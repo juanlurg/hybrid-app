@@ -1,26 +1,144 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ──────────────────────────────────────────────────────────────
+   Bloques — Swiss sport poster.
+   Full-bleed colour panels, heavy type, hard 2px rules, no radii,
+   no shadows. Session type readable from a metre away.
+   ────────────────────────────────────────────────────────────── */
+
+@theme {
+  --color-ink: #111110;
+  --color-paper: #ecebe6;
+  --color-mid: #6e6d67;
+  --color-faint: #8e8c85;
+  --color-line: #d7d5cd;
+  --color-quiet: #c9c6bc;
+  --color-soft: #e0ded7;
+  --color-hairline: #b6b3aa;
+  --color-ghost: #a9a7a0;
+  --color-ink-2: #2c2c29;
+  --color-ink-3: #7d7c76;
+  --color-sunk: #e4e2db;
+
+  /* semantic accents */
+  --color-strength: oklch(0.62 0.19 32); /* fuerza — the orange */
+  --color-run: oklch(0.62 0.19 250); /* carrera — the blue */
+  --color-ok: oklch(0.55 0.14 145);
+  --color-ok-bright: oklch(0.72 0.19 130);
+  --color-warn: oklch(0.72 0.16 75);
+  --color-fail: oklch(0.55 0.21 25);
+  --color-tint: #f2e6cf; /* "touched by AI" wash */
+
+  --font-display: var(--font-archivo), system-ui, sans-serif;
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+
+  --radius-none: 0px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+/*
+ * Everything below goes in `@layer base`. Unlayered rules outrank every
+ * `@layer utilities` declaration, so an element selector like
+ * `button { color: inherit }` sitting outside a layer silently beats
+ * `text-paper` on every button in the app.
+ */
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: light;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* Nothing in Bloques is round. */
+  *,
+  ::before,
+  ::after {
+    border-radius: 0;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-faint);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Hide scrollbars inside the app shell — the phone frame has none. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* Tabular numerals everywhere numbers matter. */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes bloques-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes bloques-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.22;
+  }
+}
+
+@keyframes bloques-rise {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-pulse-block {
+  animation: bloques-pulse 0.9s ease-in-out infinite;
+}
+.animate-flash {
+  animation: bloques-flash 0.35s ease-in-out 3;
+}
+.animate-rise {
+  animation: bloques-rise 0.18s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-block,
+  .animate-flash,
+  .animate-rise {
+    animation: none;
+  }
+}
+
+/* Focus rings: a hard offset block, never a glow. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-strength);
+  outline-offset: 2px;
 }

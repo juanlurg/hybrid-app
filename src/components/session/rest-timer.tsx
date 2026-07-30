@@ -1,0 +1,194 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+export interface RestState {
+  left: number;
+  total: number;
+  label: string;
+}
+
+/** Short square-wave beep. Cheap, and audible over a gym playlist. */
+function beep() {
+  try {
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctor) return;
+    const ctx = new Ctor();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "square";
+    osc.frequency.value = 760;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+    setTimeout(() => void ctx.close(), 800);
+  } catch {
+    // Autoplay policy or no audio device: the vibration and flash still fire.
+  }
+}
+
+export function useRestTimer({
+  sound,
+  vibration,
+}: {
+  sound: boolean;
+  vibration: boolean;
+}) {
+  const [rest, setRest] = useState<RestState | null>(null);
+  const [flash, setFlash] = useState(false);
+  // Wall-clock deadline: a background tab throttles the interval, but the
+  // remaining time still has to be right when the athlete looks back.
+  const deadline = useRef<number | null>(null);
+
+  const start = useCallback((seconds: number, label: string) => {
+    if (seconds <= 0) {
+      deadline.current = null;
+      setRest(null);
+      return;
+    }
+    deadline.current = Date.now() + seconds * 1000;
+    setRest({ left: seconds, total: seconds, label });
+  }, []);
+
+  const stop = useCallback(() => {
+    deadline.current = null;
+    setRest(null);
+  }, []);
+
+  const extend = useCallback((seconds: number) => {
+    setRest((prev) => {
+      if (!prev) return prev;
+      deadline.current = (deadline.current ?? Date.now()) + seconds * 1000;
+      return {
+        ...prev,
+        left: prev.left + seconds,
+        total: prev.total + seconds,
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!rest) return;
+    const tick = window.setInterval(() => {
+      if (deadline.current == null) return;
+      const left = Math.round((deadline.current - Date.now()) / 1000);
+      if (left <= 0) {
+        deadline.current = null;
+        setRest(null);
+        setFlash(true);
+        window.setTimeout(() => setFlash(false), 1100);
+        if (vibration && typeof navigator !== "undefined" && navigator.vibrate) {
+          navigator.vibrate([140, 90, 140]);
+        }
+        if (sound) beep();
+        return;
+      }
+      setRest((prev) => (prev ? { ...prev, left } : prev));
+    }, 250);
+    return () => window.clearInterval(tick);
+  }, [rest, sound, vibration]);
+
+  return { rest, flash, start, stop, extend };
+}
+
+export function RestBar({
+  rest,
+  onSkip,
+  onExtend,
+}: {
+  rest: RestState;
+  onSkip: () => void;
+  onExtend: () => void;
+}) {
+  const mins = Math.floor(rest.left / 60);
+  const secs = String(rest.left % 60).padStart(2, "0");
+  const pct = Math.max(0, Math.round((rest.left / rest.total) * 100));
+
+  return (
+    <div className="absolute inset-x-0 bottom-0 z-20 bg-ink px-4 pt-3.5 pb-3.5 text-paper">
+      <div className="flex items-baseline gap-2.5">
+        <span className="text-[10px] leading-none font-extrabold tracking-[0.14em] opacity-55 uppercase">
+          Descanso
+        </span>
+        <span className="truncate text-[10.5px] leading-none font-medium opacity-45">
+          {rest.label}
+        </span>
+        <button
+          type="button"
+          onClick={onSkip}
+          className="ml-auto text-[11px] leading-none font-medium underline opacity-60"
+        >
+          saltar
+        </button>
+      </div>
+      <div className="mt-2 flex items-end gap-3">
+        <span
+          className="num text-[54px] leading-[0.85] font-black tracking-[-0.04em]"
+          style={{ color: "oklch(0.72 0.19 130)" }}
+          aria-live="off"
+        >
+          {mins}:{secs}
+        </span>
+        <button
+          type="button"
+          onClick={onExtend}
+          className="ml-auto flex h-11 items-center bg-ink-2 px-4 text-[13px] leading-none font-bold"
+        >
+          +30 S
+        </button>
+      </div>
+      <div className="mt-3 h-[5px] bg-ink-2">
+        <div
+          className="h-full transition-[width] duration-300 ease-linear"
+          style={{ width: `${pct}%`, background: "oklch(0.72 0.19 130)" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Keeps the screen on during a session, when the browser allows it. */
+export function useWakeLock(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || typeof navigator === "undefined") return;
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinel> };
+    };
+    if (!nav.wakeLock) return;
+
+    let sentinel: WakeLockSentinel | null = null;
+    let cancelled = false;
+
+    const acquire = async () => {
+      try {
+        const lock = await nav.wakeLock!.request("screen");
+        if (cancelled) {
+          void lock.release();
+          return;
+        }
+        sentinel = lock;
+      } catch {
+        // Denied or unsupported — nothing to fall back to.
+      }
+    };
+
+    void acquire();
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !sentinel) void acquire();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void sentinel?.release().catch(() => {});
+    };
+  }, [enabled]);
+}
