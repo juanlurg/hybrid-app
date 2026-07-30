@@ -280,7 +280,9 @@ export function resolveExercise(
     repMin: row.rep_min,
     repMax: row.rep_max,
     repsLabel: repsLabel(row.rep_min, row.rep_max),
-    schemeLabel: `${sets} × ${repsLabel(row.rep_min, row.rep_max)}`,
+    schemeLabel: `${sets} × ${repsLabel(row.rep_min, row.rep_max)}${
+      row.effort === "seconds" ? "″" : ""
+    }`,
     restSeconds: row.rest_seconds,
     restLabel: restLabel(row.rest_seconds),
     isPrimary: row.is_primary,

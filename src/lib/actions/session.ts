@@ -112,7 +112,12 @@ export async function logSet(input: {
   programExerciseId: string;
   position: number;
   setIndex: number;
-  reps: number;
+  /** Reps for `reps`/`amrap` efforts; null when the set was timed. */
+  reps: number | null;
+  /** Seconds for `seconds` efforts (planchas); null otherwise. */
+  seconds?: number | null;
+  /** Reserve the athlete reported, if any. Feeds the double progression. */
+  rir?: number | null;
   weightKg: number | null;
 }): Promise<LogSetResult> {
   const athlete = await loadAthlete();
@@ -131,7 +136,10 @@ export async function logSet(input: {
     .maybeSingle();
   if (!session) return { ok: false, error: "Sesión no encontrada." };
 
-  const missed = isRangeFailure(input.reps, exercise.rep_min);
+  // Reps or seconds — whichever the effort prescribes — measured
+  // against the same rep_min column (seconds live there for holds).
+  const achieved = input.reps ?? input.seconds ?? 0;
+  const missed = isRangeFailure(achieved, exercise.rep_min);
 
   const { error: logError } = await supabase.from("set_logs").upsert(
     {
@@ -143,6 +151,8 @@ export async function logSet(input: {
       position: input.position,
       set_index: input.setIndex,
       reps: input.reps,
+      seconds: input.seconds ?? null,
+      rir: input.rir ?? null,
       weight_kg: input.weightKg,
       missed_range: missed,
     },

@@ -19,10 +19,12 @@ interface LoggedSet {
   programExerciseId: string | null;
   setIndex: number;
   reps: number | null;
+  seconds: number | null;
   missedRange: boolean;
 }
 
-type LogMap = Record<string, { reps: number; missed: boolean }>;
+/** `value` is reps or seconds, whichever the exercise's effort counts. */
+type LogMap = Record<string, { value: number; missed: boolean }>;
 
 const keyOf = (exerciseId: string, setIndex: number) =>
   `${exerciseId}:${setIndex}`;
@@ -59,9 +61,10 @@ export function SessionRunner({
   const [logs, setLogs] = useState<LogMap>(() => {
     const map: LogMap = {};
     for (const l of initialLogs) {
-      if (!l.programExerciseId || l.reps == null) continue;
+      const value = l.reps ?? l.seconds;
+      if (!l.programExerciseId || value == null) continue;
       map[keyOf(l.programExerciseId, l.setIndex)] = {
-        reps: l.reps,
+        value,
         missed: l.missedRange,
       };
     }
@@ -77,6 +80,7 @@ export function SessionRunner({
   }, [exercises, logs]);
 
   const [exIndex, setExIndex] = useState(firstUnfinished);
+  const [pendingRir, setPendingRir] = useState<number | null>(null);
   const exercise = exercises[Math.min(exIndex, exercises.length - 1)];
 
   const { rest, flash, start, stop, extend } = useRestTimer({ sound, vibration });
@@ -87,6 +91,15 @@ export function SessionRunner({
   const totalDone = exercises.reduce(
     (acc, e) => acc + countDone(logs, e.id, e.sets),
     0,
+  );
+
+  /** The other members of this exercise's superset, in plan order. */
+  const groupMembers = useMemo(
+    () =>
+      exercise.supersetGroup == null
+        ? [exercise]
+        : exercises.filter((e) => e.supersetGroup === exercise.supersetGroup),
+    [exercise, exercises],
   );
 
   function advance(fromIndex: number) {
@@ -101,26 +114,48 @@ export function SessionRunner({
     setBanner(null);
   }
 
-  function record(reps: number) {
+  function record(value: number) {
     const setIndex = doneForExercise;
     if (setIndex >= exercise.sets) {
       advance(exIndex);
       return;
     }
 
-    const missed = reps < exercise.repMin;
+    const missed = value < exercise.repMin;
     const k = keyOf(exercise.id, setIndex);
+    const rir = pendingRir;
 
     // Optimistic: the athlete is mid-set, the number has to land instantly.
-    setLogs((prev) => ({ ...prev, [k]: { reps, missed } }));
+    setLogs((prev) => ({ ...prev, [k]: { value, missed } }));
     setRepsOpen(false);
+    setPendingRir(null);
     setError(null);
-    if (autoRest) {
+
+    // A superset runs back to back: after this member's set, jump to the
+    // partner that is still behind — rest only after the last one.
+    const laggard = groupMembers.find(
+      (m) =>
+        m.id !== exercise.id &&
+        countDone(logs, m.id, m.sets) < Math.min(setIndex + 1, m.sets),
+    );
+    if (laggard) {
+      setExIndex(exercises.findIndex((e) => e.id === laggard.id));
+    } else if (autoRest) {
       start(exercise.restSeconds, `${exercise.name} · serie ${setIndex + 1}`);
     }
 
-    const wasLast = setIndex + 1 >= exercise.sets;
-    const currentIndex = exIndex;
+    // Done with the whole group (not just this row) → move past it.
+    const groupDone =
+      !laggard &&
+      groupMembers.every(
+        (m) =>
+          (m.id === exercise.id
+            ? setIndex + 1
+            : countDone(logs, m.id, m.sets)) >= m.sets,
+      );
+    const lastGroupIndex = Math.max(
+      ...groupMembers.map((m) => exercises.findIndex((e) => e.id === m.id)),
+    );
 
     startTransition(async () => {
       const res = await logSet({
@@ -128,7 +163,9 @@ export function SessionRunner({
         programExerciseId: exercise.id,
         position: exercise.position,
         setIndex,
-        reps,
+        reps: exercise.effort === "seconds" ? null : value,
+        seconds: exercise.effort === "seconds" ? value : null,
+        rir,
         weightKg: exercise.weightKg,
       });
       if (!res.ok) {
@@ -141,15 +178,23 @@ export function SessionRunner({
         return;
       }
       if (res.banner) setBanner(res.banner);
-      if (wasLast) advance(currentIndex);
+      if (groupDone) advance(lastGroupIndex);
     });
   }
 
   const repOptions = useMemo(() => {
     const out: number[] = [];
-    for (let n = exercise.repMax + 2; n >= 1; n--) out.push(n);
+    if (exercise.effort === "seconds") {
+      // Holds are logged in steps of 5 seconds, well past the top.
+      const top = Math.ceil((exercise.repMax + 15) / 5) * 5;
+      for (let n = top; n >= 5; n -= 5) out.push(n);
+      return out;
+    }
+    // AMRAP gets generous headroom; plain reps a little slack over the top.
+    const top = exercise.effort === "amrap" ? exercise.repMax + 8 : exercise.repMax + 2;
+    for (let n = top; n >= 1; n--) out.push(n);
     return out;
-  }, [exercise.repMax]);
+  }, [exercise.repMax, exercise.effort]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -181,7 +226,9 @@ export function SessionRunner({
         <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase">
           {exercise.isPrimary
             ? `Básico del día · serie ${Math.min(doneForExercise + 1, exercise.sets)}`
-            : `Ejercicio ${exIndex + 1} · serie ${Math.min(doneForExercise + 1, exercise.sets)}`}
+            : exercise.supersetGroup != null
+              ? `Superserie · serie ${Math.min(doneForExercise + 1, exercise.sets)}`
+              : `Ejercicio ${exIndex + 1} · serie ${Math.min(doneForExercise + 1, exercise.sets)}`}
         </div>
         <h1 className="mt-1.5 text-[21px] leading-[1.05] font-bold">
           {exercise.name}
@@ -246,7 +293,7 @@ export function SessionRunner({
                   entry ? (bad ? "text-fail" : "text-ok") : "text-hairline",
                 )}
               >
-                {entry ? entry.reps : i + 1}
+                {entry ? entry.value : i + 1}
               </span>
               <span
                 className={cn(
@@ -254,7 +301,11 @@ export function SessionRunner({
                   entry ? (bad ? "text-fail" : "text-ok") : "text-ghost",
                 )}
               >
-                {entry ? "reps" : "serie"}
+                {entry
+                  ? exercise.effort === "seconds"
+                    ? "seg"
+                    : "reps"
+                  : "serie"}
               </span>
             </div>
           );
@@ -310,7 +361,34 @@ export function SessionRunner({
         {repsOpen ? (
           <div className="mt-3.5">
             <div className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
-              Reps completadas
+              {exercise.effort === "seconds"
+                ? "Segundos aguantados"
+                : exercise.effort === "amrap"
+                  ? "Reps completadas · AMRAP"
+                  : "Reps completadas"}
+            </div>
+            <div className="mt-2.5 flex items-center gap-2">
+              <span className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+                RIR
+              </span>
+              {[0, 1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setPendingRir((v) => (v === n ? null : n))}
+                  className={cn(
+                    "num flex h-8 w-8 items-center justify-center border-2 text-[13px] leading-none font-extrabold",
+                    pendingRir === n
+                      ? "border-ink bg-ink text-paper"
+                      : "border-hairline text-mid",
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
+              <span className="text-[10px] leading-none text-faint">
+                opcional
+              </span>
             </div>
             <div className="mt-2.5 flex flex-wrap gap-0.5">
               {repOptions.map((n) => (
@@ -392,10 +470,24 @@ export function SessionRunner({
         <button
           type="button"
           disabled={pending}
-          onClick={() => record(exercise.repMax)}
+          onClick={() =>
+            exercise.effort === "amrap"
+              ? setRepsOpen(true)
+              : record(exercise.repMax)
+          }
           className="flex h-[66px] flex-1 items-center justify-center gap-2.5 bg-strength text-[17px] leading-none font-extrabold tracking-[0.06em] text-ink uppercase active:opacity-85 disabled:opacity-60"
         >
-          Hecho <span className="num opacity-60">{exercise.repMax}</span>
+          {exercise.effort === "amrap" ? (
+            "Registrar AMRAP"
+          ) : (
+            <>
+              Hecho{" "}
+              <span className="num opacity-60">
+                {exercise.repMax}
+                {exercise.effort === "seconds" ? "″" : ""}
+              </span>
+            </>
+          )}
         </button>
         <button
           type="button"

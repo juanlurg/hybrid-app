@@ -8,15 +8,33 @@ export interface RestState {
   label: string;
 }
 
-/** Short square-wave beep. Cheap, and audible over a gym playlist. */
-function beep() {
+/**
+ * One AudioContext for the whole session, created inside a user gesture.
+ * iOS silences contexts born outside a tap — creating it when the timer
+ * *expires* (no gesture) produced a mute first beep on the iPhone.
+ */
+let audioCtx: AudioContext | null = null;
+
+function primeAudio() {
   try {
     const Ctor =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext?: typeof AudioContext })
         .webkitAudioContext;
     if (!Ctor) return;
-    const ctx = new Ctor();
+    audioCtx ??= new Ctor();
+    if (audioCtx.state === "suspended") void audioCtx.resume();
+  } catch {
+    // No audio device: the vibration and flash still fire.
+  }
+}
+
+/** Short square-wave beep. Cheap, and audible over a gym playlist. */
+function beep() {
+  try {
+    if (!audioCtx) primeAudio();
+    const ctx = audioCtx;
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -28,7 +46,6 @@ function beep() {
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
     osc.start();
     osc.stop(ctx.currentTime + 0.5);
-    setTimeout(() => void ctx.close(), 800);
   } catch {
     // Autoplay policy or no audio device: the vibration and flash still fire.
   }
@@ -47,15 +64,21 @@ export function useRestTimer({
   // remaining time still has to be right when the athlete looks back.
   const deadline = useRef<number | null>(null);
 
-  const start = useCallback((seconds: number, label: string) => {
-    if (seconds <= 0) {
-      deadline.current = null;
-      setRest(null);
-      return;
-    }
-    deadline.current = Date.now() + seconds * 1000;
-    setRest({ left: seconds, total: seconds, label });
-  }, []);
+  const start = useCallback(
+    (seconds: number, label: string) => {
+      // `start` runs inside the tap that logged the set — the only place
+      // iOS lets us unlock audio for the beep that fires later.
+      if (sound) primeAudio();
+      if (seconds <= 0) {
+        deadline.current = null;
+        setRest(null);
+        return;
+      }
+      deadline.current = Date.now() + seconds * 1000;
+      setRest({ left: seconds, total: seconds, label });
+    },
+    [sound],
+  );
 
   const stop = useCallback(() => {
     deadline.current = null;

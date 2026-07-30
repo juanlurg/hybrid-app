@@ -59,6 +59,7 @@ export default async function SessionPage({
         programExerciseId: l.program_exercise_id,
         setIndex: l.set_index,
         reps: l.reps,
+        seconds: l.seconds,
         missedRange: l.missed_range,
       }))}
       autoRest={athlete.ctx.profile.auto_rest_timer}
