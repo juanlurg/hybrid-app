@@ -1,18 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 
 import { PlateChips } from "@/components/ui/kit";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
-import { formatWeight } from "@/lib/engine";
+import { formatWeight, type EngineConfig, type LiftState } from "@/lib/engine";
+import { replayEngine, type ReplayPrimary } from "@/lib/engine/replay";
 import type { ResolvedExercise } from "@/lib/domain/plan";
 import {
-  finishSession,
-  logSet,
-  undoEngineEvent,
-  type EngineBanner,
-} from "@/lib/actions/session";
+  createLocalSession,
+  recordLocalSet,
+  undoLocalFailure,
+  finishLocalSession,
+  type LocalSessionState,
+} from "@/lib/offline/local-session";
+import type { SessionKey } from "@/lib/offline/queue";
+import {
+  enqueueAndFlush,
+  enqueueOp,
+  flush,
+  getLocalSession,
+  putLocalSession,
+} from "@/lib/offline/syncer";
 import { cn } from "@/lib/cn";
 
 interface LoggedSet {
@@ -23,6 +33,14 @@ interface LoggedSet {
   missedRange: boolean;
 }
 
+/** What the client needs to run the regression engine locally. */
+export interface ReplayContext {
+  lift: LiftState | null;
+  primary: ReplayPrimary | null;
+  week: number;
+  config: EngineConfig;
+}
+
 /** `value` is reps or seconds, whichever the exercise's effort counts. */
 type LogMap = Record<string, { value: number; missed: boolean }>;
 
@@ -31,9 +49,12 @@ const keyOf = (exerciseId: string, setIndex: number) =>
 
 export function SessionRunner({
   sessionId,
+  sessionKey,
   label,
   exercises,
   initialLogs,
+  initialUndone,
+  replayCtx,
   autoRest,
   sound,
   vibration,
@@ -42,9 +63,13 @@ export function SessionRunner({
   targetRir,
 }: {
   sessionId: string;
+  sessionKey: SessionKey;
   label: string;
   exercises: ResolvedExercise[];
   initialLogs: LoggedSet[];
+  /** Failures already undone in earlier flushes of this session. */
+  initialUndone: Array<{ position: number; setIndex: number }>;
+  replayCtx: ReplayContext;
   autoRest: boolean;
   sound: boolean;
   vibration: boolean;
@@ -54,7 +79,8 @@ export function SessionRunner({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [banner, setBanner] = useState<EngineBanner | null>(null);
+  const [dismissedFailure, setDismissedFailure] = useState<string | null>(null);
+  const [undone, setUndone] = useState(initialUndone);
   const [repsOpen, setRepsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +96,65 @@ export function SessionRunner({
     }
     return map;
   });
+
+  /** The persisted mirror of this session — survives a killed tab. */
+  const localRef = useRef<LocalSessionState | null>(null);
+  async function withLocal(
+    mutate: (s: LocalSessionState) => LocalSessionState,
+  ): Promise<void> {
+    let s =
+      localRef.current ??
+      (await getLocalSession(sessionId)) ??
+      createLocalSession(sessionId, sessionKey, new Date().toISOString());
+    s = mutate(s);
+    localRef.current = s;
+    await putLocalSession(s);
+  }
+
+  /**
+   * The regression banner, computed HERE with the same fold the server
+   * runs at flush time. No network between a missed set and the answer.
+   */
+  const replay = useMemo(() => {
+    const { primary } = replayCtx;
+    if (!primary) return null;
+    const primaryExercise = exercises.find(
+      (e) => e.id === primary.programExerciseId,
+    );
+    if (!primaryExercise) return null;
+    const replayLogs = [];
+    for (let i = 0; i < primaryExercise.sets; i++) {
+      const entry = logs[keyOf(primaryExercise.id, i)];
+      if (!entry) continue;
+      replayLogs.push({
+        programExerciseId: primaryExercise.id,
+        position: primaryExercise.position,
+        setIndex: i,
+        reps: primaryExercise.effort === "seconds" ? null : entry.value,
+        seconds: primaryExercise.effort === "seconds" ? entry.value : null,
+        weightKg: primaryExercise.weightKg,
+      });
+    }
+    return replayEngine({
+      sessionId,
+      lift: replayCtx.lift,
+      primary,
+      logs: replayLogs,
+      undone,
+      week: replayCtx.week,
+      config: replayCtx.config,
+    });
+  }, [exercises, logs, undone, replayCtx, sessionId]);
+
+  const lastLiveFailure =
+    replay?.events.filter((e) => !e.undone).at(-1)?.sourceSet ?? null;
+  const failureKey = lastLiveFailure
+    ? `${lastLiveFailure.position}:${lastLiveFailure.setIndex}`
+    : null;
+  const banner =
+    replay?.banner && failureKey && failureKey !== dismissedFailure
+      ? replay.banner
+      : null;
 
   const firstUnfinished = useMemo(() => {
     const idx = exercises.findIndex((ex) => {
@@ -102,16 +187,42 @@ export function SessionRunner({
     [exercise, exercises],
   );
 
+  function finish() {
+    startTransition(async () => {
+      const finishedAt = new Date().toISOString();
+      await withLocal((s) => finishLocalSession(s, finishedAt, totalSets));
+      await enqueueOp({
+        kind: "session_finish",
+        localSessionId: sessionId,
+        finishedAt,
+      });
+      const res = await flush();
+      const landed = res?.results?.some(
+        (r) =>
+          r.localSessionId === sessionId ||
+          r.canonicalSessionId === sessionId,
+      );
+      if (landed) {
+        const canonical =
+          res?.results?.find((r) => r.localSessionId === sessionId)
+            ?.canonicalSessionId ?? sessionId;
+        router.replace(`/sesion/${canonical}/resumen`);
+        return;
+      }
+      // No network: the session is safe on this device and in the queue.
+      setError(
+        "Sin conexión. La sesión está guardada en este móvil y se subirá sola al volver la red.",
+      );
+    });
+  }
+
   function advance(fromIndex: number) {
     if (fromIndex + 1 >= exercises.length) {
-      startTransition(async () => {
-        await finishSession(sessionId);
-        router.replace(`/sesion/${sessionId}/resumen`);
-      });
+      finish();
       return;
     }
     setExIndex(fromIndex + 1);
-    setBanner(null);
+    if (failureKey) setDismissedFailure(failureKey);
   }
 
   function record(value: number) {
@@ -124,8 +235,11 @@ export function SessionRunner({
     const missed = value < exercise.repMin;
     const k = keyOf(exercise.id, setIndex);
     const rir = pendingRir;
+    const timed = exercise.effort === "seconds";
+    const loggedAt = new Date().toISOString();
 
-    // Optimistic: the athlete is mid-set, the number has to land instantly.
+    // Local-first: the number lands instantly and survives a killed tab;
+    // the queue takes it to the server whenever there is network.
     setLogs((prev) => ({ ...prev, [k]: { value, missed } }));
     setRepsOpen(false);
     setPendingRir(null);
@@ -158,27 +272,50 @@ export function SessionRunner({
     );
 
     startTransition(async () => {
-      const res = await logSet({
-        sessionId,
+      await withLocal((s) =>
+        recordLocalSet(s, {
+          position: exercise.position,
+          setIndex,
+          value,
+          missed,
+          weightKg: exercise.weightKg,
+          rir,
+          timed,
+          loggedAt,
+        }),
+      );
+      await enqueueAndFlush({
+        kind: "set_log",
+        localSessionId: sessionId,
         programExerciseId: exercise.id,
+        liftKey: exercise.liftKey,
+        exerciseName: exercise.name,
         position: exercise.position,
         setIndex,
-        reps: exercise.effort === "seconds" ? null : value,
-        seconds: exercise.effort === "seconds" ? value : null,
+        reps: timed ? null : value,
+        seconds: timed ? value : null,
         rir,
         weightKg: exercise.weightKg,
+        loggedAt,
       });
-      if (!res.ok) {
-        setLogs((prev) => {
-          const next = { ...prev };
-          delete next[k];
-          return next;
-        });
-        setError(res.error ?? "No se ha podido guardar la serie.");
-        return;
-      }
-      if (res.banner) setBanner(res.banner);
       if (groupDone) advance(lastGroupIndex);
+    });
+  }
+
+  function undoFailure() {
+    if (!lastLiveFailure) return;
+    const target = lastLiveFailure;
+    setUndone((prev) => [...prev, target]);
+    startTransition(async () => {
+      await withLocal((s) =>
+        undoLocalFailure(s, target.position, target.setIndex),
+      );
+      await enqueueAndFlush({
+        kind: "engine_undo",
+        localSessionId: sessionId,
+        position: target.position,
+        setIndex: target.setIndex,
+      });
     });
   }
 
@@ -336,16 +473,10 @@ export function SessionRunner({
               >
                 {banner.title}
               </span>
-              {banner.eventId ? (
+              {lastLiveFailure ? (
                 <button
                   type="button"
-                  onClick={() =>
-                    startTransition(async () => {
-                      await undoEngineEvent(banner.eventId);
-                      setBanner(null);
-                      router.refresh();
-                    })
-                  }
+                  onClick={undoFailure}
                   className="ml-auto text-[10.5px] leading-none font-medium underline opacity-60"
                 >
                   deshacer
@@ -429,7 +560,7 @@ export function SessionRunner({
                 type="button"
                 onClick={() => {
                   setExIndex(i);
-                  setBanner(null);
+                  if (failureKey) setDismissedFailure(failureKey);
                   setRepsOpen(false);
                 }}
                 className="flex items-center gap-2.5 bg-paper py-2.5 text-left"

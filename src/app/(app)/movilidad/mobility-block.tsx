@@ -11,7 +11,7 @@ import {
   SectionLabel,
 } from "@/components/ui/kit";
 import { accentFor, TONE } from "@/components/day-accents";
-import { logMobility } from "@/lib/actions/session";
+import { enqueueAndFlush } from "@/lib/offline/syncer";
 import { cn } from "@/lib/cn";
 
 export interface MobilityItem {
@@ -57,21 +57,20 @@ export function MobilityBlock({
   const doneCount = items.filter((i) => done.has(i.slug)).length;
   const allDone = items.length > 0 && doneCount === items.length;
 
-  /** Optimistic locally, persisted on every change — the block is 20′ long. */
+  /** Optimistic locally; the write-ahead queue lands it whenever there is
+   *  network. Re-ticks replace the queued op (same natural key), so the
+   *  basement gym can tick the whole block without a single bar of signal. */
   function persist(nextSlugs: string[]) {
-    const previous = completed;
     setCompleted(nextSlugs);
     setError(null);
     startTransition(async () => {
-      const res = await logMobility({
+      await enqueueAndFlush({
+        kind: "mobility_log",
         performedOn,
         completedSlugs: nextSlugs,
         totalItems: items.length,
+        loggedAt: new Date().toISOString(),
       });
-      if (!res.ok) {
-        setCompleted(previous);
-        setError(res.error ?? "No se ha podido guardar el bloque.");
-      }
     });
   }
 

@@ -1,7 +1,13 @@
 import { notFound, redirect } from "next/navigation";
 
 import { requireAthlete } from "@/lib/data/athlete";
-import { resolveDay } from "@/lib/domain/plan";
+import {
+  liftStateFrom,
+  phaseEngineConfig,
+  resolveDay,
+} from "@/lib/domain/plan";
+import { preSessionLiftState } from "@/lib/engine/replay";
+import { setsForWeek, type LiftState } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { placeDate } from "@/lib/domain/calendar";
 import { phaseSpans } from "@/lib/domain/plan";
@@ -50,9 +56,58 @@ export default async function SessionPage({
 
   if (day.exercises.length === 0) redirect("/");
 
+  /* ── what the client engine needs to run the fold locally ──── */
+  const phaseConfig = phaseEngineConfig(athlete.config, phase);
+  const primaryExercise = day.primary;
+  const primaryRow = primaryExercise
+    ? athlete.ctx.exercises.find((e) => e.id === primaryExercise.id)
+    : null;
+  const liftRow = primaryRow?.lift_key
+    ? (athlete.ctx.lifts.find((l) => l.key === primaryRow.lift_key) ?? null)
+    : null;
+
+  // The fold must start from the lift as it was BEFORE this session:
+  // events already flushed for it carry that state in their payload.
+  let preLift: LiftState | null = null;
+  const initialUndone: Array<{ position: number; setIndex: number }> = [];
+  if (liftRow) {
+    const { data: events } = await supabase
+      .from("engine_events")
+      .select("dedup_key, created_at, reverted_at, kind, payload")
+      .eq("session_id", id)
+      .eq("lift_id", liftRow.id);
+    const failEvents = (events ?? []).filter(
+      (e) =>
+        (e.kind === "fail_hold" || e.kind === "fail_penalty") && e.dedup_key,
+    );
+    preLift = preSessionLiftState(
+      liftStateFrom(liftRow),
+      failEvents.map((e) => ({
+        createdAt: e.created_at,
+        previous:
+          ((e.payload as { previous?: Record<string, unknown> } | null)
+            ?.previous as Partial<LiftState> | null) ?? null,
+      })),
+    );
+    for (const e of failEvents) {
+      if (!e.reverted_at || !e.dedup_key) continue;
+      const m = e.dedup_key.match(/:fail:(\d+):(\d+)$/);
+      if (m) initialUndone.push({ position: +m[1], setIndex: +m[2] });
+    }
+  }
+
   return (
     <SessionRunner
       sessionId={id}
+      sessionKey={{
+        phaseId: phase.id,
+        slotId: session.slot_id ?? day.slot?.id ?? "",
+        scheduledOn: session.scheduled_on,
+        week: session.week,
+        dayIndex: session.day_index,
+        sessionType: session.session_type,
+        title: session.title,
+      }}
       label={day.label}
       exercises={day.exercises}
       initialLogs={(logs ?? []).map((l) => ({
@@ -62,6 +117,21 @@ export default async function SessionPage({
         seconds: l.seconds,
         missedRange: l.missed_range,
       }))}
+      initialUndone={initialUndone}
+      replayCtx={{
+        lift: preLift,
+        primary:
+          primaryRow && primaryRow.lift_key
+            ? {
+                programExerciseId: primaryRow.id,
+                liftKey: primaryRow.lift_key,
+                repMin: primaryRow.rep_min,
+                sets: setsForWeek(primaryRow.sets, session.week, phaseConfig),
+              }
+            : null,
+        week: session.week,
+        config: phaseConfig,
+      }}
       autoRest={athlete.ctx.profile.auto_rest_timer}
       sound={athlete.ctx.profile.rest_sound}
       vibration={athlete.ctx.profile.rest_vibration}

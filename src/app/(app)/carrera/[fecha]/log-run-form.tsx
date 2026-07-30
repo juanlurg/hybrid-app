@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { ActionBar } from "@/components/ui/kit";
-import { logRun } from "@/lib/actions/session";
+import { enqueueAndFlush } from "@/lib/offline/syncer";
 import type { SessionType } from "@/lib/domain/plan";
 
 export interface RunTarget {
@@ -38,6 +38,7 @@ export function LogRunForm({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
+  const [queued, setQueued] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [minutes, setMinutes] = useState("");
@@ -96,29 +97,33 @@ export function LogRunForm({
     }
 
     start(async () => {
-      const res = await logRun({
-        phaseId: day.phaseId,
-        slotId: day.slotId,
-        scheduledOn: day.date,
-        week: day.week,
-        dayIndex: day.dayIndex,
-        sessionType: day.sessionType,
-        title: day.title,
+      // Write-ahead: the run is registered on this device instantly and
+      // lands in the database whenever there is network.
+      await enqueueAndFlush({
+        kind: "run_log",
+        key: {
+          phaseId: day.phaseId,
+          slotId: day.slotId,
+          scheduledOn: day.date,
+          week: day.week,
+          dayIndex: day.dayIndex,
+          sessionType: day.sessionType,
+          title: day.title,
+        },
         prescription: day.prescription,
         durationMinutes: toNumber(minutes),
         distanceKm: toNumber(distance),
         avgHr: toNumber(avgHr),
         decouplingPct: toNumber(decouplingPct),
+        notes: "",
+        loggedAt: new Date().toISOString(),
       });
-      if (!res.ok) {
-        setError(res.error ?? "No se ha podido guardar la carrera.");
-        return;
-      }
+      setQueued(true);
       router.refresh();
     });
   }
 
-  if (done) {
+  if (done || queued) {
     return (
       <div className="flex h-16 flex-none items-center justify-center gap-3 bg-ink text-[15px] leading-none font-extrabold tracking-[0.1em] text-ok-bright uppercase">
         ✓ Registrado

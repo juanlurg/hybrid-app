@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import { ActionBar } from "@/components/ui/kit";
-import { setSessionStatus, startSession } from "@/lib/actions/session";
+import { setSessionStatus } from "@/lib/actions/session";
+import { createLocalSession } from "@/lib/offline/local-session";
+import { enqueueOp, flush, putLocalSession } from "@/lib/offline/syncer";
 import type { SessionGroup, SessionStatus, SessionType } from "@/lib/domain/plan";
 
 export interface DayTarget {
@@ -64,7 +66,12 @@ export function StartSessionButton({
             router.push(`/carrera/${day.scheduledOn}`);
             return;
           }
-          const res = await startSession({
+          // Local-first: the session exists on this device before any
+          // network happens; the flush lands it (and may hand back the
+          // canonical id if another device already opened it).
+          const localId = crypto.randomUUID();
+          const startedAt = new Date().toISOString();
+          const key = {
             phaseId: day.phaseId,
             slotId: day.slotId,
             scheduledOn: day.scheduledOn,
@@ -72,8 +79,21 @@ export function StartSessionButton({
             dayIndex: day.dayIndex,
             sessionType: day.sessionType,
             title: day.title,
+          };
+          await putLocalSession(createLocalSession(localId, key, startedAt));
+          await enqueueOp({
+            kind: "session_start",
+            localSessionId: localId,
+            key,
+            startedAt,
           });
-          if (res.ok && res.sessionId) router.push(`/sesion/${res.sessionId}`);
+          const res = await flush();
+          const canonical =
+            res?.results?.find((r) => r.localSessionId === localId)
+              ?.canonicalSessionId ??
+            existingSessionId ??
+            localId;
+          router.push(`/sesion/${canonical}`);
         })
       }
     >
