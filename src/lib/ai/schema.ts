@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { LIFT_KEYS } from "@/lib/domain/catalog";
+
 /**
  * The contract between the model and the plan.
  *
@@ -43,6 +45,8 @@ export const changeOpSchema = z
     slotId: z.string().uuid().nullish(),
     targetSlotId: z.string().uuid().nullish(),
 
+    /** Catalogue slug — the ONLY way to name an exercise. No inventions. */
+    exerciseSlug: z.string().max(80).nullish(),
     name: z.string().max(120).nullish(),
     sets: z.number().int().min(1).max(12).nullish(),
     repMin: z.number().int().min(1).max(100).nullish(),
@@ -67,14 +71,14 @@ export const changeOpSchema = z
     if (needsExercise.includes(op.op) && !op.exerciseId) {
       fail(`${op.op} necesita exerciseId`);
     }
-    if (op.op === "add_exercise" && (!op.slotId || !op.name)) {
-      fail("add_exercise necesita slotId y name");
+    if (op.op === "add_exercise" && (!op.slotId || !op.exerciseSlug)) {
+      fail("add_exercise necesita slotId y exerciseSlug del catálogo");
     }
     if (op.op === "move_exercise" && !op.targetSlotId) {
       fail("move_exercise necesita targetSlotId");
     }
-    if (op.op === "rename_exercise" && !op.name) {
-      fail("rename_exercise necesita name");
+    if (op.op === "rename_exercise" && !op.exerciseSlug) {
+      fail("rename_exercise necesita exerciseSlug del catálogo");
     }
     if (op.op === "set_sets" && op.sets == null) fail("set_sets necesita sets");
     if (op.op === "set_reps" && (op.repMin == null || op.repMax == null)) {
@@ -99,17 +103,44 @@ export type ChangeOp = z.infer<typeof changeOpSchema>;
 export const proposalSchema = z.object({
   /** The coach's answer, in prose. Shown as the assistant message. */
   rationale: z.string().min(1).max(1600),
-  changes: z.array(changeOpSchema).max(12).default([]),
+  /** Same ceiling the prompt states — 6, not a silent 12. */
+  changes: z.array(changeOpSchema).max(6).default([]),
 });
 
 export type Proposal = z.infer<typeof proposalSchema>;
 
 /**
- * JSON Schema handed to Gemini. Written out rather than derived so the
+ * JSON Schema handed to Gemini, built per call so `exerciseSlug` can be
+ * a hard enum of the athlete's usable catalogue — the model literally
+ * cannot invent an exercise name. Written out rather than derived so the
  * wording of each description is tuned for the model — those strings do
  * most of the work of keeping proposals sane.
  */
-export const PROPOSAL_JSON_SCHEMA = {
+export function proposalJsonSchema(slugs: readonly string[]) {
+  return {
+    ...PROPOSAL_JSON_SCHEMA,
+    properties: {
+      ...PROPOSAL_JSON_SCHEMA.properties,
+      changes: {
+        ...PROPOSAL_JSON_SCHEMA.properties.changes,
+        items: {
+          ...PROPOSAL_JSON_SCHEMA.properties.changes.items,
+          properties: {
+            ...PROPOSAL_JSON_SCHEMA.properties.changes.items.properties,
+            exerciseSlug: {
+              type: "string",
+              enum: [...slugs],
+              description:
+                "Slug del catálogo para add_exercise y rename_exercise. Obligatorio en esos dos ops; elige SOLO de esta lista.",
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
+const PROPOSAL_JSON_SCHEMA = {
   type: "object",
   properties: {
     rationale: {
@@ -215,13 +246,15 @@ export const generatedProgramSchema = z.object({
               exercises: z
                 .array(
                   z.object({
-                    name: z.string().min(1).max(120),
+                    /** Catalogue slug — the model picks, never invents. */
+                    exerciseSlug: z.string().min(1).max(80),
+                    name: z.string().max(120).nullish(),
                     sets: z.number().int().min(1).max(12),
                     repMin: z.number().int().min(1).max(100),
                     repMax: z.number().int().min(1).max(100),
                     restSeconds: z.number().int().min(0).max(600),
                     isPrimary: z.boolean().default(false),
-                    liftKey: z.string().max(40).nullish(),
+                    liftKey: z.enum(LIFT_KEYS).nullish(),
                     notes: z.string().max(240).default(""),
                   }),
                 )
@@ -245,6 +278,25 @@ export const generatedProgramSchema = z.object({
               slotKey: z.string().min(1).max(12),
               week: z.number().int().min(1).max(24),
               prescription: z.string().min(1).max(200),
+              /** Typed blocks — what the Carrera screen renders from. */
+              structure: z
+                .array(
+                  z.object({
+                    kind: z.enum([
+                      "steady", "interval", "hills", "strides",
+                      "test", "race", "walk", "rest",
+                    ]),
+                    repeat: z.number().int().min(1).max(30).nullish(),
+                    workMin: z.number().min(0).max(300).nullish(),
+                    workKm: z.number().min(0).max(50).nullish(),
+                    workSec: z.number().int().min(0).max(120).nullish(),
+                    zone: z.enum(["Z1", "Z2", "Z3", "Z4", "Z5", "RM"]).nullish(),
+                    recMin: z.number().min(0).max(15).nullish(),
+                    note: z.string().max(160).nullish(),
+                  }),
+                )
+                .max(12)
+                .nullish(),
               targetMinutes: z.number().int().min(0).max(600).nullish(),
               notes: z.string().max(240).default(""),
             }),
@@ -259,7 +311,67 @@ export const generatedProgramSchema = z.object({
 
 export type GeneratedProgram = z.infer<typeof generatedProgramSchema>;
 
-export const PROGRAM_JSON_SCHEMA = {
+/** Per-call builder: embeds the athlete's usable catalogue as an enum. */
+export function programJsonSchema(slugs: readonly string[]) {
+  const json = JSON.parse(JSON.stringify(PROGRAM_JSON_SCHEMA)) as Record<
+    string,
+    unknown
+  >;
+  const exercises = (
+    json as {
+      properties: {
+        phases: {
+          items: {
+            properties: {
+              slots: {
+                items: {
+                  properties: { exercises: { items: { properties: Record<string, unknown>; required: string[] } } };
+                };
+              };
+            };
+          };
+        };
+      };
+    }
+  ).properties.phases.items.properties.slots.items.properties.exercises.items;
+  exercises.properties.exerciseSlug = {
+    type: "string",
+    enum: [...slugs],
+    description: "Slug del catálogo. Elige SOLO de esta lista; nada de nombres inventados.",
+  };
+  if (!exercises.required.includes("exerciseSlug")) {
+    exercises.required.push("exerciseSlug");
+  }
+  return json;
+}
+
+const RUN_STRUCTURE_JSON = {
+  type: "array",
+  description:
+    "La sesión como bloques tipados. steady = rodaje continuo (workMin o workKm + zone), " +
+    "interval = repeticiones (repeat × workMin|workKm en zone, rec recMin), hills/strides = " +
+    "repeat × workSec, test = test LTHR de workMin, race = carrera, walk = caminata, rest = descanso. " +
+    "zone RM = ritmo objetivo de media maratón.",
+  items: {
+    type: "object",
+    properties: {
+      kind: {
+        type: "string",
+        enum: ["steady", "interval", "hills", "strides", "test", "race", "walk", "rest"],
+      },
+      repeat: { type: "integer" },
+      workMin: { type: "number" },
+      workKm: { type: "number" },
+      workSec: { type: "integer" },
+      zone: { type: "string", enum: ["Z1", "Z2", "Z3", "Z4", "Z5", "RM"] },
+      recMin: { type: "number" },
+      note: { type: "string" },
+    },
+    required: ["kind"],
+  },
+} as const;
+
+const PROGRAM_JSON_SCHEMA = {
   type: "object",
   properties: {
     name: { type: "string" },
@@ -324,6 +436,7 @@ export const PROGRAM_JSON_SCHEMA = {
                       },
                       liftKey: {
                         type: "string",
+                        enum: [...LIFT_KEYS],
                         description:
                           "Sólo para básicos con RM seguida: sentadilla, banca, hipthrust, militar, rdl.",
                       },
@@ -364,11 +477,15 @@ export const PROGRAM_JSON_SCHEMA = {
               properties: {
                 slotKey: { type: "string" },
                 week: { type: "integer" },
-                prescription: { type: "string" },
+                prescription: {
+                  type: "string",
+                  description: "La etiqueta humana. Ej: \"3×8' Z4 (rec 3')\".",
+                },
+                structure: RUN_STRUCTURE_JSON,
                 targetMinutes: { type: "integer" },
                 notes: { type: "string" },
               },
-              required: ["slotKey", "week", "prescription"],
+              required: ["slotKey", "week", "prescription", "structure"],
             },
           },
         },

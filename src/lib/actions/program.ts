@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { loadAthlete } from "@/lib/data/athlete";
 import { createClient } from "@/lib/supabase/server";
 import { formatWeight, roundToStep } from "@/lib/engine";
+import { seedWeightKg, TIMED_SLUGS } from "@/lib/domain/catalog";
 import type { Database } from "@/lib/supabase/database.types";
 
 type Result = { ok: boolean; error?: string };
@@ -152,33 +153,6 @@ export async function deleteExercise(exerciseId: string): Promise<Result> {
   revalidatePath("/", "layout");
   return { ok: true };
 }
-
-/** A starting load the athlete can actually rack, per equipment. A `fixed`
- *  row without a weight renders as "—" — the regression the accessory
- *  start-loads migration patched once already. Never insert one again. */
-function seedWeightKg(
-  equipment: string | null,
-  config: { barKg: number; kettlebellsKg: readonly number[] },
-): number {
-  switch (equipment) {
-    case "barbell":
-      return config.barKg;
-    case "dumbbell":
-      return 10;
-    case "kettlebell":
-      return config.kettlebellsKg.length
-        ? Math.min(...config.kettlebellsKg)
-        : 12;
-    case "pulley":
-    case "machine":
-      return 20;
-    default:
-      return 10;
-  }
-}
-
-/** Isometric catalogue entries whose rep range means seconds. */
-const TIMED_SLUGS = new Set(["copenhagen-plank", "plancha-lateral"]);
 
 export async function addExercise(
   slotId: string,

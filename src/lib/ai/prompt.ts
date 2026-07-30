@@ -47,6 +47,9 @@ CÓMO RESPONDES
 - "changes": como mucho 6 cambios, cada uno con title / from / to / why cortos y concretos.
 - Copia los UUID exactos que te doy. No inventes identificadores. Si no encuentras el ejercicio
   al que se refiere el atleta, dilo en "rationale" y devuelve "changes" vacío.
+- Para añadir o sustituir un ejercicio usas SIEMPRE "exerciseSlug" con un slug del catálogo que
+  te doy. Si lo que el atleta pide no existe en el catálogo, dilo en "rationale" y propón el
+  sustituto más cercano del catálogo — nunca un nombre inventado.
 - Si la pregunta es ambigua (no sabes si es tiempo, molestia u objetivo), pregunta en "rationale"
   y devuelve "changes" vacío. Es mejor preguntar que adivinar.
 `.trim();
@@ -66,14 +69,36 @@ REGLAS DURAS
   Los accesorios no llevan liftKey.
 - Toda fase incluye al menos un día de descanso y un bloque de movilidad, salvo que sea una fase
   de viaje o de carga puramente aeróbica.
-- Las prescripciones de carrera se escriben como en el plan maestro: "45' Z2 + 6 strides 20\\"",
-  "3×8' Z4 (rec 3')", "18 km, 6 km a RM al final", "Test LTHR 30'".
+- Cada ejercicio usa "exerciseSlug" con un slug del catálogo que te doy. Nada de nombres
+  inventados: si un ejercicio no está en el catálogo, elige el más parecido que sí esté.
+- Las prescripciones de carrera llevan las dos formas: "prescription" como etiqueta humana
+  ("3×8' Z4 (rec 3')") y "structure" como bloques tipados — la estructura es lo que la app
+  renderiza y calcula, la etiqueta es solo texto.
 - Una entrada de "runs" por cada slot de carrera Y cada semana de la fase. Si la fase dura 8
   semanas y tiene 2 slots de carrera, son 16 entradas.
 - La ola ("wave") son multiplicadores por semana del ciclo; la última es la descarga. El estándar
   es [0.75, 0.8, 0.85, 0.7].
 - No inventes kilos: el motor los calcula a partir de la RM y la ola.
 `.trim();
+
+export interface CatalogRowForPrompt {
+  slug: string;
+  name: string;
+  equipment: string;
+  pattern: string | null;
+}
+
+/** The catalogue the model may pick from — already equipment-filtered. */
+export function buildCatalogContext(rows: CatalogRowForPrompt[]): string {
+  const lines = [
+    "## Catálogo de ejercicios (usa exerciseSlug EXACTO de esta lista)",
+    ...rows.map(
+      (r) =>
+        `- ${r.slug} · ${r.name} · ${r.equipment}${r.pattern ? ` · ${r.pattern}` : ""}`,
+    ),
+  ];
+  return lines.join("\n");
+}
 
 /** Serialise the athlete's current plan for the model. */
 export function buildPlanContext(

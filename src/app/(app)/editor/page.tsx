@@ -7,6 +7,7 @@ import {
   resolveWeek,
   type SessionGroup,
 } from "@/lib/domain/plan";
+import { planWarnings } from "@/lib/domain/plan-rules";
 import { DAY_LABELS, formatDayShort } from "@/lib/domain/calendar";
 import { cycleOf, isDeloadWeek, weekInCycle } from "@/lib/engine";
 import { changeOpSchema, type ChangeOp } from "@/lib/ai/schema";
@@ -86,61 +87,27 @@ export default async function EditorPage() {
         .map((r) => r.data)
     : [];
 
-  /* ── plan validator ─────────────────────────────────────────── */
+  /* ── plan validator — the same rules applyProposal enforces ──── */
 
-  const warnings: EditorWarning[] = [];
-  const longIndex = week.findIndex((d) => d.slot?.session_type === "run_long");
-  if (longIndex > 0 && week[longIndex - 1].group === "strength") {
-    warnings.push({
-      tone: "warn",
-      title: `Fricción · ${week[longIndex - 1].title} el día antes de la larga`,
-      detail:
-        "Menos de 18 h entre cadena posterior pesada y la tirada larga. Si la larga se cae dos semanas seguidas, mueve la fuerza al jueves antes de tocar volumen.",
-    });
-  }
-
-  for (const slot of slots) {
-    if (groupOf(slot.session_type) !== "strength") continue;
-    const sets = ctx.exercises
-      .filter((e) => e.slot_id === slot.id)
-      .reduce((acc, e) => acc + e.sets, 0);
-    if (sets > 18) {
-      warnings.push({
-        tone: "warn",
-        title: `${slot.label}: ${sets} series ≈ ${Math.round(sets * 3.1 + 12)} min`,
-        detail:
-          "Por encima de 70 minutos la calidad de las últimas series cae. Recorta accesorio antes que series del básico.",
-      });
-    }
-    if (!ctx.exercises.some((e) => e.slot_id === slot.id && e.is_primary)) {
-      warnings.push({
-        tone: "fail",
-        title: `${slot.label} sin básico`,
-        detail:
-          "Sin un básico marcado, la regla de regresión no tiene a qué agarrarse: esa sesión no mueve el motor.",
-      });
-    }
-  }
-
-  if (!week.some((d) => d.group === "mobility")) {
-    warnings.push({
-      tone: "fail",
-      title: "Sin bloque de movilidad",
-      detail:
-        "Los correctivos eran innegociables en el plan original: 20 minutos diarios de glúteo, psoas y tobillo.",
-    });
-  }
-
-  const strengthDays = week.filter((d) => d.group === "strength").length;
-  const runDays = week.filter((d) => d.group === "run").length;
-  if (strengthDays > 3 && runDays >= 2) {
-    warnings.push({
-      tone: "fail",
-      title: `${strengthDays} días de fuerza con ${runDays} de carrera`,
-      detail:
-        "Seis sesiones duras y un día libre. En híbrido eso se paga en la tirada larga antes que en el gimnasio.",
-    });
-  }
+  const slotIdSet = new Set(slots.map((s) => s.id));
+  const warnings: EditorWarning[] = planWarnings({
+    slots: slots.map((s) => ({
+      id: s.id,
+      label: s.label,
+      sessionType: s.session_type,
+    })),
+    exercises: ctx.exercises
+      .filter((e) => slotIdSet.has(e.slot_id))
+      .map((e) => ({
+        slotId: e.slot_id,
+        sets: e.sets,
+        isPrimary: e.is_primary,
+      })),
+    days: week.map((d) => ({
+      dayIndex: d.dayIndex,
+      slotId: d.slot?.id ?? null,
+    })),
+  }).map((w) => ({ tone: w.tone, title: w.title, detail: w.detail }));
 
   return (
     <ProgramEditor
