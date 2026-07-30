@@ -19,6 +19,9 @@ export const metadata: Metadata = {
     title: "Bloques",
     statusBarStyle: "black-translucent",
   },
+  icons: {
+    apple: "/icons/apple-touch-icon.png",
+  },
   manifest: "/manifest.webmanifest",
 };
 
