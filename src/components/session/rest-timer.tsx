@@ -51,18 +51,31 @@ function beep() {
   }
 }
 
+export interface RestSnapshot {
+  deadlineEpochMs: number;
+  totalSeconds: number;
+  label: string;
+}
+
 export function useRestTimer({
   sound,
   vibration,
+  onChange,
 }: {
   sound: boolean;
   vibration: boolean;
+  /** Fires on start/extend/stop/expiry — the hook's persistence outlet. */
+  onChange?: (rest: RestSnapshot | null) => void;
 }) {
   const [rest, setRest] = useState<RestState | null>(null);
   const [flash, setFlash] = useState(false);
   // Wall-clock deadline: a background tab throttles the interval, but the
   // remaining time still has to be right when the athlete looks back.
   const deadline = useRef<number | null>(null);
+  const notify = useRef(onChange);
+  useEffect(() => {
+    notify.current = onChange;
+  }, [onChange]);
 
   const start = useCallback(
     (seconds: number, label: string) => {
@@ -72,23 +85,43 @@ export function useRestTimer({
       if (seconds <= 0) {
         deadline.current = null;
         setRest(null);
+        notify.current?.(null);
         return;
       }
       deadline.current = Date.now() + seconds * 1000;
       setRest({ left: seconds, total: seconds, label });
+      notify.current?.({
+        deadlineEpochMs: deadline.current,
+        totalSeconds: seconds,
+        label,
+      });
     },
     [sound],
   );
 
+  /** Rehydrate a persisted deadline — a reload mid-rest keeps counting. */
+  const resume = useCallback((snapshot: RestSnapshot) => {
+    const left = Math.round((snapshot.deadlineEpochMs - Date.now()) / 1000);
+    if (left <= 0) return;
+    deadline.current = snapshot.deadlineEpochMs;
+    setRest({ left, total: snapshot.totalSeconds, label: snapshot.label });
+  }, []);
+
   const stop = useCallback(() => {
     deadline.current = null;
     setRest(null);
+    notify.current?.(null);
   }, []);
 
   const extend = useCallback((seconds: number) => {
     setRest((prev) => {
       if (!prev) return prev;
       deadline.current = (deadline.current ?? Date.now()) + seconds * 1000;
+      notify.current?.({
+        deadlineEpochMs: deadline.current,
+        totalSeconds: prev.total + seconds,
+        label: prev.label,
+      });
       return {
         ...prev,
         left: prev.left + seconds,
@@ -105,6 +138,7 @@ export function useRestTimer({
       if (left <= 0) {
         deadline.current = null;
         setRest(null);
+        notify.current?.(null);
         setFlash(true);
         window.setTimeout(() => setFlash(false), 1100);
         if (vibration && typeof navigator !== "undefined" && navigator.vibrate) {
@@ -118,7 +152,7 @@ export function useRestTimer({
     return () => window.clearInterval(tick);
   }, [rest, sound, vibration]);
 
-  return { rest, flash, start, stop, extend };
+  return { rest, flash, start, stop, extend, resume };
 }
 
 export function RestBar({

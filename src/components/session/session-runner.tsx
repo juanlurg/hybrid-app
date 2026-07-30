@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { PlateChips } from "@/components/ui/kit";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
@@ -168,8 +168,54 @@ export function SessionRunner({
   const [pendingRir, setPendingRir] = useState<number | null>(null);
   const exercise = exercises[Math.min(exIndex, exercises.length - 1)];
 
-  const { rest, flash, start, stop, extend } = useRestTimer({ sound, vibration });
+  const { rest, flash, start, stop, extend, resume } = useRestTimer({
+    sound,
+    vibration,
+    // Persist the deadline: a reload mid-rest keeps counting.
+    onChange: (snapshot) => void withLocal((s) => ({ ...s, rest: snapshot })),
+  });
   useWakeLock(keepAwake);
+
+  /* Restore what only this device knows: unflushed sets, undos and the
+     rest deadline survive a killed tab. Local entries win over server. */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const local = await getLocalSession(sessionId);
+      if (!local || cancelled) return;
+      localRef.current = local;
+      setLogs((prev) => {
+        const next = { ...prev };
+        for (const [k, entry] of Object.entries(local.logs)) {
+          const [pos, idx] = k.split(":").map(Number);
+          const ex = exercises.find((e) => e.position === pos);
+          if (!ex) continue;
+          const key = keyOf(ex.id, idx);
+          if (!(key in next)) next[key] = { value: entry.value, missed: entry.missed };
+        }
+        return next;
+      });
+      if (local.undoneFailures.length) {
+        setUndone((prev) => {
+          const seen = new Set(prev.map((u) => `${u.position}:${u.setIndex}`));
+          return [
+            ...prev,
+            ...local.undoneFailures.filter(
+              (u) => !seen.has(`${u.position}:${u.setIndex}`),
+            ),
+          ];
+        });
+      }
+      if (local.rest && local.rest.deadlineEpochMs > Date.now()) {
+        resume(local.rest);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only: the restore reads a device-local mirror once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   const doneForExercise = countDone(logs, exercise.id, exercise.sets);
   const totalSets = exercises.reduce((acc, e) => acc + e.sets, 0);

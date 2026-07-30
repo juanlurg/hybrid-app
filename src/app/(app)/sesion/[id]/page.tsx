@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { LocalSessionRunner } from "@/components/session/local-session-runner";
 import { requireAthlete } from "@/lib/data/athlete";
 import {
   liftStateFrom,
@@ -32,7 +33,9 @@ export default async function SessionPage({
     supabase.from("set_logs").select("*").eq("session_id", id),
   ]);
 
-  if (!session) notFound();
+  // Not in the database yet: a session started offline whose flush has
+  // not landed. The device that opened it holds it in IndexedDB.
+  if (!session) return <LocalSessionRunner sessionId={id} />;
   if (session.status === "done" || session.status === "partial") {
     redirect(`/sesion/${id}/resumen`);
   }

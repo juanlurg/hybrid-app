@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { SnapshotWriter } from "@/components/session/snapshot-writer";
 import { requireAthlete } from "@/lib/data/athlete";
 import { formatSeasonRange } from "@/lib/domain/calendar";
 
@@ -18,5 +19,15 @@ export default async function AppLayout({
       ? formatSeasonRange(program.starts_on, program.ends_on).toUpperCase()
       : undefined;
 
-  return <AppShell seasonLabel={season}>{children}</AppShell>;
+  return (
+    <AppShell seasonLabel={season}>
+      <SnapshotWriter
+        userId={athlete.userId}
+        ctx={athlete.ctx}
+        config={athlete.config}
+        seasonWeeks={athlete.seasonWeeks}
+      />
+      {children}
+    </AppShell>
+  );
 }

@@ -79,6 +79,11 @@ export async function deleteLocalSession(id: string): Promise<void> {
   await getStore().delete("localSessions", id);
 }
 
+export async function allLocalSessions(): Promise<LocalSessionState[]> {
+  const rows = await getStore().getAll<LocalSessionState>("localSessions");
+  return rows.map((r) => r.value);
+}
+
 /* ── queue ───────────────────────────────────────────────────── */
 
 export async function enqueueOp(op: QueueOp): Promise<void> {
