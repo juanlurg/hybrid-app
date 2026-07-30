@@ -36,6 +36,9 @@ export type SettingsProfile = Pick<
   | "bar_kg"
   | "plates_kg"
   | "dumbbell_step_kg"
+  | "pulley_step_kg"
+  | "kettlebells_kg"
+  | "available_equipment"
   | "rounding_kg"
   | "regression_rule"
   | "auto_deload"
@@ -65,6 +68,22 @@ export interface SettingsLift {
 /** The plates the shop sells, heaviest first. Anything else the athlete
  *  already owns gets a chip too — see `plateOptions` below. */
 const PLATE_STEPS = [25, 20, 15, 10, 5, 2.5, 1.25];
+
+/** The bells the shop sells; owned odd sizes get a chip via the same trick. */
+const KETTLEBELL_STEPS = [8, 12, 16, 20, 24];
+
+type EquipmentKind = Database["public"]["Enums"]["equipment_kind"];
+
+/** What can be toggled off. Bodyweight is always available by definition. */
+const EQUIPMENT_OPTIONS: Array<{ value: EquipmentKind; label: string }> = [
+  { value: "barbell", label: "Barra" },
+  { value: "dumbbell", label: "Mancuernas" },
+  { value: "kettlebell", label: "Kettlebells" },
+  { value: "pulley", label: "Polea" },
+  { value: "dip_bars", label: "Paralelas" },
+  { value: "band", label: "Bandas" },
+  { value: "machine", label: "Máquinas" },
+];
 
 /**
  * What the run screens fall back to while `lthr` is null — the same 168 ppm
@@ -186,6 +205,31 @@ export function SettingsGroups({
         setError(res.error ?? "No se han podido guardar los discos.");
       }
     });
+  }
+
+  const bells = (profile.kettlebells_kg ?? [])
+    .map(Number)
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
+  const bellOptions = Array.from(new Set([...KETTLEBELL_STEPS, ...bells])).sort(
+    (a, b) => a - b,
+  );
+  const equipment = (profile.available_equipment ?? []) as EquipmentKind[];
+
+  function toggleKettlebell(kg: number) {
+    const next = bells.includes(kg)
+      ? bells.filter((k) => k !== kg)
+      : [...bells, kg].sort((a, b) => a - b);
+    save({ kettlebells_kg: next });
+  }
+
+  function toggleEquipment(kind: EquipmentKind) {
+    const next = equipment.includes(kind)
+      ? equipment.filter((e) => e !== kind)
+      : [...equipment, kind];
+    // Bodyweight is not a chip: it can never be toggled away.
+    if (!next.includes("bodyweight")) next.push("bodyweight");
+    save({ available_equipment: next });
   }
 
   function wipeHistory() {
@@ -378,6 +422,79 @@ export function SettingsGroups({
             }
           />
         </SettingRow>
+
+        <SettingRow
+          name="Salto de polea"
+          sub="Lo que separa dos clavijas del stack"
+        >
+          <Stepper
+            label="salto de polea"
+            value={`${formatWeight(Number(profile.pulley_step_kg))} kg`}
+            onDecrement={() =>
+              save({
+                pulley_step_kg: bump(
+                  Number(profile.pulley_step_kg),
+                  -2.5,
+                  5,
+                  1,
+                  10,
+                ),
+              })
+            }
+            onIncrement={() =>
+              save({
+                pulley_step_kg: bump(
+                  Number(profile.pulley_step_kg),
+                  2.5,
+                  5,
+                  1,
+                  10,
+                ),
+              })
+            }
+          />
+        </SettingRow>
+
+        <Row>
+          <div className="text-[13px] leading-[1.2] font-bold">Kettlebells</div>
+          <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
+            Las cargas de kettlebell se ajustan a una de estas, no a un salto.
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {bellOptions.map((kg) => (
+              <Chip
+                key={kg}
+                active={bells.includes(kg)}
+                aria-pressed={bells.includes(kg)}
+                onClick={() => toggleKettlebell(kg)}
+                className="num min-w-11"
+              >
+                {formatWeight(kg)}
+              </Chip>
+            ))}
+          </div>
+        </Row>
+
+        <Row>
+          <div className="text-[13px] leading-[1.2] font-bold">
+            Material disponible
+          </div>
+          <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
+            El editor y la IA solo proponen ejercicios que puedas montar.
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {EQUIPMENT_OPTIONS.map((opt) => (
+              <Chip
+                key={opt.value}
+                active={equipment.includes(opt.value)}
+                aria-pressed={equipment.includes(opt.value)}
+                onClick={() => toggleEquipment(opt.value)}
+              >
+                {opt.label}
+              </Chip>
+            ))}
+          </div>
+        </Row>
       </RowStack>
 
       {/* ── motor de pesos ─────────────────────────────────────── */}
@@ -673,6 +790,28 @@ export function SettingsGroups({
       {/* ── datos ──────────────────────────────────────────────── */}
       <SectionLabel right={status()}>Datos</SectionLabel>
       <RowStack className="mt-2.5">
+        <a
+          href="/api/export"
+          download
+          className="flex w-full items-center gap-3 bg-paper px-4 py-3 text-left"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] leading-[1.2] font-bold">
+              Exportar histórico (JSON)
+            </span>
+            <span className="mt-1 block text-[10.5px] leading-[1.35] text-faint">
+              Todo lo tuyo en un archivo. En el plan gratuito esto ES la copia
+              de seguridad: descárgalo cada semana.
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className="flex-none text-[16px] leading-none font-bold"
+          >
+            ↓
+          </span>
+        </a>
+
         {confirmClear ? (
           <Row className="flex items-center gap-3">
             <div className="min-w-0 flex-1">

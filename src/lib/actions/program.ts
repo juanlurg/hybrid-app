@@ -153,6 +153,33 @@ export async function deleteExercise(exerciseId: string): Promise<Result> {
   return { ok: true };
 }
 
+/** A starting load the athlete can actually rack, per equipment. A `fixed`
+ *  row without a weight renders as "—" — the regression the accessory
+ *  start-loads migration patched once already. Never insert one again. */
+function seedWeightKg(
+  equipment: string | null,
+  config: { barKg: number; kettlebellsKg: readonly number[] },
+): number {
+  switch (equipment) {
+    case "barbell":
+      return config.barKg;
+    case "dumbbell":
+      return 10;
+    case "kettlebell":
+      return config.kettlebellsKg.length
+        ? Math.min(...config.kettlebellsKg)
+        : 12;
+    case "pulley":
+    case "machine":
+      return 20;
+    default:
+      return 10;
+  }
+}
+
+/** Isometric catalogue entries whose rep range means seconds. */
+const TIMED_SLUGS = new Set(["copenhagen-plank", "plancha-lateral"]);
+
 export async function addExercise(
   slotId: string,
   input?: { name?: string; exerciseId?: string | null },
@@ -165,16 +192,54 @@ export async function addExercise(
   const position = siblings.reduce((max, e) => Math.max(max, e.position), 0) + 1;
 
   const supabase = await createClient();
+
+  // From the catalogue: the row carries its own load mode, equipment and
+  // rest, and gets a rackable starting weight instead of a "—".
+  if (input?.exerciseId) {
+    const { data: cat } = await supabase
+      .from("exercises")
+      .select("id, slug, name, modality, equipment, default_rest_seconds")
+      .eq("id", input.exerciseId)
+      .maybeSingle();
+    if (!cat) return { ok: false, error: "Ejercicio no encontrado en el catálogo." };
+
+    const fixed =
+      cat.modality === "fixed"
+        ? seedWeightKg(cat.equipment, athlete.config)
+        : cat.modality === "weighted_bodyweight"
+          ? 0
+          : null;
+
+    const { error } = await supabase.from("program_exercises").insert({
+      slot_id: slotId,
+      position,
+      exercise_id: cat.id,
+      name: input.name ?? cat.name,
+      sets: 3,
+      rep_min: 8,
+      rep_max: 10,
+      rest_seconds: cat.default_rest_seconds,
+      load_mode: cat.modality,
+      fixed_weight_kg: fixed,
+      effort: TIMED_SLUGS.has(cat.slug) ? "seconds" : "reps",
+      equipment: cat.equipment,
+    });
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/", "layout");
+    return { ok: true };
+  }
+
   const { error } = await supabase.from("program_exercises").insert({
     slot_id: slotId,
     position,
-    exercise_id: input?.exerciseId ?? null,
+    exercise_id: null,
     name: input?.name ?? "Ejercicio nuevo",
     sets: 3,
     rep_min: 8,
     rep_max: 10,
     rest_seconds: 90,
     load_mode: "fixed",
+    fixed_weight_kg: 10,
   });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/", "layout");

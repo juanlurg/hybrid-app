@@ -56,6 +56,13 @@ interface ExerciseView {
   isPrimary: boolean;
 }
 
+export interface CatalogEntry {
+  id: string;
+  name: string;
+  equipment: string;
+  pattern: string | null;
+}
+
 type Tab = "semana" | "ejercicios" | "motor";
 
 const RULE_LABEL: Record<string, string> = {
@@ -76,6 +83,7 @@ export function ProgramEditor({
   days,
   slots,
   exercises,
+  catalog,
   warnings,
   hasApiKey,
   thread,
@@ -101,6 +109,8 @@ export function ProgramEditor({
   days: DayView[];
   slots: SlotView[];
   exercises: ExerciseView[];
+  /** Global catalogue, already filtered by the athlete's equipment. */
+  catalog: CatalogEntry[];
   warnings: EditorWarning[];
   hasApiKey: boolean;
   thread: { id: string | null; messages: ThreadMessage[] };
@@ -113,6 +123,7 @@ export function ProgramEditor({
   const [tab, setTab] = useState<Tab>("semana");
   const [pickerFor, setPickerFor] = useState<number | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const strengthSlots = slots.filter((s) => s.group === "strength");
@@ -462,11 +473,56 @@ export function ProgramEditor({
             <button
               type="button"
               disabled={pending}
-              onClick={() => run(() => addExercise(activeSlot.id))}
+              onClick={() => setAddOpen((v) => !v)}
               className="mx-4 mt-3.5 block w-[calc(100%-2rem)] border-2 border-dashed border-hairline px-3 py-3.5 text-center text-[11.5px] leading-none font-bold tracking-[0.08em] text-mid uppercase"
             >
               + Añadir ejercicio
             </button>
+
+            {addOpen ? (
+              <div className="mx-4 mt-2 border-2 border-ink">
+                <div className="bg-ink px-3 py-2 text-[10px] leading-none font-extrabold tracking-[0.12em] text-paper uppercase">
+                  Del catálogo · según tu material
+                </div>
+                <div className="flex max-h-64 flex-col gap-px overflow-auto bg-line">
+                  {catalog.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        setAddOpen(false);
+                        run(() =>
+                          addExercise(activeSlot.id, {
+                            exerciseId: c.id,
+                            name: c.name,
+                          }),
+                        );
+                      }}
+                      className="flex items-baseline gap-2.5 bg-paper px-3 py-2.5 text-left"
+                    >
+                      <span className="flex-1 text-[13px] leading-[1.2] font-semibold">
+                        {c.name}
+                      </span>
+                      <span className="text-[9.5px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+                        {c.pattern ?? c.equipment}
+                      </span>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      setAddOpen(false);
+                      run(() => addExercise(activeSlot.id));
+                    }}
+                    className="bg-paper px-3 py-2.5 text-left text-[13px] leading-[1.2] font-semibold text-mid"
+                  >
+                    Ejercicio libre…
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <p className="px-4 py-4 text-[11px] leading-[1.5] text-faint">
               El básico del día manda: su rango de reps es lo que dispara la

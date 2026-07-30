@@ -64,6 +64,21 @@ export default async function EditorPage() {
     .eq("program_id", ctx.program.id)
     .eq("status", "applied");
 
+  // The catalogue the picker offers: only what this athlete can rack.
+  const availableEquipment = (ctx.profile.available_equipment ?? []).map(String);
+  const { data: catalogRows } = await supabase
+    .from("exercises")
+    .select("id, name, equipment, pattern")
+    .order("name");
+  const catalog = (catalogRows ?? [])
+    .filter((c) => availableEquipment.includes(String(c.equipment)))
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      equipment: String(c.equipment),
+      pattern: c.pattern,
+    }));
+
   const changes: ChangeOp[] = Array.isArray(proposalRow?.changes)
     ? (proposalRow.changes as unknown[])
         .map((c) => changeOpSchema.safeParse(c))
@@ -144,6 +159,7 @@ export default async function EditorPage() {
         targetRir: ctx.profile.target_rir,
         regressionRule: config.regressionRule,
       }}
+      catalog={catalog}
       days={week.map((d) => ({
         dayIndex: d.dayIndex,
         dayLabel: DAY_LABELS[d.dayIndex],

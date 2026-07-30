@@ -46,6 +46,14 @@ export async function proxy(request: NextRequest) {
   );
 
   if (!user && !isPublic) {
+    // API callers (the sync queue, the export link fetched by a script)
+    // need to tell "no session" apart from "here is the login page HTML".
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { ok: false, error: "not_authenticated" },
+        { status: 401 },
+      );
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/entrar";
     url.searchParams.set("next", pathname);
@@ -68,6 +76,6 @@ export const config = {
      * Everything except static assets and images — the session refresh
      * is pointless there and costs a round trip.
      */
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
