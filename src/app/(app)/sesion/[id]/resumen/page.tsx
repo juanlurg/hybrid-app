@@ -18,11 +18,13 @@ import {
   liftStateFrom,
   phaseEngineConfig,
   resolveExercise,
-  weightLabelFor,
-  type LoadMode,
   type SessionStatus,
-  type SetLogRow,
 } from "@/lib/domain/plan";
+import {
+  formatMinutes,
+  summarise,
+  type ExerciseSummary,
+} from "@/lib/domain/summary";
 import { formatTonnage, formatWeight, regressionLadder } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/cn";
@@ -53,55 +55,6 @@ const STATUS_TONE: Record<SessionStatus, string> = {
   planned: "text-quiet",
 };
 
-/** "52′", "1 h 05′". Never a bare number of seconds. */
-function formatMinutes(seconds: number | null): string | null {
-  if (!seconds || seconds <= 0) return null;
-  const total = Math.round(seconds / 60);
-  if (total < 60) return `${total}′`;
-  return `${Math.floor(total / 60)} h ${String(total % 60).padStart(2, "0")}′`;
-}
-
-interface ExerciseSummary {
-  key: string;
-  name: string;
-  isPrimary: boolean;
-  /** Sets the plan asked for, deload included. Null when off-plan. */
-  plannedSets: number | null;
-  doneSets: number;
-  missedSets: number;
-  /** "5 · 5 · 4" — what was actually logged. */
-  repsLabel: string;
-  weightLabel: string;
-}
-
-/** Everything here comes off `set_logs`; nothing is estimated. */
-function summarise(
-  key: string,
-  name: string,
-  isPrimary: boolean,
-  plannedSets: number | null,
-  loadMode: LoadMode | null,
-  rows: SetLogRow[],
-): ExerciseSummary {
-  const raw = rows.find((r) => r.weight_kg != null)?.weight_kg;
-  const loggedKg = raw == null ? null : Number(raw);
-  return {
-    key,
-    name,
-    isPrimary,
-    plannedSets,
-    doneSets: rows.length,
-    missedSets: rows.filter((r) => r.missed_range).length,
-    repsLabel: rows
-      .map((r) => (r.reps == null ? "—" : String(r.reps)))
-      .join(" · "),
-    weightLabel: loadMode
-      ? weightLabelFor(loadMode, loggedKg)
-      : loggedKg == null
-        ? "—"
-        : `${formatWeight(loggedKg)} kg`,
-  };
-}
 
 export default async function ResumenPage({
   params,
