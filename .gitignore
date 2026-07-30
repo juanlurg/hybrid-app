@@ -43,3 +43,5 @@ next-env.d.ts
 # walkthrough screenshots
 /.walkthrough
 
+.vercel
+.env*
