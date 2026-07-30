@@ -10,7 +10,12 @@
  * repeat forever.
  */
 
-import { isRangeFailure, registerFailure, registerCleanSession } from ".";
+import {
+  isRangeFailure,
+  registerFailure,
+  registerCleanSession,
+  workingWeight,
+} from ".";
 import type { EngineConfig, LiftState, RegressionOutcome } from "./types";
 
 export interface ReplaySetLog {
@@ -62,6 +67,8 @@ export interface ReplayResult {
   events: ReplayEvent[];
   /** Every prescribed set of the basic logged, all inside the range. */
   clean: boolean;
+  /** True when this clean session actually cleared a hold/fail count. */
+  released: boolean;
   cleanDedupKey: string;
   /** What the runner shows: the last failure that still stands. */
   banner: { title: string; detail: string; tone: "warn" | "fail" } | null;
@@ -80,7 +87,14 @@ export function replayEngine(input: ReplayInput): ReplayResult {
   const cleanDedupKey = `${sessionId}:clean`;
 
   if (!primary || !input.lift) {
-    return { lift: null, events: [], clean: false, cleanDedupKey, banner: null };
+    return {
+      lift: null,
+      events: [],
+      clean: false,
+      released: false,
+      cleanDedupKey,
+      banner: null,
+    };
   }
 
   const undoneSet = new Set(
@@ -133,11 +147,50 @@ export function replayEngine(input: ReplayInput): ReplayResult {
       !isRangeFailure(l.reps ?? l.seconds ?? 0, primary.repMin),
     );
 
+  let released = false;
   if (clean && liveMisses === 0) {
-    lift = registerCleanSession(lift);
+    // The hold is a cap that only some weeks reach: a clean deload (or
+    // early-cycle week) never tested the held weight, so it must not
+    // release it — "se repite cuando la ola lo alcance" has to stay
+    // true. Only a clean session where the cap actually bound clears
+    // the hold; a plain fail-count (no hold) clears on any clean one.
+    const tested = !lift.hold || workingWeight(lift, week, config).isHeld;
+    if (tested) {
+      const next = registerCleanSession(lift);
+      released = next !== lift;
+      lift = next;
+    }
   }
 
-  return { lift, events, clean, cleanDedupKey, banner };
+  return { lift, events, clean, released, cleanDedupKey, banner };
+}
+
+/**
+ * Decode the `previous` snapshot out of an engine event payload.
+ * Payloads written before 2026-07-31 used the lifts-table column names
+ * (e1rm_kg, fail_count, hold_at_kg); newer ones store LiftState
+ * verbatim. Accept both — reading only the camelCase keys silently
+ * no-opped the rewind and made every re-flush escalate a single miss
+ * into RM cuts.
+ */
+export function parsePreviousLiftState(
+  raw: unknown,
+): Partial<LiftState> | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const previous: Partial<LiftState> = {};
+
+  const e1rm = r.e1rmKg ?? r.e1rm_kg;
+  if (e1rm != null) previous.e1rmKg = Number(e1rm);
+  if (r.penalty != null) previous.penalty = Number(r.penalty);
+  const failCount = r.failCount ?? r.fail_count;
+  if (failCount != null) previous.failCount = Number(failCount);
+  if (r.hold != null) previous.hold = Boolean(r.hold);
+  const holdAt = "holdAtKg" in r ? r.holdAtKg : r.hold_at_kg;
+  if (holdAt !== undefined) {
+    previous.holdAtKg = holdAt == null ? null : Number(holdAt);
+  }
+  return previous;
 }
 
 /**

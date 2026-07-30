@@ -9,7 +9,7 @@
 import type { EngineConfig } from "@/lib/engine";
 import type { AthleteContext } from "@/lib/domain/plan";
 
-export const SNAPSHOT_SCHEMA_VERSION = 2;
+export const SNAPSHOT_SCHEMA_VERSION = 3;
 export const SNAPSHOT_KEY = "athlete";
 
 export interface AthleteSnapshot {

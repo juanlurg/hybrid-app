@@ -1,26 +1,36 @@
 /**
- * Hand-rolled service worker — Serwist wants webpack and this repo
- * builds with Turbopack, so the ~80 lines are written out.
+ * The service worker, served as a route so every deploy ships a fresh
+ * CACHE_VERSION — the old static public/sw.js never changed bytes, so
+ * the install event never re-fired and the precached shell (and the
+ * hashed chunk URLs inside it) went stale forever after one deploy.
  *
- * Strategy:
- *  · precache the offline shell (/~offline) + manifest + icons;
+ * `force-static` bakes the version at build time; the proxy matcher
+ * already lets /sw.js through unauthenticated, and next.config.ts sets
+ * the no-cache headers on the path.
+ *
+ * Strategy (unchanged from the hand-rolled worker):
+ *  · precache the offline shell (/~offline) + its hydration chunks +
+ *    manifest + icons — the chunks are parsed out of the shell's own
+ *    HTML, so hydration works offline even if the route was never
+ *    visited online;
  *  · navigations go network-first with a short timeout, falling back
  *    to the shell — per-user HTML is NEVER cached;
- *  · hashed /_next/static assets are cache-first (immutable), which is
- *    what keeps an already-open shell working across a deploy;
- *  · POSTs, /api/*, /auth/* and RSC prefetches are never touched: the
- *    sync queue talks to the network directly.
- *
- * Bump CACHE_VERSION when the shell must be re-precached.
+ *  · hashed /_next/static assets are cache-first (immutable);
+ *  · POSTs, /api/*, /auth/* and RSC prefetches are never touched.
  */
 
-const CACHE_VERSION = "v1";
-const PRECACHE = `bloques-pre-${CACHE_VERSION}`;
-const RUNTIME = `bloques-run-${CACHE_VERSION}`;
+export const dynamic = "force-static";
+
+const CACHE_VERSION =
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? "dev";
+
+const WORKER_SOURCE = /* js */ (
+  'const CACHE_VERSION = "' + CACHE_VERSION + '";\n' +
+  `const PRECACHE = "bloques-pre-" + CACHE_VERSION;
+const RUNTIME = "bloques-run-" + CACHE_VERSION;
 
 const SHELL_URL = "/~offline";
-const PRECACHE_URLS = [
-  SHELL_URL,
+const STATIC_URLS = [
   "/manifest.webmanifest",
   "/icons/icon-192.svg",
   "/icons/icon-512.svg",
@@ -28,11 +38,32 @@ const PRECACHE_URLS = [
 
 const NETWORK_TIMEOUT_MS = 3500;
 
+// Fetch the shell rejecting redirects (a redirect here means auth got in
+// the way — cache nothing, fail the install loudly, the old worker keeps
+// serving), then precache the hashed chunks its HTML references so the
+// client component actually hydrates offline.
+async function precacheShell(cache) {
+  const res = await fetch(SHELL_URL, {
+    redirect: "error",
+    cache: "no-cache",
+    credentials: "same-origin",
+  });
+  if (!res.ok || res.redirected) {
+    throw new Error("shell precache got " + res.status);
+  }
+  const html = await res.clone().text();
+  const chunks = [
+    ...new Set(html.match(/\\/_next\\/static\\/[^"'\\\\ ]+\\.(?:js|css)/g) ?? []),
+  ];
+  await cache.addAll(STATIC_URLS.concat(chunks));
+  await cache.put(SHELL_URL, res);
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(PRECACHE)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) => precacheShell(cache))
       .then(() => self.skipWaiting()),
   );
 });
@@ -44,7 +75,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k.startsWith("bloques-") && k !== PRECACHE && k !== RUNTIME)
+            .filter((k) => k.indexOf("bloques-") === 0 && k !== PRECACHE && k !== RUNTIME)
             .map((k) => caches.delete(k)),
         ),
       )
@@ -117,3 +148,14 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request));
   }
 });
+`
+);
+
+export function GET() {
+  return new Response(WORKER_SOURCE, {
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+    },
+  });
+}

@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 
 import { LocalSessionRunner } from "@/components/session/local-session-runner";
-import { formatDayLong, placeDate, todayIso } from "@/lib/domain/calendar";
+import {
+  daysBetween,
+  formatDayLong,
+  placeDate,
+  todayIso,
+} from "@/lib/domain/calendar";
 import {
   phaseSpans,
   resolveDay,
@@ -19,6 +24,7 @@ import {
 import {
   allLocalSessions,
   attachSyncTriggers,
+  deleteLocalSession,
   enqueueOp,
   putLocalSession,
 } from "@/lib/offline/syncer";
@@ -74,9 +80,38 @@ export function OfflineShell() {
               )
             : null;
 
+        // Resume only a session from today (±1 day for a workout that
+        // crossed midnight) — an abandoned one from weeks ago must not
+        // shadow today's start button forever. Anything older is pruned,
+        // but NEVER while its ops still sit in the queue: the local
+        // session holds the key the flush hydrates envelopes with.
+        const todayDate = todayIso();
         const sessions = await allLocalSessions();
+        const queued = await store.getAll<{
+          op: { localSessionId?: string };
+        }>("queue");
+        const withQueuedOps = new Set(
+          queued
+            .map((r) => r.value.op.localSessionId)
+            .filter((id): id is string => Boolean(id)),
+        );
+        for (const s of sessions) {
+          if (
+            s.status === "in_progress" &&
+            !withQueuedOps.has(s.localSessionId) &&
+            daysBetween(s.key.scheduledOn, todayDate) > 2
+          ) {
+            await deleteLocalSession(s.localSessionId);
+          }
+        }
         const active =
-          sessions.find((s) => s.status === "in_progress") ?? null;
+          sessions
+            .filter(
+              (s) =>
+                s.status === "in_progress" &&
+                Math.abs(daysBetween(s.key.scheduledOn, todayDate)) <= 1,
+            )
+            .sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0] ?? null;
 
         setState({
           phase: "ready",

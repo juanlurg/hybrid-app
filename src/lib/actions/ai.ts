@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { loadAthlete, type LoadedAthlete } from "@/lib/data/athlete";
 import { createClient } from "@/lib/supabase/server";
 import {
+  GeminiCallError,
   generateJson,
   hasGeminiKey,
   geminiModel,
@@ -25,7 +26,7 @@ import {
   type ChangeOp,
 } from "@/lib/ai/schema";
 import { seedWeightKg, TIMED_SLUGS } from "@/lib/domain/catalog";
-import { planWarnings } from "@/lib/domain/plan-rules";
+import { newBlockingTitles, planWarnings } from "@/lib/domain/plan-rules";
 import type { Database } from "@/lib/supabase/database.types";
 import type { ProgramExerciseRow } from "@/lib/domain/plan";
 import { addDays, startOfWeek, todayIso } from "@/lib/domain/calendar";
@@ -62,10 +63,23 @@ async function loadCatalog(
 
 /* ── one repair retry ────────────────────────────────────────── */
 
+/** Short Spanish copy for an API-level failure — never the raw SDK text. */
+function geminiErrorCopy(error: GeminiCallError): string {
+  if (error.status === 429) {
+    return "Gemini está al límite de peticiones. Espera un minuto y vuelve a intentarlo.";
+  }
+  if (error.status != null && error.status >= 500) {
+    return "Gemini no responde ahora mismo. Inténtalo en un rato.";
+  }
+  return "No hay respuesta de Gemini. Revisa la conexión e inténtalo de nuevo.";
+}
+
 /**
- * One structured call plus, if the output does not validate, exactly
+ * One structured call plus, if the OUTPUT does not validate, exactly
  * one repair round with the validation errors quoted back. Two model
- * calls maximum — never a loop.
+ * calls maximum — never a loop, and never a retry against a transport
+ * failure: a 429/5xx gets short Spanish copy, not a second call that
+ * doubles the load on a service that just said no.
  */
 async function generateWithRepair<S extends z.ZodTypeAny>(
   opts: {
@@ -88,6 +102,9 @@ async function generateWithRepair<S extends z.ZodTypeAny>(
       .join("; ");
   } catch (cause) {
     if (cause instanceof MissingApiKeyError) throw cause;
+    if (cause instanceof GeminiCallError && cause.kind === "http") {
+      return { error: geminiErrorCopy(cause) };
+    }
     firstError = cause instanceof Error ? cause.message : "respuesta ilegible";
   }
 
@@ -112,6 +129,9 @@ async function generateWithRepair<S extends z.ZodTypeAny>(
     };
   } catch (cause) {
     if (cause instanceof MissingApiKeyError) throw cause;
+    if (cause instanceof GeminiCallError && cause.kind === "http") {
+      return { error: geminiErrorCopy(cause) };
+    }
     return {
       error: cause instanceof Error ? cause.message : "Error inesperado.",
     };
@@ -125,6 +145,8 @@ export interface ProposalView {
   question: string;
   rationale: string;
   changes: ChangeOp[];
+  /** Ops the rules filtered out, rendered as disabled cards with the why. */
+  dropped: Array<{ op: ChangeOp; reason: string }>;
   status: Database["public"]["Enums"]["ai_proposal_status"];
 }
 
@@ -140,7 +162,10 @@ export interface ProposeResult {
 
 interface PlanSnapshot {
   phaseId: string;
-  wave: number[];
+  /** Legacy snapshots stored programs.wave here, before the phase split. */
+  wave?: number[];
+  programWave?: number[];
+  phaseWave?: number[] | null;
   exercises: ProgramExerciseRow[];
   days: Array<{ day_index: number; slot_id: string }>;
 }
@@ -149,9 +174,11 @@ function snapshotOf(athlete: LoadedAthlete, phaseId: string): PlanSnapshot {
   const slotIds = new Set(
     athlete.ctx.slots.filter((s) => s.phase_id === phaseId).map((s) => s.id),
   );
+  const phaseRow = athlete.ctx.phases.find((p) => p.id === phaseId) ?? null;
   return {
     phaseId,
-    wave: (athlete.ctx.program.wave ?? []).map(Number),
+    programWave: (athlete.ctx.program.wave ?? []).map(Number),
+    phaseWave: phaseRow?.wave == null ? null : phaseRow.wave.map(Number),
     exercises: athlete.ctx.exercises.filter((e) => slotIds.has(e.slot_id)),
     days: athlete.ctx.days
       .filter((d) => d.phase_id === phaseId)
@@ -169,11 +196,26 @@ async function restoreSnapshot(
     .filter((s) => s.phase_id === snapshot.phaseId)
     .map((s) => s.id);
 
-  if (slotIds.length > 0) {
-    await supabase.from("program_exercises").delete().in("slot_id", slotIds);
-  }
+  // Restore by DIFF, never delete-and-reinsert: deleting a
+  // program_exercises row fires set_logs' ON DELETE SET NULL, and
+  // re-inserting the same id does NOT bring those history links back.
+  // Surviving rows are updated in place; only strays the snapshot lacks
+  // are deleted.
   if (snapshot.exercises.length > 0) {
-    await supabase.from("program_exercises").insert(snapshot.exercises);
+    await supabase
+      .from("program_exercises")
+      .upsert(snapshot.exercises, { onConflict: "id" });
+  }
+  if (slotIds.length > 0) {
+    const keepIds = snapshot.exercises.map((e) => e.id);
+    let strays = supabase
+      .from("program_exercises")
+      .delete()
+      .in("slot_id", slotIds);
+    if (keepIds.length > 0) {
+      strays = strays.not("id", "in", `(${keepIds.join(",")})`);
+    }
+    await strays;
   }
   for (const day of snapshot.days) {
     await supabase.from("program_days").upsert(
@@ -185,24 +227,50 @@ async function restoreSnapshot(
       { onConflict: "phase_id,day_index" },
     );
   }
-  await supabase
-    .from("programs")
-    .update({ wave: snapshot.wave })
-    .eq("id", athlete.ctx.program.id);
+  {
+    const keepDays = snapshot.days.map((d) => d.day_index);
+    let strayDays = supabase
+      .from("program_days")
+      .delete()
+      .eq("phase_id", snapshot.phaseId);
+    if (keepDays.length > 0) {
+      strayDays = strayDays.not("day_index", "in", `(${keepDays.join(",")})`);
+    }
+    await strayDays;
+  }
+  const programWave = snapshot.programWave ?? snapshot.wave;
+  if (programWave) {
+    await supabase
+      .from("programs")
+      .update({ wave: programWave })
+      .eq("id", athlete.ctx.program.id);
+  }
+  if (snapshot.phaseWave !== undefined) {
+    await supabase
+      .from("program_phases")
+      .update({ wave: snapshot.phaseWave })
+      .eq("id", snapshot.phaseId);
+  }
+}
+
+export interface DroppedChange {
+  op: ChangeOp;
+  reason: string;
 }
 
 /**
  * The ownership/sanity filter, shared by propose AND apply: apply must
  * re-check because the plan can change between the two. Drops anything
  * that points outside this athlete's phase, names an exercise off the
- * catalogue, or touches the regression trigger (the primary).
+ * catalogue, or touches the regression trigger (the primary) — and says
+ * WHY, so a change the rationale narrates never just vanishes.
  */
 function filterOwnedChanges(
   changes: ChangeOp[],
   athlete: LoadedAthlete,
   phaseId: string,
   catalog: Map<string, CatalogRow>,
-): ChangeOp[] {
+): { kept: ChangeOp[]; dropped: DroppedChange[] } {
   const validSlots = new Set(
     athlete.ctx.slots.filter((s) => s.phase_id === phaseId).map((s) => s.id),
   );
@@ -212,15 +280,21 @@ function filterOwnedChanges(
       .map((e) => [e.id, e]),
   );
 
-  return changes.filter((c) => {
-    if (c.exerciseId && !exercisesById.has(c.exerciseId)) return false;
-    if (c.slotId && !validSlots.has(c.slotId)) return false;
-    if (c.targetSlotId && !validSlots.has(c.targetSlotId)) return false;
+  const reasonFor = (c: ChangeOp): string | null => {
+    if (c.exerciseId && !exercisesById.has(c.exerciseId)) {
+      return "el ejercicio ya no está en esta fase del plan";
+    }
+    if (c.slotId && !validSlots.has(c.slotId)) {
+      return "la sesión no pertenece a esta fase";
+    }
+    if (c.targetSlotId && !validSlots.has(c.targetSlotId)) {
+      return "la sesión de destino no pertenece a esta fase";
+    }
     if (
       (c.op === "add_exercise" || c.op === "rename_exercise") &&
       (!c.exerciseSlug || !catalog.has(c.exerciseSlug))
     ) {
-      return false;
+      return "el ejercicio no está en el catálogo disponible";
     }
     // Never let a proposal orphan or mutate the regression trigger.
     if (
@@ -230,10 +304,19 @@ function filterOwnedChanges(
       c.exerciseId &&
       exercisesById.get(c.exerciseId)?.is_primary
     ) {
-      return false;
+      return "el básico no se toca: es el que dispara la regresión";
     }
-    return true;
-  });
+    return null;
+  };
+
+  const kept: ChangeOp[] = [];
+  const dropped: DroppedChange[] = [];
+  for (const c of changes) {
+    const reason = reasonFor(c);
+    if (reason) dropped.push({ op: c, reason });
+    else kept.push(c);
+  }
+  return { kept, dropped };
 }
 
 /* ── propose ─────────────────────────────────────────────────── */
@@ -280,8 +363,11 @@ export async function proposeChanges(
     .from("ai_messages")
     .select("role, content")
     .eq("thread_id", thread)
-    .order("created_at")
+    // The 12 NEWEST turns, oldest-first for the model — ascending with
+    // limit() froze the model on the thread's opening messages forever.
+    .order("created_at", { ascending: false })
     .limit(12);
+  history?.reverse();
 
   await supabase.from("ai_messages").insert({
     thread_id: thread,
@@ -342,7 +428,12 @@ export async function proposeChanges(
     };
   }
 
-  const changes = filterOwnedChanges(parsed.changes, athlete, phase.id, catalog);
+  const { kept: changes, dropped } = filterOwnedChanges(
+    parsed.changes,
+    athlete,
+    phase.id,
+    catalog,
+  );
 
   const { data: message } = await supabase
     .from("ai_messages")
@@ -367,6 +458,7 @@ export async function proposeChanges(
       question: trimmed,
       rationale: parsed.rationale,
       changes: changes as unknown as Json,
+      dropped: dropped as unknown as Json,
       status: "pending",
     })
     .select("id, status")
@@ -383,6 +475,7 @@ export async function proposeChanges(
       question: trimmed,
       rationale: parsed.rationale,
       changes,
+      dropped,
       status: proposal.status,
     },
   };
@@ -413,9 +506,10 @@ export async function applyProposal(
     : [];
   const parsed = acceptedIndices
     .filter((i) => i >= 0 && i < allChanges.length)
-    .map((i) => changeOpSchema.safeParse(allChanges[i]))
-    .filter((r) => r.success)
-    .map((r) => r.data);
+    .map((i) => ({ index: i, result: changeOpSchema.safeParse(allChanges[i]) }))
+    .filter((p) => p.result.success)
+    .map((p) => ({ index: p.index, op: p.result.data! }));
+  const indexByOp = new Map(parsed.map((p) => [p.op, p.index]));
 
   const phaseId = proposal.phase_id ?? athlete.placement.phase.id;
   const catalog = await loadCatalog(
@@ -423,24 +517,53 @@ export async function applyProposal(
     (athlete.ctx.profile.available_equipment ?? []).map(String),
   );
   // The plan can have changed since propose: re-run the same filter.
-  const accepted = filterOwnedChanges(parsed, athlete, phaseId, catalog);
+  const { kept: accepted, dropped: applyDropped } = filterOwnedChanges(
+    parsed.map((p) => p.op),
+    athlete,
+    phaseId,
+    catalog,
+  );
 
   if (accepted.length === 0)
     return { ok: false, error: "No has seleccionado ningún cambio aplicable." };
 
   const snapshot = snapshotOf(athlete, phaseId);
 
+  // In-memory high-water mark: two adds into the same slot in one batch
+  // must land on distinct positions, not both at stale-max + 1.
+  const nextPosition = new Map<string, number>();
   const positionOf = (slotId: string) => {
-    const rows = athlete.ctx.exercises.filter((e) => e.slot_id === slotId);
-    return rows.reduce((max, e) => Math.max(max, e.position), 0) + 1;
+    const position =
+      nextPosition.get(slotId) ??
+      athlete.ctx.exercises
+        .filter((e) => e.slot_id === slotId)
+        .reduce((max, e) => Math.max(max, e.position), 0) + 1;
+    nextPosition.set(slotId, position + 1);
+    return position;
   };
 
-  // set_wave ops accumulate on this copy — two in one batch both land.
-  const wave = [...snapshot.wave];
+  // set_wave edits whichever wave is LIVE for this phase — the same
+  // scope the editor displays via phaseEngineConfig. Two ops in one
+  // batch accumulate on this copy and both land.
+  const phaseRow = athlete.ctx.phases.find((p) => p.id === phaseId) ?? null;
+  const waveTarget =
+    phaseRow?.progression_mode === "fixed_pct"
+      ? ("fixed" as const)
+      : (phaseRow?.wave ?? []).map(Number).some((n) => n > 0)
+        ? ("phase" as const)
+        : ("program" as const);
+  const wave =
+    waveTarget === "phase"
+      ? (phaseRow!.wave ?? []).map(Number)
+      : [...(snapshot.programWave ?? [])];
   let waveTouched = false;
 
   let appliedCount = 0;
   const failures: string[] = [];
+  // Timeline events are written only after BOTH rollback gates pass —
+  // a rolled-back batch used to leave "ai_change" entries for changes
+  // that never persisted.
+  const appliedOps: ChangeOp[] = [];
 
   for (const op of accepted) {
     let error: { message: string } | null = null;
@@ -546,7 +669,13 @@ export async function applyProposal(
       }
 
       case "set_wave": {
-        if (op.waveIndex! < wave.length) {
+        if (waveTarget === "fixed") {
+          error = {
+            message: "esta fase va a porcentaje fijo: no hay ola que editar",
+          };
+        } else if (op.waveIndex! >= wave.length) {
+          error = { message: "paso de la ola fuera de rango" };
+        } else {
           wave[op.waveIndex!] = op.waveValue!;
           waveTouched = true;
         }
@@ -564,22 +693,20 @@ export async function applyProposal(
     }
 
     appliedCount += 1;
-    await supabase.from("engine_events").insert({
-      user_id: athlete.userId,
-      program_id: athlete.ctx.program.id,
-      week: athlete.placement.week,
-      kind: "ai_change",
-      title: op.title,
-      detail: `${op.from || "—"} → ${op.to || "—"}${op.why ? ` · ${op.why}` : ""}`,
-      payload: { proposal_id: proposalId, op: op.op },
-    });
+    appliedOps.push(op);
   }
 
   if (waveTouched && failures.length === 0) {
-    const { error } = await supabase
-      .from("programs")
-      .update({ wave })
-      .eq("id", athlete.ctx.program.id);
+    const { error } =
+      waveTarget === "phase"
+        ? await supabase
+            .from("program_phases")
+            .update({ wave })
+            .eq("id", phaseId)
+        : await supabase
+            .from("programs")
+            .update({ wave })
+            .eq("id", athlete.ctx.program.id);
     if (error) failures.push(`Ola: ${error.message}`);
   }
 
@@ -591,12 +718,27 @@ export async function applyProposal(
     };
   }
 
-  // Sanity rules over the plan as it now stands. A batch that leaves a
-  // blocking violation is rolled back whole: the AI proposes, the rules
-  // dispose.
-  const slotIds = athlete.ctx.slots
+  // Sanity rules over the plan as it now stands — but a batch is only
+  // blocked by violations IT introduced. A pre-existing one (a template
+  // phase seeded without mobility, a hand-edited week) must not veto
+  // every unrelated change forever.
+  const slotsForRules = athlete.ctx.slots
     .filter((s) => s.phase_id === phaseId)
-    .map((s) => s.id);
+    .map((s) => ({ id: s.id, label: s.label, sessionType: s.session_type }));
+  const preWarnings = planWarnings({
+    slots: slotsForRules,
+    exercises: snapshot.exercises.map((e) => ({
+      slotId: e.slot_id,
+      sets: e.sets,
+      isPrimary: e.is_primary,
+    })),
+    days: snapshot.days.map((d) => ({
+      dayIndex: d.day_index,
+      slotId: d.slot_id,
+    })),
+  });
+
+  const slotIds = slotsForRules.map((s) => s.id);
   const [{ data: freshExercises }, { data: freshDays }] = await Promise.all([
     slotIds.length
       ? supabase
@@ -610,10 +752,8 @@ export async function applyProposal(
       .eq("phase_id", phaseId),
   ]);
 
-  const blocking = planWarnings({
-    slots: athlete.ctx.slots
-      .filter((s) => s.phase_id === phaseId)
-      .map((s) => ({ id: s.id, label: s.label, sessionType: s.session_type })),
+  const postWarnings = planWarnings({
+    slots: slotsForRules,
     exercises: (freshExercises ?? []).map((e) => ({
       slotId: e.slot_id,
       sets: e.sets,
@@ -623,34 +763,59 @@ export async function applyProposal(
       dayIndex: d.day_index,
       slotId: d.slot_id,
     })),
-  }).filter((w) => w.blocking);
+  });
 
+  const blocking = newBlockingTitles(preWarnings, postWarnings);
   if (blocking.length > 0) {
     await restoreSnapshot(supabase, athlete, snapshot);
     return {
       ok: false,
-      error: `El lote dejaría el plan en un estado inválido y se ha deshecho entero: ${blocking
-        .map((w) => w.title)
-        .join(" · ")}.`,
+      error: `El lote dejaría el plan en un estado inválido y se ha deshecho entero: ${blocking.join(" · ")}.`,
     };
+  }
+
+  // Both gates passed: NOW the changes are real — log them.
+  if (appliedOps.length > 0) {
+    await supabase.from("engine_events").insert(
+      appliedOps.map((op) => ({
+        user_id: athlete.userId,
+        program_id: athlete.ctx.program.id,
+        week: athlete.placement.absoluteWeek,
+        kind: "ai_change" as const,
+        title: op.title,
+        detail: `${op.from || "—"} → ${op.to || "—"}${op.why ? ` · ${op.why}` : ""}`,
+        payload: { proposal_id: proposalId, op: op.op },
+      })),
+    );
   }
 
   await supabase
     .from("ai_proposals")
     .update({
       status: "applied",
-      accepted_indices: acceptedIndices,
+      // The indices that actually landed, not the raw client array —
+      // the editor shows this count as "applied".
+      accepted_indices: appliedOps
+        .map((op) => indexByOp.get(op))
+        .filter((i): i is number => i !== undefined),
       snapshot: snapshot as unknown as Json,
       applied_at: new Date().toISOString(),
     })
     .eq("id", proposalId);
 
   if (proposal.thread_id) {
+    const appliedTitles = appliedOps.map((o) => o.title).join(" · ");
+    const rejectedTitles = applyDropped
+      .map((d) => `${d.op.title} (${d.reason})`)
+      .join(" · ");
     await supabase.from("ai_messages").insert({
       thread_id: proposal.thread_id,
       user_id: athlete.userId,
       role: "assistant",
-      content: `${appliedCount} ${appliedCount === 1 ? "cambio aplicado" : "cambios aplicados"}. El motor de pesos sigue igual: las RM y la regla de regresión no se han tocado. Queda registrado en el historial.`,
+      content:
+        `Aplicado: ${appliedTitles || "nada"}.` +
+        (rejectedTitles ? ` Rechazado por las reglas: ${rejectedTitles}.` : "") +
+        " El motor de pesos sigue igual: las RM y la regla de regresión no se han tocado.",
     });
   }
 
@@ -726,10 +891,35 @@ export async function undoProposal(
 
 /* ── rebuild a whole program ─────────────────────────────────── */
 
+export interface GeneratedPreview {
+  programId: string;
+  name: string;
+  startsOn: string;
+  phases: Array<{
+    key: string;
+    name: string;
+    weeks: number;
+    warnings: Array<{ tone: "warn" | "fail"; title: string; detail: string }>;
+  }>;
+  /** Engine lifts the plan needs that the athlete does not track yet. */
+  newLiftKeys: string[];
+}
+
+/**
+ * Build the programme INACTIVE and hand back a preview. Nothing takes
+ * charge until `activateProgram` — the athlete reviews the phases,
+ * seeds any missing RMs (never a fabricated number), and activates
+ * explicitly. Non-negotiable 3 applies to the biggest change too.
+ */
 export async function rebuildProgram(input: {
   brief: string;
   startsOn?: string;
-}): Promise<{ ok: boolean; error?: string; needsApiKey?: boolean; programId?: string }> {
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  needsApiKey?: boolean;
+  preview?: GeneratedPreview;
+}> {
   const athlete = await loadAthlete();
   if (!athlete) return { ok: false, error: "Sin sesión iniciada." };
   const brief = input.brief.trim();
@@ -743,7 +933,8 @@ export async function rebuildProgram(input: {
     return { ok: false, needsApiKey: true, error: new MissingApiKeyError().message };
 
   const supabase = await createClient();
-  const startsOn = input.startsOn || startOfWeek(todayIso());
+  // Snap to Monday: day_index 0 is hard-wired to it across the app.
+  const startsOn = startOfWeek(input.startsOn || todayIso());
   const catalog = await loadCatalog(
     supabase,
     (athlete.ctx.profile.available_equipment ?? []).map(String),
@@ -948,19 +1139,37 @@ export async function rebuildProgram(input: {
     };
   }
 
-  // Everything landed: only now does the new programme take charge.
-  await supabase
-    .from("programs")
-    .update({ is_active: false })
-    .eq("user_id", athlete.userId)
-    .eq("is_active", true);
-  await supabase
-    .from("programs")
-    .update({ is_active: true })
-    .eq("id", created.id);
+  // The plan rules, per phase, over the parsed structure — the same
+  // rules that gate the editor. Blocking ones show in the preview and
+  // veto activation; the generator never ships a state the refine loop
+  // would then choke on.
+  const phasePreviews = program.phases.map((phase) => ({
+    key: phase.key,
+    name: phase.name,
+    weeks: phase.weeks,
+    warnings: planWarnings({
+      slots: phase.slots.map((s) => ({
+        id: s.key,
+        label: s.label,
+        sessionType: s.sessionType,
+      })),
+      exercises: phase.slots.flatMap((s) =>
+        s.exercises.map((e) => ({
+          slotId: s.key,
+          sets: e.sets,
+          isPrimary: e.isPrimary,
+        })),
+      ),
+      days: phase.days.map((d) => ({
+        dayIndex: d.dayIndex,
+        slotId: d.slotKey,
+      })),
+    }).map((w) => ({ tone: w.tone, title: w.title, detail: w.detail })),
+  }));
 
-  // Carry the athlete's tracked lifts over — the engine state is theirs,
-  // not the plan's, and a new plan must not reset an RM.
+  // Lifts the plan needs but the athlete does not track. Their RMs are
+  // the athlete's to seed in the preview — never a fabricated 60 kg
+  // presented with the engine's authority.
   const liftKeys = new Set<string>(
     program.phases.flatMap((p) =>
       p.slots.flatMap((s) =>
@@ -969,31 +1178,34 @@ export async function rebuildProgram(input: {
     ),
   );
   const existing = new Set(athlete.ctx.lifts.map((l) => l.key));
-  const missing = [...liftKeys].filter((k) => !existing.has(k));
-  if (missing.length > 0) {
-    await supabase.from("lifts").insert(
-      missing.map((key) => ({
-        user_id: athlete.userId,
-        key,
-        name: key.charAt(0).toUpperCase() + key.slice(1),
-        kind: (["sentadilla", "hipthrust", "rdl"].includes(key)
-          ? "lower"
-          : "upper") as "lower" | "upper",
-        e1rm_kg: 60,
-      })),
-    );
-  }
-
-  await supabase.from("engine_events").insert({
-    user_id: athlete.userId,
-    program_id: created.id,
-    week: 1,
-    kind: "program_created",
-    title: `Programa generado con IA · ${program.name}`,
-    detail: `${program.phases.length} fases, ${totalWeeks} semanas. Arranca el ${startsOn}. Las RM que ya seguías se conservan.`,
-    payload: { brief },
-  });
+  const newLiftKeys = [...liftKeys].filter((k) => !existing.has(k));
 
   revalidatePath("/", "layout");
-  return { ok: true, programId: created.id };
+  return {
+    ok: true,
+    preview: {
+      programId: created.id,
+      name: program.name,
+      startsOn,
+      phases: phasePreviews,
+      newLiftKeys,
+    },
+  };
+}
+
+/** Throw away a generated programme the athlete decided not to keep. */
+export async function discardGeneratedProgram(
+  programId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const athlete = await loadAthlete();
+  if (!athlete) return { ok: false, error: "Sin sesión iniciada." };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("programs")
+    .delete()
+    .eq("id", programId)
+    .eq("user_id", athlete.userId)
+    .eq("is_active", false);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

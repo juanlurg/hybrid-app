@@ -1,7 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/entrar", "/registro", "/recuperar", "/auth"];
+// /~offline is public: it renders purely from IndexedDB and the service
+// worker precaches it at install time, possibly before the first login —
+// behind auth, the precache stored the /entrar redirect and the offline
+// shell was permanently dead on any device installed while signed out.
+const PUBLIC_PATHS = ["/entrar", "/registro", "/recuperar", "/auth", "/~offline"];
 
 /**
  * Runs on every navigation. Two jobs, in this order:
@@ -44,6 +48,11 @@ export async function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
+
+  // The daily cron has no cookie; the route enforces CRON_SECRET itself.
+  if (pathname === "/api/keepalive") {
+    return response;
+  }
 
   if (!user && !isPublic) {
     // API callers (the sync queue, the export link fetched by a script)

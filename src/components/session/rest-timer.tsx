@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { TONE } from "@/components/day-accents";
+
 export interface RestState {
   left: number;
   total: number;
@@ -177,26 +179,28 @@ export function RestBar({
         <span className="truncate text-[10.5px] leading-none font-medium opacity-45">
           {rest.label}
         </span>
-        <button
-          type="button"
-          onClick={onSkip}
-          className="ml-auto text-[11px] leading-none font-medium underline opacity-60"
-        >
-          saltar
-        </button>
       </div>
-      <div className="mt-2 flex items-end gap-3">
+      <div className="mt-2 flex items-end gap-2">
         <span
           className="num text-[54px] leading-[0.85] font-black tracking-[-0.04em]"
-          style={{ color: "oklch(0.72 0.19 130)" }}
+          style={{ color: TONE.okBright }}
           aria-live="off"
         >
           {mins}:{secs}
         </span>
+        {/* Ending rest early is a between-sets staple: a real block
+            target, not an 11px underline under a fatigued thumb. */}
+        <button
+          type="button"
+          onClick={onSkip}
+          className="ml-auto flex h-11 items-center bg-ink-2 px-4 text-[13px] leading-none font-bold"
+        >
+          SALTAR
+        </button>
         <button
           type="button"
           onClick={onExtend}
-          className="ml-auto flex h-11 items-center bg-ink-2 px-4 text-[13px] leading-none font-bold"
+          className="flex h-11 items-center bg-ink-2 px-4 text-[13px] leading-none font-bold"
         >
           +30 S
         </button>
@@ -204,7 +208,7 @@ export function RestBar({
       <div className="mt-3 h-[5px] bg-ink-2">
         <div
           className="h-full transition-[width] duration-300 ease-linear"
-          style={{ width: `${pct}%`, background: "oklch(0.72 0.19 130)" }}
+          style={{ width: `${pct}%`, background: TONE.okBright }}
         />
       </div>
     </div>
@@ -231,6 +235,12 @@ export function useWakeLock(enabled: boolean) {
           return;
         }
         sentinel = lock;
+        // The browser releases the lock on its own when the tab hides;
+        // without clearing the sentinel here, the visibilitychange
+        // re-acquire below never fires again after the first app switch.
+        lock.addEventListener("release", () => {
+          if (sentinel === lock) sentinel = null;
+        });
       } catch {
         // Denied or unsupported — nothing to fall back to.
       }

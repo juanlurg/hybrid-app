@@ -150,7 +150,9 @@ export function buildPlanContext(
     const state = liftStateFrom(lift);
     const today = workingWeightKg(state, placement.week, phaseConfig);
     const flags = [
-      state.hold ? `EN ESPERA a ${formatWeight(state.holdAtKg ?? 0)} kg` : null,
+      state.hold
+        ? `TOPE tras fallo: ${formatWeight(state.holdAtKg ?? 0)} kg (se aplica cuando la ola lo alcanza; en descarga manda la descarga)`
+        : null,
       state.penalty > 0 ? `RM penalizada −${Math.round(state.penalty * 100)} %` : null,
       state.failCount > 0 ? `${state.failCount} fallo(s)` : null,
     ].filter(Boolean);

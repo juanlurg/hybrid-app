@@ -165,7 +165,8 @@ export function AiPanel({
                 </div>
               ) : null}
 
-              {proposal && proposal.changes.length > 0 ? (
+              {proposal &&
+              (proposal.changes.length > 0 || proposal.dropped.length > 0) ? (
                 <div className="flex flex-col gap-2.5">
                   <div className="flex items-baseline gap-2">
                     <span className="text-[10px] leading-none font-extrabold tracking-[0.14em] uppercase">
@@ -222,6 +223,24 @@ export function AiPanel({
                       </button>
                     );
                   })}
+                  {proposal.dropped.map((d, i) => (
+                    <div
+                      key={`dropped-${i}`}
+                      className="flex gap-3 border-2 border-dashed border-hairline bg-paper px-3 py-3"
+                    >
+                      <span className="flex h-5 w-5 flex-none items-center justify-center border-2 border-hairline text-[11px] leading-none font-extrabold text-ghost">
+                        ×
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[12.5px] leading-[1.3] font-bold text-ghost line-through">
+                          {d.op.title}
+                        </span>
+                        <span className="mt-1.5 block text-[11px] leading-[1.45] text-mid">
+                          Las reglas lo dejan fuera: {d.reason}.
+                        </span>
+                      </span>
+                    </div>
+                  ))}
                 </div>
               ) : null}
 

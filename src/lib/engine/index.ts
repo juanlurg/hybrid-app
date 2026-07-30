@@ -94,9 +94,12 @@ export function cycleBump(
 /**
  * Full derivation of the weight for `lift` on `week`.
  *
- * `hold` short-circuits the maths: after a first range failure the engine
- * repeats the exact weight that was missed rather than letting the wave
- * carry the athlete further up.
+ * `hold` is a CAP, not a floor: after a first range failure the wave may
+ * not climb past the missed weight, but a week the wave prescribes less
+ * (the deload, the first weeks of the next cycle) keeps its own number.
+ * The failed weight repeats exactly when the wave reaches it again —
+ * repeating a just-failed top weight on the 70 % deload week inverted
+ * the deload's whole purpose.
  */
 export function workingWeight(
   lift: LiftState,
@@ -107,10 +110,14 @@ export function workingWeight(
   const bump = cycleBump(lift.kind, week, config);
   const penalised = lift.e1rmKg * (1 - lift.penalty);
   const uncapped = roundToStep((penalised + bump) * factor, config.roundingKg);
-  const held = lift.hold && lift.holdAtKg != null && lift.holdAtKg > 0;
+  const heldKg =
+    lift.hold && lift.holdAtKg != null && lift.holdAtKg > 0
+      ? round2(lift.holdAtKg)
+      : null;
+  const held = heldKg != null && heldKg <= uncapped;
 
   return {
-    workingKg: held ? round2(lift.holdAtKg as number) : uncapped,
+    workingKg: held ? heldKg : uncapped,
     e1rmKg: round2(lift.e1rmKg),
     penalty: lift.penalty,
     cycleBumpKg: bump,
@@ -215,7 +222,8 @@ export function registerFailure(
       title: `Fallo ${failCount} · peso en espera`,
       detail:
         `Se repite ${formatWeight(missedAtKg)} kg en la próxima sesión de ` +
-        `${lift.name.toLowerCase()}. Otro fallo y la RM baja un ${Math.round(nextPenalty * 100)} %.`,
+        `${lift.name.toLowerCase()}; si toca descarga, manda la descarga. ` +
+        `Otro fallo y la RM baja un ${Math.round(nextPenalty * 100)} %.`,
     };
   }
 

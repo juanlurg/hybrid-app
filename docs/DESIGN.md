@@ -86,6 +86,7 @@ Programa via `SecondaryNav`.
 | `/movilidad` | Guided / list mobility block |
 | `/historial` | Consistency grid, records, log, engine timeline |
 | `/editor` | Weekly template editor + AI refinement |
+| `/generar` | AI program builder — brief in, preview, explicit activation |
 | `/ajustes` | Every knob, grouped |
 
 ## Non-negotiables
@@ -110,3 +111,7 @@ Programa via `SecondaryNav`.
    (`engine_events.dedup_key`). No per-set server actions — ever again.
 8. **The export is the backup.** Free tier, no snapshots: the JSON from
    Ajustes → Datos is the only copy of the only irreplaceable thing.
+   `scripts/restore.ts` replays it into a fresh project (catalogue ids
+   re-linked by slug); Ajustes shows the age of the last copy and warns
+   past 14 days; a daily `vercel.json` cron pings `/api/keepalive` so
+   the free project never pauses for inactivity (the Camino weeks).

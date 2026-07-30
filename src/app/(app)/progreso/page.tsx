@@ -126,13 +126,15 @@ export default async function ProgresoPage({
       .eq("lift_id", liftRow.id)
       .in("kind", ["fail_hold", "fail_penalty"])
       .is("reverted_at", null),
+    // The season charts below claim "lo no anotado no existe", so the
+    // window has to hold a whole season: ~4 runs × 39 weeks ≪ 400.
     supabase
       .from("sessions")
       .select("id, scheduled_on")
       .eq("user_id", athlete.userId)
       .in("session_type", ["run_easy", "run_long", "run_quality", "run_test"])
       .order("scheduled_on", { ascending: false })
-      .limit(60),
+      .limit(400),
   ]);
 
   const failEvents = failRes.data ?? [];
@@ -153,10 +155,9 @@ export default async function ProgresoPage({
     runSessionIds.length
       ? supabase
           .from("run_logs")
-          .select("session_id, decoupling_pct")
+          .select("session_id, decoupling_pct, distance_km")
           .eq("user_id", athlete.userId)
           .in("session_id", runSessionIds)
-          .not("decoupling_pct", "is", null)
       : null,
   ]);
 
@@ -179,16 +180,28 @@ export default async function ProgresoPage({
   const runDates = new Map<string, IsoDate>(
     runSessions.map((s) => [s.id, s.scheduled_on as IsoDate]),
   );
-  const decouplings = (runLogRes?.data ?? [])
+  // Every logged decoupling, oldest first — CARRERA-juanlu.md calls
+  // Pa:HR drift THE progress metric, so it gets a trend, not a strip.
+  const decouplingSeries = (runLogRes?.data ?? [])
     .flatMap((log) => {
       const date = runDates.get(log.session_id);
       if (!date || log.decoupling_pct == null) return [];
       // Two runs can share a date, so the session is the identity.
       return [{ id: log.session_id, date, pct: Number(log.decoupling_pct) }];
     })
-    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
-    .slice(0, 4)
-    .reverse(); // newest last
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const decouplings = decouplingSeries.slice(-4); // newest last
+
+  // Weekly volume across the season, from the logged distances.
+  const kmByWeek = new Map<number, number>();
+  for (const log of runLogRes?.data ?? []) {
+    const date = runDates.get(log.session_id);
+    if (!date || log.distance_km == null) continue;
+    const week = placeDate(spans, date)?.absoluteWeek;
+    if (week == null) continue;
+    kmByWeek.set(week, (kmByWeek.get(week) ?? 0) + Number(log.distance_km));
+  }
+  const maxWeekKm = Math.max(0, ...kmByWeek.values());
 
   /* ── the audit ───────────────────────────────────────────────── */
 
@@ -229,16 +242,22 @@ export default async function ProgresoPage({
       `${liftRow.name.toLowerCase()}. La ola habría pedido ` +
       `${formatWeight(breakdown.uncappedKg)} kg, pero fallaste el mínimo del ` +
       `rango y el motor congela el peso en vez de subir. ${nextStepText}`
-    : lift.penalty > 0
-      ? `RM estimada a ${formatWeight(penalisedRmKg)} kg tras un recorte del ` +
-        `${Math.round(lift.penalty * 100)} %. La ola se recalcula sobre ese ` +
-        `número: ${formatWeight(currentKg)} kg. Una sesión con todas las ` +
-        `series dentro del rango pone el contador de fallos a cero; la RM ` +
-        `vuelve a subir por el incremento de ciclo, no de golpe.`
-      : `Sin fallos abiertos. El peso sale entero de la ola sobre una RM de ` +
-        `${formatWeight(breakdown.e1rmKg)} kg, y cada ciclo cerrado le suma ` +
-        `${formatWeight(incKg)} kg. Solo el básico del día mueve el motor: ` +
-        `los accesorios no cuentan.`;
+    : lift.hold && lift.holdAtKg != null
+      ? `Hay un fallo abierto: la ola no pasará de ` +
+        `${formatWeight(Number(lift.holdAtKg))} kg hasta una sesión limpia a ` +
+        `ese peso. Esta semana la ola pide menos ` +
+        `(${formatWeight(currentKg)} kg), así que el tope no toca — pero ` +
+        `sigue ahí.`
+      : lift.penalty > 0
+        ? `RM estimada a ${formatWeight(penalisedRmKg)} kg tras un recorte del ` +
+          `${Math.round(lift.penalty * 100)} %. La ola se recalcula sobre ese ` +
+          `número: ${formatWeight(currentKg)} kg. Una sesión con todas las ` +
+          `series dentro del rango pone el contador de fallos a cero; la RM ` +
+          `vuelve a subir por el incremento de ciclo, no de golpe.`
+        : `Sin fallos abiertos. El peso sale entero de la ola sobre una RM de ` +
+          `${formatWeight(breakdown.e1rmKg)} kg, y cada ciclo cerrado le suma ` +
+          `${formatWeight(incKg)} kg. Solo el básico del día mueve el motor: ` +
+          `los accesorios no cuentan.`;
 
   const deltaTone =
     deltaKg > 0 ? "text-ok" : deltaKg < 0 ? "text-fail" : "text-mid";
@@ -448,10 +467,40 @@ export default async function ProgresoPage({
                     </div>
                   ))}
                 </div>
+                {decouplingSeries.length > 4 ? (
+                  <>
+                    <div className="mt-3.5 flex h-[54px] items-end gap-0.5">
+                      {decouplingSeries.map((d) => (
+                        <div
+                          key={d.id}
+                          className="min-w-0 flex-1"
+                          style={{
+                            height: `${Math.max(8, Math.min(100, Math.round((d.pct / 10) * 100)))}%`,
+                            background:
+                              d.pct < DECOUPLING_LIMIT ? TONE.ok : TONE.warn,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-1 flex justify-between">
+                      <span className="num text-[8.5px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
+                        {formatDayShort(decouplingSeries[0].date)}
+                      </span>
+                      <span className="num text-[8.5px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
+                        {formatDayShort(
+                          decouplingSeries[decouplingSeries.length - 1].date,
+                        )}
+                      </span>
+                    </div>
+                  </>
+                ) : null}
                 <p className="mt-3 text-[10.5px] leading-[1.45] text-faint">
                   Ritmo por pulsación, segunda mitad contra primera; solo dice
                   algo en tiradas largas a ritmo constante. Por debajo del{" "}
-                  {DECOUPLING_LIMIT} % la base aeróbica aguanta el rodaje.
+                  {DECOUPLING_LIMIT} % la base aeróbica aguanta el rodaje
+                  {decouplingSeries.length > 4
+                    ? " — la serie completa de la temporada, abajo."
+                    : "."}
                 </p>
               </>
             ) : (
@@ -466,6 +515,52 @@ export default async function ProgresoPage({
             )}
           </Framed>
         </div>
+
+        {/* ── weekly km ────────────────────────────────────────── */}
+        {maxWeekKm > 0 ? (
+          <div className="px-4 pb-6">
+            <Framed>
+              <div className="flex items-baseline gap-3">
+                <span className="text-[10px] leading-none font-extrabold tracking-[0.12em] text-run uppercase">
+                  Kilómetros por semana
+                </span>
+                <span className="num ml-auto text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                  MÁX {formatWeight(maxWeekKm)} km
+                </span>
+              </div>
+              <div className="mt-3.5 flex h-[54px] items-end gap-px">
+                {Array.from({ length: seasonWeeks }, (_, i) => {
+                  const km = kmByWeek.get(i + 1) ?? 0;
+                  return (
+                    <div
+                      key={i}
+                      className="min-w-0 flex-1"
+                      style={{
+                        height: `${km > 0 ? Math.max(6, Math.round((km / maxWeekKm) * 100)) : 2}%`,
+                        background: km > 0 ? accentFor("run") : TONE.line,
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <div className="mt-1 flex gap-px">
+                {Array.from({ length: seasonWeeks }, (_, i) => (
+                  <div
+                    key={i}
+                    className="num min-w-0 flex-1 text-center text-[8px] leading-none font-semibold text-faint"
+                  >
+                    {ticks.has(i + 1) ? i + 1 : ""}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[10.5px] leading-[1.45] text-faint">
+                Suma de las distancias anotadas al marcar cada carrera. Las
+                semanas sin kilómetros son huecos de verdad: lo no anotado no
+                existe.
+              </p>
+            </Framed>
+          </div>
+        ) : null}
       </div>
     </div>
   );

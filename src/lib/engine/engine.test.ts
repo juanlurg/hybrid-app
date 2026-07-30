@@ -132,6 +132,28 @@ describe("working weight", () => {
     expect(b.uncappedKg).toBe(127.5);
   });
 
+  it("the hold is a cap: the deload week keeps its own lighter weight", () => {
+    // Missed 127.5 on week 3; week 4 is the 70 % deload → 105, not 127.5.
+    const held: LiftState = { ...hipThrust, hold: true, holdAtKg: 127.5, failCount: 1 };
+    const b = workingWeight(held, 4);
+    expect(b.isDeload).toBe(true);
+    expect(b.workingKg).toBe(105);
+    expect(b.isHeld).toBe(false);
+    // The hold state itself survives the deload untouched.
+    expect(held.failCount).toBe(1);
+  });
+
+  it("the hold is a cap: week 1 of the next cycle climbs its own wave", () => {
+    // 75 % of (150 + 5 bump) = 116.25 → 117.5 < 127.5: the wave wins…
+    const held: LiftState = { ...hipThrust, hold: true, holdAtKg: 127.5, failCount: 1 };
+    expect(workingWeight(held, 5).workingKg).toBe(117.5);
+    expect(workingWeight(held, 5).isHeld).toBe(false);
+    // …until it reaches the failed weight again, which then repeats.
+    const b7 = workingWeight(held, 7); // 85 % of 155 = 131.75 → capped
+    expect(b7.workingKg).toBe(127.5);
+    expect(b7.isHeld).toBe(true);
+  });
+
   it("recomputes from the penalised RM", () => {
     const hurt: LiftState = { ...hipThrust, penalty: 0.05, failCount: 2 };
     // 150 × 0.95 = 142.5 ; × 0.85 = 121.125 → 120

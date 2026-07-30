@@ -118,12 +118,20 @@ describe("buildEnvelopes", () => {
     expect(env.opKeys).toHaveLength(5);
   });
 
-  it("sets without a start still build an envelope (start already flushed)", () => {
+  it("sets without a start hydrate the key from the local-session map", () => {
     const q = enqueue(EMPTY_QUEUE, set(2, 5, "t"));
-    const { sessions } = buildEnvelopes(q);
+    const { sessions } = buildEnvelopes(q, new Map([["loc-1", KEY]]));
     expect(sessions).toHaveLength(1);
     expect(sessions[0].startedAt).toBeNull();
     expect(sessions[0].sets).toHaveLength(1);
+    expect(sessions[0].key).toEqual(KEY);
+  });
+
+  it("sets without a start and no local session ship a null key, never a placeholder", () => {
+    const q = enqueue(EMPTY_QUEUE, set(2, 5, "t"));
+    const { sessions } = buildEnvelopes(q);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].key).toBeNull();
   });
 
   it("run and mobility logs travel as standalone envelopes", () => {

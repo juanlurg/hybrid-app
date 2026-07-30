@@ -53,6 +53,7 @@ export type Database = {
           applied_at: string | null
           changes: Json
           created_at: string
+          dropped: Json
           id: string
           message_id: string | null
           phase_id: string | null
@@ -70,6 +71,7 @@ export type Database = {
           applied_at?: string | null
           changes?: Json
           created_at?: string
+          dropped?: Json
           id?: string
           message_id?: string | null
           phase_id?: string | null
@@ -87,6 +89,7 @@ export type Database = {
           applied_at?: string | null
           changes?: Json
           created_at?: string
+          dropped?: Json
           id?: string
           message_id?: string | null
           phase_id?: string | null
@@ -472,7 +475,6 @@ export type Database = {
           body_weight_kg: number | null
           created_at: string
           display_name: string
-          distance_unit: Database["public"]["Enums"]["distance_unit"]
           dumbbell_step_kg: number
           height_cm: number | null
           id: string
@@ -480,11 +482,9 @@ export type Database = {
           inc_upper_kg: number
           keep_screen_awake: boolean
           kettlebells_kg: number[]
+          last_export_at: string | null
           locale: string
           lthr: number | null
-          notify_deload: boolean
-          notify_session: boolean
-          notify_weekly_summary: boolean
           onboarded_at: string | null
           plates_kg: number[]
           pulley_step_kg: number
@@ -495,9 +495,7 @@ export type Database = {
           show_plate_breakdown: boolean
           sync_rm_after_retest: boolean
           target_rir: string
-          units: Database["public"]["Enums"]["unit_system"]
           updated_at: string
-          zone_model: Database["public"]["Enums"]["zone_model"]
         }
         Insert: {
           auto_deload?: boolean
@@ -507,7 +505,6 @@ export type Database = {
           body_weight_kg?: number | null
           created_at?: string
           display_name?: string
-          distance_unit?: Database["public"]["Enums"]["distance_unit"]
           dumbbell_step_kg?: number
           height_cm?: number | null
           id: string
@@ -515,11 +512,9 @@ export type Database = {
           inc_upper_kg?: number
           keep_screen_awake?: boolean
           kettlebells_kg?: number[]
+          last_export_at?: string | null
           locale?: string
           lthr?: number | null
-          notify_deload?: boolean
-          notify_session?: boolean
-          notify_weekly_summary?: boolean
           onboarded_at?: string | null
           plates_kg?: number[]
           pulley_step_kg?: number
@@ -530,9 +525,7 @@ export type Database = {
           show_plate_breakdown?: boolean
           sync_rm_after_retest?: boolean
           target_rir?: string
-          units?: Database["public"]["Enums"]["unit_system"]
           updated_at?: string
-          zone_model?: Database["public"]["Enums"]["zone_model"]
         }
         Update: {
           auto_deload?: boolean
@@ -542,7 +535,6 @@ export type Database = {
           body_weight_kg?: number | null
           created_at?: string
           display_name?: string
-          distance_unit?: Database["public"]["Enums"]["distance_unit"]
           dumbbell_step_kg?: number
           height_cm?: number | null
           id?: string
@@ -550,11 +542,9 @@ export type Database = {
           inc_upper_kg?: number
           keep_screen_awake?: boolean
           kettlebells_kg?: number[]
+          last_export_at?: string | null
           locale?: string
           lthr?: number | null
-          notify_deload?: boolean
-          notify_session?: boolean
-          notify_weekly_summary?: boolean
           onboarded_at?: string | null
           plates_kg?: number[]
           pulley_step_kg?: number
@@ -565,9 +555,7 @@ export type Database = {
           show_plate_breakdown?: boolean
           sync_rm_after_retest?: boolean
           target_rir?: string
-          units?: Database["public"]["Enums"]["unit_system"]
           updated_at?: string
-          zone_model?: Database["public"]["Enums"]["zone_model"]
         }
         Relationships: []
       }
@@ -1182,7 +1170,6 @@ export type Database = {
     }
     Enums: {
       ai_proposal_status: "pending" | "applied" | "discarded" | "undone"
-      distance_unit: "km" | "mi"
       engine_event_kind:
         | "fail_hold"
         | "fail_penalty"
@@ -1223,8 +1210,6 @@ export type Database = {
         | "run_test"
         | "mobility"
         | "rest"
-      unit_system: "kg" | "lb"
-      zone_model: "lthr" | "hrmax"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1353,7 +1338,6 @@ export const Constants = {
   public: {
     Enums: {
       ai_proposal_status: ["pending", "applied", "discarded", "undone"],
-      distance_unit: ["km", "mi"],
       engine_event_kind: [
         "fail_hold",
         "fail_penalty",
@@ -1398,8 +1382,6 @@ export const Constants = {
         "mobility",
         "rest",
       ],
-      unit_system: ["kg", "lb"],
-      zone_model: ["lthr", "hrmax"],
     },
   },
 } as const

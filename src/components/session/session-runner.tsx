@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { PlateChips } from "@/components/ui/kit";
+import { TONE } from "@/components/day-accents";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
 import { formatWeight, type EngineConfig, type LiftState } from "@/lib/engine";
 import { replayEngine, type ReplayPrimary } from "@/lib/engine/replay";
@@ -82,6 +83,10 @@ export function SessionRunner({
   const [dismissedFailure, setDismissedFailure] = useState<string | null>(null);
   const [undone, setUndone] = useState(initialUndone);
   const [repsOpen, setRepsOpen] = useState(false);
+  /** Set index being corrected via its pill — overwrites in place. */
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [confirmFinish, setConfirmFinish] = useState(false);
+  const [finishNotes, setFinishNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [logs, setLogs] = useState<LogMap>(() => {
@@ -241,6 +246,7 @@ export function SessionRunner({
         kind: "session_finish",
         localSessionId: sessionId,
         finishedAt,
+        notes: finishNotes.trim() || null,
       });
       const res = await flush();
       const landed = res?.results?.some(
@@ -271,8 +277,14 @@ export function SessionRunner({
     if (failureKey) setDismissedFailure(failureKey);
   }
 
-  function record(value: number) {
-    const setIndex = doneForExercise;
+  function record(value: number, atIndex: number | null = null) {
+    // A pill tap corrects a set in place: the queue op and the server
+    // upsert share the same natural key, so an overwrite flows through
+    // the exact idempotent path a first write does — no rest timer, no
+    // superset jump, no advancing.
+    const overwrite =
+      atIndex != null && Boolean(logs[keyOf(exercise.id, atIndex)]);
+    const setIndex = atIndex ?? doneForExercise;
     if (setIndex >= exercise.sets) {
       advance(exIndex);
       return;
@@ -288,34 +300,39 @@ export function SessionRunner({
     // the queue takes it to the server whenever there is network.
     setLogs((prev) => ({ ...prev, [k]: { value, missed } }));
     setRepsOpen(false);
+    setEditingIndex(null);
     setPendingRir(null);
     setError(null);
 
-    // A superset runs back to back: after this member's set, jump to the
-    // partner that is still behind — rest only after the last one.
-    const laggard = groupMembers.find(
-      (m) =>
-        m.id !== exercise.id &&
-        countDone(logs, m.id, m.sets) < Math.min(setIndex + 1, m.sets),
-    );
-    if (laggard) {
-      setExIndex(exercises.findIndex((e) => e.id === laggard.id));
-    } else if (autoRest) {
-      start(exercise.restSeconds, `${exercise.name} · serie ${setIndex + 1}`);
-    }
-
-    // Done with the whole group (not just this row) → move past it.
-    const groupDone =
-      !laggard &&
-      groupMembers.every(
+    let groupDone = false;
+    let lastGroupIndex = exIndex;
+    if (!overwrite) {
+      // A superset runs back to back: after this member's set, jump to
+      // the partner that is still behind — rest only after the last one.
+      const laggard = groupMembers.find(
         (m) =>
-          (m.id === exercise.id
-            ? setIndex + 1
-            : countDone(logs, m.id, m.sets)) >= m.sets,
+          m.id !== exercise.id &&
+          countDone(logs, m.id, m.sets) < Math.min(setIndex + 1, m.sets),
       );
-    const lastGroupIndex = Math.max(
-      ...groupMembers.map((m) => exercises.findIndex((e) => e.id === m.id)),
-    );
+      if (laggard) {
+        setExIndex(exercises.findIndex((e) => e.id === laggard.id));
+      } else if (autoRest) {
+        start(exercise.restSeconds, `${exercise.name} · serie ${setIndex + 1}`);
+      }
+
+      // Done with the whole group (not just this row) → move past it.
+      groupDone =
+        !laggard &&
+        groupMembers.every(
+          (m) =>
+            (m.id === exercise.id
+              ? setIndex + 1
+              : countDone(logs, m.id, m.sets)) >= m.sets,
+        );
+      lastGroupIndex = Math.max(
+        ...groupMembers.map((m) => exercises.findIndex((e) => e.id === m.id)),
+      );
+    }
 
     startTransition(async () => {
       await withLocal((s) =>
@@ -453,14 +470,25 @@ export function SessionRunner({
         ) : null}
       </section>
 
-      {/* One pill per prescribed set. */}
+      {/* One pill per prescribed set. A logged pill re-opens the picker
+          for THAT set — a wrong value is never permanent. */}
       <div className="flex flex-none gap-0.5 bg-line py-0.5">
         {Array.from({ length: exercise.sets }, (_, i) => {
           const entry = logs[keyOf(exercise.id, i)];
           const bad = entry?.missed ?? false;
+          const editing = editingIndex === i;
           return (
-            <div
+            <button
               key={i}
+              type="button"
+              disabled={!entry}
+              aria-label={
+                entry ? `Corregir la serie ${i + 1}` : `Serie ${i + 1}`
+              }
+              onClick={() => {
+                setEditingIndex(i);
+                setRepsOpen(true);
+              }}
               className={cn(
                 "flex h-[62px] flex-1 flex-col items-center justify-center gap-1 border-2 box-border",
                 entry
@@ -468,6 +496,7 @@ export function SessionRunner({
                     ? "border-fail bg-fail/10"
                     : "border-ok bg-ok/10"
                   : "border-quiet bg-paper",
+                editing && "border-ink",
               )}
             >
               <span
@@ -490,7 +519,7 @@ export function SessionRunner({
                     : "reps"
                   : "serie"}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -538,11 +567,13 @@ export function SessionRunner({
         {repsOpen ? (
           <div className="mt-3.5">
             <div className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
-              {exercise.effort === "seconds"
-                ? "Segundos aguantados"
-                : exercise.effort === "amrap"
-                  ? "Reps completadas · AMRAP"
-                  : "Reps completadas"}
+              {editingIndex != null
+                ? `Corregir serie ${editingIndex + 1}`
+                : exercise.effort === "seconds"
+                  ? "Segundos aguantados"
+                  : exercise.effort === "amrap"
+                    ? "Reps completadas · AMRAP"
+                    : "Reps completadas"}
             </div>
             <div className="mt-2.5 flex items-center gap-2">
               <span className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
@@ -572,7 +603,7 @@ export function SessionRunner({
                 <button
                   key={n}
                   type="button"
-                  onClick={() => record(n)}
+                  onClick={() => record(n, editingIndex)}
                   className={cn(
                     "num flex h-11 w-11 items-center justify-center border-2 text-[17px] leading-none font-extrabold",
                     n < exercise.repMin
@@ -608,6 +639,7 @@ export function SessionRunner({
                   setExIndex(i);
                   if (failureKey) setDismissedFailure(failureKey);
                   setRepsOpen(false);
+                  setEditingIndex(null);
                 }}
                 className="flex items-center gap-2.5 bg-paper py-2.5 text-left"
               >
@@ -641,17 +673,72 @@ export function SessionRunner({
             );
           })}
         </div>
+
+        {/* Explicit exit: the gym closes, the shoulder hurts — a session
+            can close as partial without inventing sets. */}
+        {totalDone < totalSets ? (
+          confirmFinish ? (
+            <div className="mt-4 border-2 border-fail px-3 py-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex-1 text-[12px] leading-[1.35] font-bold">
+                  ¿Terminar con {totalSets - totalDone}{" "}
+                  {totalSets - totalDone === 1 ? "serie" : "series"} sin hacer?
+                </span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={finish}
+                  className="flex h-9 items-center bg-ink px-3 text-[11px] leading-none font-extrabold tracking-[0.06em] text-paper uppercase"
+                >
+                  Sí, terminar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmFinish(false)}
+                  className="text-[11px] leading-none font-medium text-mid underline"
+                >
+                  seguir
+                </button>
+              </div>
+              <textarea
+                value={finishNotes}
+                onChange={(e) => setFinishNotes(e.target.value)}
+                rows={2}
+                maxLength={2000}
+                placeholder="Por qué cierras antes — «aquíleo molesto», «sin tiempo»… (opcional)"
+                aria-label="Nota de la sesión"
+                className="mt-2.5 w-full border-2 border-hairline bg-paper px-2.5 py-2 text-[12px] leading-[1.4] outline-none"
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmFinish(true)}
+              className="mt-4 flex w-full items-center justify-between border-2 border-dashed border-hairline px-3 py-3 text-left"
+            >
+              <span className="text-[12px] leading-none font-bold">
+                Terminar sesión
+              </span>
+              <span className="num text-[11px] leading-none text-mid">
+                {totalDone}/{totalSets} series
+              </span>
+            </button>
+          )
+        ) : null}
       </div>
 
       <div className="flex flex-none">
         <button
           type="button"
           disabled={pending}
-          onClick={() =>
-            exercise.effort === "amrap"
-              ? setRepsOpen(true)
-              : record(exercise.repMax)
-          }
+          onClick={() => {
+            if (exercise.effort === "amrap") {
+              setEditingIndex(null);
+              setRepsOpen(true);
+              return;
+            }
+            record(exercise.repMax);
+          }}
           className="flex h-[66px] flex-1 items-center justify-center gap-2.5 bg-strength text-[17px] leading-none font-extrabold tracking-[0.06em] text-ink uppercase active:opacity-85 disabled:opacity-60"
         >
           {exercise.effort === "amrap" ? (
@@ -668,7 +755,12 @@ export function SessionRunner({
         </button>
         <button
           type="button"
-          onClick={() => setRepsOpen((v) => !v)}
+          onClick={() => {
+            // Always a FRESH set from here — a pill left in edit mode
+            // must not make this overwrite an old value.
+            setEditingIndex(null);
+            setRepsOpen((v) => !v);
+          }}
           className="flex h-[66px] w-[92px] flex-col items-center justify-center gap-1 bg-ink text-[11px] leading-none font-semibold text-paper"
         >
           <span>OTRAS</span>
@@ -684,7 +776,7 @@ export function SessionRunner({
         <div
           aria-hidden
           className="animate-flash pointer-events-none absolute inset-0 z-10"
-          style={{ background: "oklch(0.72 0.19 130)" }}
+          style={{ background: TONE.okBright }}
         />
       ) : null}
     </div>

@@ -14,7 +14,6 @@ const WRITABLE = new Set<keyof ProfileUpdate>([
   "display_name",
   "body_weight_kg",
   "height_cm",
-  "units",
   "bar_kg",
   "plates_kg",
   "dumbbell_step_kg",
@@ -34,11 +33,6 @@ const WRITABLE = new Set<keyof ProfileUpdate>([
   "keep_screen_awake",
   "show_plate_breakdown",
   "lthr",
-  "zone_model",
-  "distance_unit",
-  "notify_session",
-  "notify_deload",
-  "notify_weekly_summary",
 ]);
 
 export async function updateProfile(patch: ProfileUpdate): Promise<Result> {

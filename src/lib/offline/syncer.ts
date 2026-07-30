@@ -17,6 +17,7 @@ import {
   opKey,
   type QueueOp,
   type QueueState,
+  type SessionKey,
   type SyncResponse,
 } from "./queue";
 import type { LocalSessionState } from "./local-session";
@@ -30,7 +31,8 @@ type FlushListener = (response: SyncResponse) => void;
 
 let store: OfflineStore | null = null;
 let seq = 0;
-let flushing = false;
+let inFlight: Promise<SyncResponse | null> | null = null;
+let follower: Promise<SyncResponse | null> | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryDelayMs = 2000;
 let triggersAttached = false;
@@ -55,12 +57,31 @@ async function deviceId(): Promise<string> {
   return id;
 }
 
-async function loadQueueState(): Promise<QueueState> {
+async function loadQueueState(): Promise<{
+  state: QueueState;
+  /** seq of each op at snapshot time — the ack must not delete an op
+      overwritten while its old value was in flight. */
+  seqByKey: Map<string, number>;
+}> {
   const rows = await getStore().getAll<StoredOp>("queue");
   rows.sort((a, b) => a.value.seq - b.value.seq);
   let state = EMPTY_QUEUE;
-  for (const r of rows) state = enqueue(state, r.value.op);
-  return state;
+  const seqByKey = new Map<string, number>();
+  for (const r of rows) {
+    state = enqueue(state, r.value.op);
+    seqByKey.set(opKey(r.value.op), r.value.seq);
+  }
+  return { state, seqByKey };
+}
+
+/** Delete an acked/dropped op only if it was not overwritten mid-flight. */
+async function deleteIfUnchanged(
+  key: string,
+  seqByKey: Map<string, number>,
+): Promise<void> {
+  const current = await getStore().get<StoredOp>("queue", key);
+  if (!current || current.seq !== seqByKey.get(key)) return;
+  await getStore().delete("queue", key);
 }
 
 /* ── local sessions ──────────────────────────────────────────── */
@@ -100,13 +121,56 @@ export function onFlushResult(cb: FlushListener): () => void {
   return () => listeners.delete(cb);
 }
 
+/* ── sync visibility — what the indicator on Hoy reads ───────── */
+
+export interface SyncAlerts {
+  /** The server refused the whole flush (401/409/400). */
+  blocked: { at: string; error: string } | null;
+  /** Ops the server rejected permanently — dropped and surfaced. */
+  failure: { at: string; reasons: string[]; opCount: number } | null;
+}
+
+async function noteBlocked(error: string): Promise<void> {
+  await getStore().put("meta", "lastSyncBlocked", {
+    at: new Date().toISOString(),
+    error,
+  });
+}
+
+export async function readSyncAlerts(): Promise<SyncAlerts> {
+  const s = getStore();
+  return {
+    blocked:
+      (await s.get<SyncAlerts["blocked"]>("meta", "lastSyncBlocked")) ?? null,
+    failure:
+      (await s.get<SyncAlerts["failure"]>("meta", "lastSyncFailure")) ?? null,
+  };
+}
+
+export async function clearSyncFailure(): Promise<void> {
+  await getStore().delete("meta", "lastSyncFailure");
+}
+
+/** Epoch ms of the oldest queued op — `seq` encodes Date.now()·1000. */
+export async function oldestPendingAt(): Promise<number | null> {
+  const rows = await getStore().getAll<StoredOp>("queue");
+  if (!rows.length) return null;
+  return Math.floor(Math.min(...rows.map((r) => r.value.seq)) / 1000);
+}
+
 /* ── flush ───────────────────────────────────────────────────── */
 
 async function doFlush(): Promise<SyncResponse | null> {
-  const state = await loadQueueState();
+  const { state, seqByKey } = await loadQueueState();
   if (state.order.length === 0) return null;
 
-  const { sessions, runLogs, mobilityLogs } = buildEnvelopes(state);
+  // The session_start op is acked and deleted first in the normal
+  // online flow; the persisted local session still holds the key.
+  const locals = await allLocalSessions();
+  const sessionKeys = new Map<string, SessionKey>(
+    locals.map((s) => [s.localSessionId, s.key]),
+  );
+  const { sessions, runLogs, mobilityLogs } = buildEnvelopes(state, sessionKeys);
   const body = {
     protocolVersion: 1 as const,
     deviceId: await deviceId(),
@@ -125,20 +189,44 @@ async function doFlush(): Promise<SyncResponse | null> {
   if (res.status === 401) {
     // Cookie expired mid-gym. The queue survives; the next authenticated
     // navigation refreshes the session and the flush retries.
+    await noteBlocked("not_authenticated");
     return { ok: false, error: "not_authenticated" };
+  }
+  if (res.status === 409) {
+    // Signed in but no active programme — nothing to sync against
+    // until one is activated from Ajustes → Datos.
+    await noteBlocked("no_active_program");
+    return { ok: false, error: "no_active_program" };
   }
   if (res.status === 400) {
     // Protocol mismatch (old client, new server). Keep the queue and
     // stop hammering — a reload brings matching code.
+    await noteBlocked("bad_request");
     return { ok: false, error: "bad_request" };
   }
   if (!res.ok) throw new Error(`sync ${res.status}`);
+  await getStore().delete("meta", "lastSyncBlocked");
 
   const data = (await res.json()) as SyncResponse;
   const acked = data.ackedKeys ?? [];
   if (acked.length) {
     ackFlushed(state, acked); // keeps the reducer honest in tests
-    for (const key of acked) await getStore().delete("queue", key);
+    for (const key of acked) await deleteIfUnchanged(key, seqByKey);
+  }
+
+  // Non-transient failures will never land no matter how often we
+  // retry: surface them (the meta summary feeds the sync indicator)
+  // and stop resending them.
+  const fatal = (data.failures ?? []).filter((f) => !f.transient);
+  if (fatal.length) {
+    await getStore().put("meta", "lastSyncFailure", {
+      at: new Date().toISOString(),
+      reasons: fatal.map((f) => f.reason),
+      opCount: fatal.reduce((n, f) => n + f.opKeys.length, 0),
+    });
+    for (const f of fatal) {
+      for (const key of f.opKeys) await deleteIfUnchanged(key, seqByKey);
+    }
   }
 
   // Reconcile canonical session ids the server may have chosen.
@@ -152,19 +240,28 @@ async function doFlush(): Promise<SyncResponse | null> {
     }
   }
 
+  // Prune local sessions that finished, flushed fully and aged out —
+  // they exist to survive a mid-session crash, not forever. Recent ones
+  // stay so the offline summary still renders right after a finish.
+  const remaining = await getStore().getAll<StoredOp>("queue");
+  const withPendingOps = new Set(
+    remaining
+      .map((r) => r.value.op)
+      .flatMap((op) => ("localSessionId" in op ? [op.localSessionId] : [])),
+  );
+  for (const s of locals) {
+    if (s.status === "in_progress" || !s.finishedAt) continue;
+    if (withPendingOps.has(s.localSessionId)) continue;
+    if (Date.now() - new Date(s.finishedAt).getTime() < 24 * 3600 * 1000) {
+      continue;
+    }
+    await deleteLocalSession(s.localSessionId);
+  }
+
   return data;
 }
 
-/**
- * Single-flight flush with backoff. Safe to call as often as you like —
- * concurrent calls collapse, failures reschedule themselves while the
- * tab is open, and the server is idempotent anyway.
- */
-export async function flush(): Promise<SyncResponse | null> {
-  if (typeof window === "undefined") return null;
-  if (!navigator.onLine) return null;
-  if (flushing) return null;
-  flushing = true;
+async function runFlush(): Promise<SyncResponse | null> {
   try {
     const response = await doFlush();
     retryDelayMs = 2000;
@@ -176,8 +273,31 @@ export async function flush(): Promise<SyncResponse | null> {
     retryDelayMs = Math.min(retryDelayMs * 2, 60_000);
     return null;
   } finally {
-    flushing = false;
+    inFlight = null;
   }
+}
+
+/**
+ * Coalescing flush with backoff. Safe to call as often as you like.
+ * Callers arriving mid-flight share ONE follow-up run whose doFlush
+ * re-reads the queue — so awaiting flush() after an enqueue always
+ * resolves with a response that covered your op. (The old single-flight
+ * version returned null here, which made finish() report "sin conexión"
+ * while fully online.)
+ */
+export function flush(): Promise<SyncResponse | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (!navigator.onLine) return Promise.resolve(null);
+  if (inFlight) {
+    follower ??= inFlight.then(
+      () => flush(),
+      () => flush(),
+    );
+    return follower;
+  }
+  follower = null;
+  inFlight = runFlush();
+  return inFlight;
 }
 
 /** Enqueue and try to land it right away. The op survives either way. */

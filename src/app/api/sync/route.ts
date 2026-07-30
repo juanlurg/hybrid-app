@@ -1,91 +1,27 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 
 import { loadAthlete } from "@/lib/data/athlete";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getUser } from "@/lib/supabase/server";
 import {
   formatWeight,
+  isDeloadWeek,
   isRangeFailure,
   setsForWeek,
   tonnage,
   type LiftState,
+  type LoadMode,
 } from "@/lib/engine";
-import { preSessionLiftState, replayEngine } from "@/lib/engine/replay";
+import {
+  parsePreviousLiftState,
+  preSessionLiftState,
+  replayEngine,
+} from "@/lib/engine/replay";
 import { doubleProgression } from "@/lib/engine/progression";
 import { liftStateFrom, phaseEngineConfig } from "@/lib/domain/plan";
+import { syncRequestSchema } from "@/lib/offline/sync-schema";
 import type { SyncResponse, SyncSessionResult } from "@/lib/offline/queue";
 
 export const dynamic = "force-dynamic";
-
-/* ── request schema ──────────────────────────────────────────── */
-
-const sessionKeySchema = z.object({
-  phaseId: z.string().uuid(),
-  slotId: z.string().uuid(),
-  scheduledOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  week: z.number().int().min(1).max(60),
-  dayIndex: z.number().int().min(0).max(6),
-  sessionType: z.enum([
-    "strength", "run_quality", "run_long", "run_easy", "run_test",
-    "mobility", "rest",
-  ]),
-  title: z.string().max(200),
-});
-
-const setSchema = z.object({
-  programExerciseId: z.string().uuid(),
-  liftKey: z.string().max(60).nullable(),
-  exerciseName: z.string().max(200),
-  position: z.number().int().min(0).max(50),
-  setIndex: z.number().int().min(0).max(30),
-  reps: z.number().int().min(0).max(200).nullable(),
-  seconds: z.number().int().min(0).max(600).nullable(),
-  rir: z.number().min(0).max(10).nullable(),
-  weightKg: z.number().min(0).max(1000).nullable(),
-  loggedAt: z.string(),
-});
-
-const sessionEnvelopeSchema = z.object({
-  localSessionId: z.string().uuid(),
-  key: sessionKeySchema,
-  startedAt: z.string().nullable(),
-  sets: z.array(setSchema).max(200),
-  undoneFailures: z
-    .array(z.object({ position: z.number().int(), setIndex: z.number().int() }))
-    .max(50),
-  finish: z.object({ finishedAt: z.string() }).nullable(),
-  opKeys: z.array(z.string().max(200)).max(300),
-});
-
-const syncRequestSchema = z.object({
-  protocolVersion: z.literal(1),
-  deviceId: z.string().max(100),
-  sessions: z.array(sessionEnvelopeSchema).max(30),
-  runLogs: z
-    .array(
-      z.object({
-        key: sessionKeySchema,
-        prescription: z.string().max(400),
-        durationMinutes: z.number().min(0).max(1000).nullable(),
-        distanceKm: z.number().min(0).max(500).nullable(),
-        avgHr: z.number().int().min(0).max(250).nullable(),
-        decouplingPct: z.number().min(-50).max(50).nullable(),
-        notes: z.string().max(2000),
-        opKey: z.string().max(200),
-      }),
-    )
-    .max(60),
-  mobilityLogs: z
-    .array(
-      z.object({
-        performedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        completedSlugs: z.array(z.string().max(100)).max(60),
-        totalItems: z.number().int().min(0).max(100),
-        opKey: z.string().max(200),
-      }),
-    )
-    .max(60),
-});
 
 function persistLift(lift: LiftState) {
   return {
@@ -109,9 +45,19 @@ function persistLift(lift: LiftState) {
 export async function POST(request: Request) {
   const athlete = await loadAthlete();
   if (!athlete) {
+    // Signed out and signed-in-without-an-active-program are different
+    // problems: the syncer waits for a session refresh on 401, but a
+    // 409 means the athlete must activate a programme first.
+    const user = await getUser();
+    if (!user) {
+      return NextResponse.json(
+        { ok: false, error: "not_authenticated" } satisfies SyncResponse,
+        { status: 401 },
+      );
+    }
     return NextResponse.json(
-      { ok: false, error: "not_authenticated" } satisfies SyncResponse,
-      { status: 401 },
+      { ok: false, error: "no_active_program" } satisfies SyncResponse,
+      { status: 409 },
     );
   }
 
@@ -133,26 +79,74 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const results: SyncSessionResult[] = [];
   const ackedKeys: string[] = [];
+  const failures: NonNullable<SyncResponse["failures"]> = [];
 
   for (const env of body.sessions) {
     try {
-      /* ── resolve the session by its natural key ───────────── */
-      const { data: existing } = await supabase
-        .from("sessions")
-        .select("id, status, started_at, phase_id, slot_id, week")
-        .eq("user_id", athlete.userId)
-        .eq("scheduled_on", env.key.scheduledOn)
-        .eq("slot_id", env.key.slotId)
-        .maybeSingle();
+      /* ── which programme does this envelope belong to? ────── */
+      // The queue can hold a session logged under a programme that was
+      // archived before the flush. It still gets written — under ITS
+      // programme — but the engine only ever runs for the active one.
+      let envelopeProgramId = ctx.program.id;
+      let archived = false;
+      if (env.key && !ctx.phases.some((p) => p.id === env.key!.phaseId)) {
+        const { data: foreignPhase } = await supabase
+          .from("program_phases")
+          .select("id, program_id")
+          .eq("id", env.key.phaseId)
+          .maybeSingle();
+        if (!foreignPhase?.program_id) {
+          failures.push({
+            opKeys: env.opKeys,
+            reason: "la fase de la sesión ya no existe en ningún programa",
+            transient: false,
+          });
+          continue;
+        }
+        envelopeProgramId = foreignPhase.program_id;
+        archived = true;
+      }
 
-      let session = existing;
+      /* ── resolve the session: natural key, then its own id ── */
+      let session = null;
+      if (env.key) {
+        const { data } = await supabase
+          .from("sessions")
+          .select("id, status, started_at, phase_id, slot_id, week")
+          .eq("user_id", athlete.userId)
+          .eq("scheduled_on", env.key.scheduledOn)
+          .eq("slot_id", env.key.slotId)
+          .maybeSingle();
+        session = data;
+      }
       if (!session) {
+        const { data } = await supabase
+          .from("sessions")
+          .select("id, status, started_at, phase_id, slot_id, week")
+          .eq("user_id", athlete.userId)
+          .eq("id", env.localSessionId)
+          .maybeSingle();
+        session = data;
+      }
+
+      if (!session && !env.key) {
+        // No key to insert with and no row to attach to: retrying can
+        // never fix this envelope, so say so instead of looping.
+        failures.push({
+          opKeys: env.opKeys,
+          reason: "sesión desconocida: sin clave y sin fila en el servidor",
+          transient: false,
+        });
+        continue;
+      }
+
+      if (!session && env.key) {
         const { data: inserted, error } = await supabase
           .from("sessions")
           .insert({
             id: env.localSessionId,
             user_id: athlete.userId,
-            program_id: ctx.program.id,
+            program_id: envelopeProgramId,
             phase_id: env.key.phaseId,
             slot_id: env.key.slotId,
             scheduled_on: env.key.scheduledOn,
@@ -167,7 +161,10 @@ export async function POST(request: Request) {
           .single();
         if (error) throw new Error(error.message);
         session = inserted;
-      } else if (session.status === "planned" || session.status === "skipped") {
+      } else if (
+        session &&
+        (session.status === "planned" || session.status === "skipped")
+      ) {
         await supabase
           .from("sessions")
           .update({
@@ -176,12 +173,34 @@ export async function POST(request: Request) {
           })
           .eq("id", session.id);
       }
+      if (!session) throw new Error("sesión sin resolver");
       const sessionId = session.id;
+
+      // The slot's prescriptions — from ctx for the active programme,
+      // from the DB for an archived one, so missed_range and the
+      // partial/done grade stay honest either way. Only the ACTIVE
+      // programme ever moves the engine.
+      const phase =
+        ctx.phases.find(
+          (p) => p.id === (session.phase_id ?? env.key?.phaseId),
+        ) ?? null;
+      const phaseConfig = phase ? phaseEngineConfig(config, phase) : config;
+      const envSlotId = session.slot_id ?? env.key?.slotId ?? null;
+      let slotExercises = ctx.exercises.filter(
+        (e) => e.slot_id === envSlotId,
+      );
+      if (archived && envSlotId) {
+        const { data: archivedRows } = await supabase
+          .from("program_exercises")
+          .select("*")
+          .eq("slot_id", envSlotId);
+        slotExercises = archivedRows ?? [];
+      }
 
       /* ── upsert the sets, missed_range recomputed here ────── */
       if (env.sets.length) {
         const rows = env.sets.map((s) => {
-          const exercise = ctx.exercises.find(
+          const exercise = slotExercises.find(
             (e) => e.id === s.programExerciseId,
           );
           const achieved = s.reps ?? s.seconds ?? 0;
@@ -203,20 +222,34 @@ export async function POST(request: Request) {
             logged_at: s.loggedAt,
           };
         });
-        const { error } = await supabase
+        let { error } = await supabase
           .from("set_logs")
           .upsert(rows, { onConflict: "session_id,position,set_index" });
+        if (error?.code === "23503") {
+          // A referenced exercise was deleted between logging and this
+          // flush. The denormalised name/lift_key carry the history —
+          // drop only the dead pointers instead of poisoning the
+          // envelope forever.
+          const ids = [...new Set(rows.map((r) => r.program_exercise_id))];
+          const { data: alive } = await supabase
+            .from("program_exercises")
+            .select("id")
+            .in("id", ids);
+          const ok = new Set((alive ?? []).map((e) => e.id));
+          ({ error } = await supabase.from("set_logs").upsert(
+            rows.map((r) => ({
+              ...r,
+              program_exercise_id: ok.has(r.program_exercise_id)
+                ? r.program_exercise_id
+                : null,
+            })),
+            { onConflict: "session_id,position,set_index" },
+          ));
+        }
         if (error) throw new Error(error.message);
       }
 
       /* ── replay the engine against what the DB now holds ──── */
-      const phase =
-        ctx.phases.find((p) => p.id === (session.phase_id ?? env.key.phaseId)) ??
-        null;
-      const phaseConfig = phase ? phaseEngineConfig(config, phase) : config;
-      const slotExercises = ctx.exercises.filter(
-        (e) => e.slot_id === (session.slot_id ?? env.key.slotId),
-      );
       const primaryRow = slotExercises.find((e) => e.is_primary && e.lift_key);
       const liftRow = primaryRow
         ? (ctx.lifts.find((l) => l.key === primaryRow.lift_key) ?? null)
@@ -230,7 +263,7 @@ export async function POST(request: Request) {
 
       let banner: SyncSessionResult["banner"] = null;
 
-      if (primaryRow && liftRow) {
+      if (!archived && primaryRow && liftRow) {
         const { data: priorEvents } = await supabase
           .from("engine_events")
           .select("dedup_key, created_at, reverted_at, kind, payload")
@@ -250,9 +283,9 @@ export async function POST(request: Request) {
             liftStateFrom(liftRow),
             failEvents.map((e) => ({
               createdAt: e.created_at,
-              previous:
-                ((e.payload as { previous?: Record<string, unknown> } | null)
-                  ?.previous as Partial<LiftState> | null) ?? null,
+              previous: parsePreviousLiftState(
+                (e.payload as { previous?: unknown } | null)?.previous,
+              ),
             })),
           );
 
@@ -287,7 +320,7 @@ export async function POST(request: Request) {
           });
 
           for (const ev of replay.events) {
-            await supabase.from("engine_events").upsert(
+            const { error: eventError } = await supabase.from("engine_events").upsert(
               {
                 dedup_key: ev.dedupKey,
                 user_id: athlete.userId,
@@ -298,8 +331,10 @@ export async function POST(request: Request) {
                 kind: ev.kind,
                 title: ev.title,
                 detail: ev.detail,
+                // `previous` is the LiftState verbatim — the exact shape
+                // parsePreviousLiftState/preSessionLiftState read back.
                 payload: {
-                  previous: persistLift(ev.previous),
+                  previous: { ...ev.previous },
                   missed_at_kg: ev.outcome.lift.holdAtKg,
                   source: ev.sourceSet,
                   forced_deload: ev.outcome.forcedDeload,
@@ -308,6 +343,7 @@ export async function POST(request: Request) {
               },
               { onConflict: "dedup_key", ignoreDuplicates: true },
             );
+            if (eventError) throw new Error(eventError.message);
           }
           // An undo arriving after the event already existed live.
           for (const u of env.undoneFailures) {
@@ -318,10 +354,27 @@ export async function POST(request: Request) {
               .is("reverted_at", null);
           }
 
+          // A corrected set can erase a failure: a persisted fail event
+          // whose source set no longer misses in this replay is stale —
+          // revert it and let the lift row follow the fold, which now
+          // starts (and ends) at the true pre-session state.
+          const currentKeys = new Set(replay.events.map((e) => e.dedupKey));
+          let staleReverted = 0;
+          for (const e of failEvents) {
+            if (!e.dedup_key || e.reverted_at) continue;
+            if (currentKeys.has(e.dedup_key)) continue;
+            await supabase
+              .from("engine_events")
+              .update({ reverted_at: new Date().toISOString() })
+              .eq("dedup_key", e.dedup_key);
+            staleReverted += 1;
+          }
+
           const touched =
             replay.events.some((e) => !e.undone) ||
             env.undoneFailures.length > 0 ||
-            (replay.clean && (pre.hold || pre.failCount > 0));
+            staleReverted > 0 ||
+            replay.released;
           if (touched && replay.lift) {
             await supabase
               .from("lifts")
@@ -329,22 +382,25 @@ export async function POST(request: Request) {
               .eq("id", liftRow.id);
           }
 
-          if (replay.clean && (pre.hold || pre.failCount > 0)) {
-            await supabase.from("engine_events").upsert(
-              {
-                dedup_key: replay.cleanDedupKey,
-                user_id: athlete.userId,
-                program_id: ctx.program.id,
-                lift_id: liftRow.id,
-                session_id: sessionId,
-                week: session.week,
-                kind: "clean_reset",
-                title: `${liftRow.name} · sesión limpia`,
-                detail:
-                  "Todas las series dentro del rango. El contador de fallos vuelve a cero y el peso deja de estar en espera.",
-              },
-              { onConflict: "dedup_key", ignoreDuplicates: true },
-            );
+          if (replay.released) {
+            const { error: cleanError } = await supabase
+              .from("engine_events")
+              .upsert(
+                {
+                  dedup_key: replay.cleanDedupKey,
+                  user_id: athlete.userId,
+                  program_id: ctx.program.id,
+                  lift_id: liftRow.id,
+                  session_id: sessionId,
+                  week: session.week,
+                  kind: "clean_reset",
+                  title: `${liftRow.name} · sesión limpia`,
+                  detail:
+                    "Todas las series dentro del rango. El contador de fallos vuelve a cero y el peso deja de estar en espera.",
+                },
+                { onConflict: "dedup_key", ignoreDuplicates: true },
+              );
+            if (cleanError) throw new Error(cleanError.message);
           }
 
           banner = replay.banner;
@@ -393,13 +449,20 @@ export async function POST(request: Request) {
                 reps: l.reps,
               })),
             ),
+            ...(env.finish.notes ? { notes: env.finish.notes } : {}),
           })
           .eq("id", sessionId);
         if (error) throw new Error(error.message);
 
         // Double progression for accessories — deduped per exercise so
-        // a repeated flush can never award the jump twice.
-        if (!alreadyClosed) {
+        // a repeated flush can never award the jump twice. Never on the
+        // deload (topping a halved-volume session proves nothing) and
+        // never for an archived programme.
+        if (
+          !alreadyClosed &&
+          !archived &&
+          !isDeloadWeek(session.week, phaseConfig)
+        ) {
           for (const e of slotExercises) {
             if (e.is_primary) continue;
             if (e.load_mode !== "fixed" && e.load_mode !== "weighted_bodyweight") {
@@ -412,6 +475,7 @@ export async function POST(request: Request) {
               {
                 equipment: e.equipment,
                 effort: e.effort as "reps" | "seconds" | "amrap",
+                loadMode: e.load_mode as LoadMode,
                 repMax: e.rep_max,
                 plannedSets: setsForWeek(e.sets, session.week, phaseConfig),
                 currentWeightKg:
@@ -426,7 +490,7 @@ export async function POST(request: Request) {
             );
             if (!outcome.advance || outcome.nextWeightKg == null) continue;
 
-            const { data: bumpRow } = await supabase
+            const { data: bumpRow, error: bumpError } = await supabase
               .from("engine_events")
               .upsert(
                 {
@@ -448,6 +512,7 @@ export async function POST(request: Request) {
                 { onConflict: "dedup_key", ignoreDuplicates: true },
               )
               .select("id");
+            if (bumpError) throw new Error(bumpError.message);
             // Conflict → this bump was already awarded by an earlier flush.
             if (bumpRow && bumpRow.length > 0) {
               await supabase
@@ -465,22 +530,49 @@ export async function POST(request: Request) {
         setsApplied: env.sets.length,
         status,
         banner,
+        ...(archived ? { engineSkipped: true } : {}),
       });
       ackedKeys.push(...env.opKeys);
-    } catch {
-      // This envelope stays queued; the others still land.
+    } catch (cause) {
+      // This envelope stays queued; the others still land — but never
+      // silently: the log is the only way a stuck queue gets diagnosed.
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.error("[sync] session envelope failed", {
+        localSessionId: env.localSessionId,
+        message,
+      });
+      failures.push({ opKeys: env.opKeys, reason: message, transient: true });
     }
   }
 
   /* ── run logs ────────────────────────────────────────────── */
   for (const r of body.runLogs) {
     try {
+      // Same archived-programme attribution as the session envelopes.
+      let runProgramId = ctx.program.id;
+      if (!ctx.phases.some((p) => p.id === r.key.phaseId)) {
+        const { data: foreignPhase } = await supabase
+          .from("program_phases")
+          .select("program_id")
+          .eq("id", r.key.phaseId)
+          .maybeSingle();
+        if (!foreignPhase?.program_id) {
+          failures.push({
+            opKeys: [r.opKey],
+            reason: "la fase de la carrera ya no existe en ningún programa",
+            transient: false,
+          });
+          continue;
+        }
+        runProgramId = foreignPhase.program_id;
+      }
+
       const { data: session, error } = await supabase
         .from("sessions")
         .upsert(
           {
             user_id: athlete.userId,
-            program_id: ctx.program.id,
+            program_id: runProgramId,
             phase_id: r.key.phaseId,
             slot_id: r.key.slotId,
             scheduled_on: r.key.scheduledOn,
@@ -511,14 +603,17 @@ export async function POST(request: Request) {
           distance_km: r.distanceKm,
           avg_hr: r.avgHr,
           decoupling_pct: r.decouplingPct,
+          perceived_effort: r.perceivedEffort ?? null,
           notes: r.notes,
         },
         { onConflict: "session_id" },
       );
       if (logError) throw new Error(logError.message);
       ackedKeys.push(r.opKey);
-    } catch {
-      // Stays queued.
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.error("[sync] run log failed", { opKey: r.opKey, message });
+      failures.push({ opKeys: [r.opKey], reason: message, transient: true });
     }
   }
 
@@ -536,8 +631,10 @@ export async function POST(request: Request) {
       );
       if (error) throw new Error(error.message);
       ackedKeys.push(m.opKey);
-    } catch {
-      // Stays queued.
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.error("[sync] mobility log failed", { opKey: m.opKey, message });
+      failures.push({ opKeys: [m.opKey], reason: message, transient: true });
     }
   }
 
@@ -545,5 +642,6 @@ export async function POST(request: Request) {
     ok: true,
     results,
     ackedKeys,
+    failures,
   } satisfies SyncResponse);
 }

@@ -13,7 +13,7 @@
 | Fase | Fechas (ajustables) | Duración | Énfasis | Fuerza | Carrera |
 |---|---|---|---|---|---|
 | **F0 — Puente verano** | 27 jul – ~23 ago | 4 sem | Mantener y llegar sano al Camino | 2 d/sem | 1-3 Z2/sem + caminatas con mochila |
-| **F1 — Camino Primitivo** | ~24 ago – ~12 sep | 2 sem | Base aeróbica masiva | 0 | 0 (caminar ES el entreno) |
+| **F1 — Camino Primitivo** | ~24 ago – ~13 sep | 3 sem | Base aeróbica masiva | 0 | 0 (caminar ES el entreno) |
 | **F2 — Hipertrofia/Fuerza** | 14 sep – 6 dic | 12 sem | **Ganar músculo y fuerza** (el bloque del físico) | 3 d/sem (prioridad) | 2 d/sem Z2 + strides/cuestas |
 | **F3 — Base híbrida** | 7 dic – 31 ene | 8 sem | Subir volumen de carrera e introducir tempo, fuerza a mantenimiento-plus | 2 d/sem | 3 d/sem |
 | **F4 — Específico media maratón** | 1 feb – ~25 abr | 12 sem | **Carrera** (calidad + tiradas hasta 20 km) | 2 d/sem mantenimiento | 4 d/sem (prioridad) |

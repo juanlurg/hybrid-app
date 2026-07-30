@@ -6,7 +6,7 @@ import { useState, useTransition } from "react";
 
 import { SecondaryNav } from "@/components/app-shell";
 import { Chip, RuleNote, SectionLabel, Segmented, Stepper } from "@/components/ui/kit";
-import { accentFor } from "@/components/day-accents";
+import { accentFor, TONE } from "@/components/day-accents";
 import { cn } from "@/lib/cn";
 import { formatWeight } from "@/lib/engine";
 import type { SessionGroup } from "@/lib/domain/plan";
@@ -79,6 +79,8 @@ export function ProgramEditor({
   cycle,
   waveIndex,
   wave,
+  waveScope,
+  pctOfRm,
   params,
   days,
   slots,
@@ -99,6 +101,9 @@ export function ProgramEditor({
   cycle: number;
   waveIndex: number;
   wave: number[];
+  /** Which wave the steppers edit — or none at all in a fixed-% phase. */
+  waveScope: "phase" | "program" | "fixed";
+  pctOfRm: number | null;
   params: {
     incLowerKg: number;
     incUpperKg: number;
@@ -277,11 +282,7 @@ export function ProgramEditor({
                 {warnings.map((w, i) => (
                   <RuleNote
                     key={i}
-                    tone={
-                      w.tone === "fail"
-                        ? "oklch(0.55 0.21 25)"
-                        : "oklch(0.72 0.16 75)"
-                    }
+                    tone={w.tone === "fail" ? TONE.fail : TONE.warn}
                     title={w.title}
                   >
                     {w.detail}
@@ -533,7 +534,28 @@ export function ProgramEditor({
 
         {tab === "motor" ? (
           <>
-            <SectionLabel>Ola de {wave.length} semanas</SectionLabel>
+            {waveScope === "fixed" ? (
+              <>
+                <SectionLabel>Progresión de la fase</SectionLabel>
+                <div className="mx-4 mt-3 border-2 border-ink px-4 py-4">
+                  <div className="num text-[30px] leading-none font-black tracking-[-0.035em]">
+                    {Math.round((pctOfRm ?? 0.8) * 100)} %
+                  </div>
+                  <p className="mt-2 text-[11px] leading-[1.5] text-mid">
+                    {phase.key} va a porcentaje fijo de la RM: sin olas, sin
+                    bumps y sin descargas automáticas. No hay ola que editar en
+                    esta fase.
+                  </p>
+                </div>
+              </>
+            ) : null}
+
+            {waveScope !== "fixed" ? (
+            <>
+            <SectionLabel>
+              Ola de {wave.length} semanas ·{" "}
+              {waveScope === "phase" ? `de esta fase (${phase.key})` : "del programa"}
+            </SectionLabel>
             <div className="mx-4 mt-3 flex h-[104px] items-end gap-0.5">
               {wave.map((w, i) => {
                 const max = Math.max(...wave);
@@ -594,9 +616,14 @@ export function ProgramEditor({
             <p className="mx-4 mt-3.5 text-[11px] leading-[1.5] text-faint">
               La semana {wave.length} es la descarga: mismos pesos al{" "}
               {Math.round(wave[wave.length - 1] * 100)} %, mitad de series.
-              Cambiar el pico cambia todos los pesos calculados de ese ciclo.
+              Cambiar el pico cambia todos los pesos calculados de ese ciclo
+              {waveScope === "phase"
+                ? " — solo en esta fase; las demás siguen con su propia ola."
+                : "."}
               {isDeload ? " Estás en ella ahora mismo." : ""}
             </p>
+            </>
+            ) : null}
 
             <SectionLabel className="mt-5">
               Parámetros del motor
@@ -605,7 +632,10 @@ export function ProgramEditor({
               <EngineRow
                 name="Ciclo actual"
                 sub={`Semana ${week} de ${phase.weeks} · ciclo ${cycle}`}
-                value={`${Math.round(wave[waveIndex] * 100)} %`}
+                value={`${Math.round(
+                  (waveScope === "fixed" ? (pctOfRm ?? 0.8) : wave[waveIndex]) *
+                    100,
+                )} %`}
               />
               <EngineRow
                 name="Incremento por ciclo · piernas"

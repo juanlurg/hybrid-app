@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_ENGINE_CONFIG, registerFailure, type LiftState } from ".";
 import {
   failDedupKey,
+  parsePreviousLiftState,
   preSessionLiftState,
   replayEngine,
   type ReplayInput,
@@ -118,8 +119,26 @@ describe("replayEngine", () => {
       input({ lift: held, logs: [log(0, 5), log(1, 5), log(2, 5), log(3, 5)] }),
     );
     expect(r.clean).toBe(true);
+    expect(r.released).toBe(true);
     expect(r.lift?.hold).toBe(false);
     expect(r.lift?.failCount).toBe(0);
+  });
+
+  it("a clean DELOAD session does not release a hold the week never tested", () => {
+    // Held at 90 (week 1's own weight); week 4 prescribes the 70 %
+    // deload below the cap — completing it proves nothing about 90.
+    const held: LiftState = { ...squat, hold: true, holdAtKg: 90, failCount: 1 };
+    const r = replayEngine(
+      input({
+        lift: held,
+        week: 4,
+        logs: [log(0, 5), log(1, 5), log(2, 5), log(3, 5)],
+      }),
+    );
+    expect(r.clean).toBe(true);
+    expect(r.released).toBe(false);
+    expect(r.lift?.hold).toBe(true);
+    expect(r.lift?.failCount).toBe(1);
   });
 
   it("no primary or no lift → nothing to do", () => {
@@ -154,5 +173,51 @@ describe("preSessionLiftState", () => {
     expect(rewound.failCount).toBe(0);
     expect(rewound.penalty).toBe(0);
     expect(rewound.hold).toBe(false);
+  });
+});
+
+describe("parsePreviousLiftState — the persisted payload round-trip", () => {
+  const mutated: LiftState = { ...squat, failCount: 1, hold: true, holdAtKg: 90 };
+
+  it("rewinds from a snake_case payload (rows written before 2026-07-31)", () => {
+    // Verbatim shape of the old persistLift() output, through JSON like
+    // a real jsonb column.
+    const stored = JSON.parse(
+      JSON.stringify({
+        e1rm_kg: 120, penalty: 0, fail_count: 0, hold: false, hold_at_kg: null,
+      }),
+    );
+    const rewound = preSessionLiftState(mutated, [
+      { createdAt: "t", previous: parsePreviousLiftState(stored) },
+    ]);
+    expect(rewound.failCount).toBe(0);
+    expect(rewound.hold).toBe(false);
+    expect(rewound.holdAtKg).toBeNull();
+  });
+
+  it("rewinds from a camelCase payload (rows written now)", () => {
+    const stored = JSON.parse(JSON.stringify({ ...squat }));
+    const rewound = preSessionLiftState(mutated, [
+      { createdAt: "t", previous: parsePreviousLiftState(stored) },
+    ]);
+    expect(rewound).toEqual(squat);
+  });
+
+  it("documents the killed bug: the raw cast of a snake_case payload no-ops the rewind", () => {
+    const stored = {
+      e1rm_kg: 120, penalty: 0, fail_count: 0, hold: false, hold_at_kg: null,
+    } as unknown as Partial<LiftState>;
+    const broken = preSessionLiftState(mutated, [
+      { createdAt: "t", previous: stored },
+    ]);
+    // failCount stays 1 — replaying the same logs from here escalated
+    // a single miss into −5 % and then a forced deload.
+    expect(broken.failCount).toBe(1);
+  });
+
+  it("returns null for absent or non-object payloads", () => {
+    expect(parsePreviousLiftState(null)).toBeNull();
+    expect(parsePreviousLiftState(undefined)).toBeNull();
+    expect(parsePreviousLiftState("x")).toBeNull();
   });
 });

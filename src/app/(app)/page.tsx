@@ -7,7 +7,8 @@ import { formatWeight } from "@/lib/engine";
 import { DAY_INITIALS } from "@/lib/domain/calendar";
 import { Callout, PlateChips } from "@/components/ui/kit";
 import { StartSessionButton } from "@/components/session/start-session-button";
-import { accentFor, GROUP_LABEL } from "@/components/day-accents";
+import { SyncStatus } from "@/components/sync-status";
+import { accentFor, GROUP_LABEL, TONE } from "@/components/day-accents";
 
 export default async function HoyPage() {
   const athlete = await requireAthlete();
@@ -72,7 +73,7 @@ export default async function HoyPage() {
               style={{
                 flex: isToday ? 2.4 : 1,
                 background: isToday ? accentFor(d.group) : "transparent",
-                color: isToday ? "#111110" : done ? "#ecebe6" : "#7d7c76",
+                color: isToday ? TONE.ink : done ? TONE.paper : TONE.ink3,
               }}
             >
               {isToday ? d.dayLabel : DAY_INITIALS[i]}
@@ -83,6 +84,7 @@ export default async function HoyPage() {
       </div>
 
       <div className="flex-1 overflow-auto">
+        <SyncStatus />
         {day.group === "strength" && day.primary ? (
           <>
             <section
@@ -210,8 +212,9 @@ export default async function HoyPage() {
             <Callout
               eyebrow={`${lift.name} en espera · ${formatWeight(Number(lift.hold_at_kg))} kg`}
             >
-              Fallaste el mínimo del rango la última vez, así que el motor
-              repite el mismo peso en vez de subir. Otro fallo y la RM baja.
+              Fallaste el mínimo del rango la última vez: la ola no pasa de ese
+              peso hasta una sesión limpia. Si toca descarga, manda la
+              descarga. Otro fallo y la RM baja.
             </Callout>
           </div>
         ))}

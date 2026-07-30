@@ -1,6 +1,8 @@
 import { SecondaryNav } from "@/components/app-shell";
 import { ScreenHeader } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
+import { createClient } from "@/lib/supabase/server";
+import { daysBetween, todayIso } from "@/lib/domain/calendar";
 import { formatWeight } from "@/lib/engine";
 
 import { SettingsGroups, type SettingsProfile } from "./settings-groups";
@@ -9,6 +11,19 @@ export default async function AjustesPage() {
   const athlete = await requireAthlete();
   const { ctx, email } = athlete;
   const p = ctx.profile;
+
+  const supabase = await createClient();
+  const { data: programRows } = await supabase
+    .from("programs")
+    .select("id, name, starts_on, is_active")
+    .eq("user_id", athlete.userId)
+    .eq("is_template", false)
+    .order("created_at", { ascending: false });
+
+  const exportAgeDays =
+    p.last_export_at == null
+      ? null
+      : Math.max(0, daysBetween(p.last_export_at.slice(0, 10), todayIso()));
 
   const localPart = email ? email.split("@")[0] : "";
   const title = p.display_name.trim() || localPart || "Atleta";
@@ -24,7 +39,6 @@ export default async function AjustesPage() {
     display_name: p.display_name,
     body_weight_kg: p.body_weight_kg == null ? null : Number(p.body_weight_kg),
     height_cm: p.height_cm,
-    units: p.units,
     bar_kg: Number(p.bar_kg),
     plates_kg: (p.plates_kg ?? []).map(Number),
     dumbbell_step_kg: Number(p.dumbbell_step_kg),
@@ -44,11 +58,6 @@ export default async function AjustesPage() {
     keep_screen_awake: p.keep_screen_awake,
     show_plate_breakdown: p.show_plate_breakdown,
     lthr: p.lthr,
-    zone_model: p.zone_model,
-    distance_unit: p.distance_unit,
-    notify_session: p.notify_session,
-    notify_deload: p.notify_deload,
-    notify_weekly_summary: p.notify_weekly_summary,
   };
 
   return (
@@ -72,6 +81,13 @@ export default async function AjustesPage() {
             kind: l.kind,
           }))}
           email={email}
+          exportAgeDays={exportAgeDays}
+          programs={(programRows ?? []).map((row) => ({
+            id: row.id,
+            name: row.name,
+            starts_on: row.starts_on,
+            is_active: row.is_active,
+          }))}
         />
       </div>
     </div>

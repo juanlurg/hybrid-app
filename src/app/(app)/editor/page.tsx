@@ -87,6 +87,18 @@ export default async function EditorPage() {
         .map((r) => r.data)
     : [];
 
+  const dropped: Array<{ op: ChangeOp; reason: string }> = Array.isArray(
+    proposalRow?.dropped,
+  )
+    ? (proposalRow.dropped as unknown[]).flatMap((d) => {
+        const raw = d as { op?: unknown; reason?: unknown };
+        const parsed = changeOpSchema.safeParse(raw.op);
+        return parsed.success
+          ? [{ op: parsed.data, reason: String(raw.reason ?? "") }]
+          : [];
+      })
+    : [];
+
   /* ── plan validator — the same rules applyProposal enforces ──── */
 
   const slotIdSet = new Set(slots.map((s) => s.id));
@@ -119,6 +131,14 @@ export default async function EditorPage() {
       cycle={cycleOf(placement.week, phaseConfig.cycleWeeks)}
       waveIndex={weekInCycle(placement.week, phaseConfig.cycleWeeks)}
       wave={[...phaseConfig.wave]}
+      waveScope={
+        phase.progression_mode === "fixed_pct"
+          ? "fixed"
+          : (phase.wave ?? []).map(Number).some((n) => n > 0)
+            ? "phase"
+            : "program"
+      }
+      pctOfRm={phaseConfig.pctOfRm}
       params={{
         incLowerKg: config.incLowerKg,
         incUpperKg: config.incUpperKg,
@@ -182,6 +202,7 @@ export default async function EditorPage() {
               question: proposalRow.question,
               rationale: proposalRow.rationale,
               changes,
+              dropped,
               status: proposalRow.status,
             }
           : null

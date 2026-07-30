@@ -8,8 +8,8 @@
  * ever touches `fixed_weight_kg` of non-primary rows.
  */
 
-import { loadableWeight, round2 } from ".";
-import type { Effort, EngineConfig, Equipment } from "./types";
+import { loadableWeight, round2, roundToStep } from ".";
+import type { Effort, EngineConfig, Equipment, LoadMode } from "./types";
 
 export interface AccessorySetLog {
   reps: number | null;
@@ -20,6 +20,12 @@ export interface AccessorySetLog {
 export interface AccessoryProgressionInput {
   equipment: Equipment | null;
   effort: Effort;
+  /**
+   * Belt-loaded work (`weighted_bodyweight`) progresses by plate steps
+   * regardless of `equipment`, which for those rows is just "bodyweight"
+   * — the increment would otherwise resolve to 0 and never move.
+   */
+  loadMode?: LoadMode;
   /** Top of the prescribed range (reps or seconds, per `effort`). */
   repMax: number;
   /** Sets prescribed for the session as run (after any deload halving). */
@@ -74,7 +80,12 @@ export function doubleProgression(
     reason,
   });
 
-  if (currentWeightKg == null || currentWeightKg <= 0) {
+  const weightedBodyweight = input.loadMode === "weighted_bodyweight";
+  if (
+    currentWeightKg == null ||
+    (currentWeightKg <= 0 && !weightedBodyweight)
+  ) {
+    // A belt at 0 kg is a valid start — the first bump adds the lastre.
     return hold("sin carga externa que progresar");
   }
   if (effort === "amrap") {
@@ -93,6 +104,21 @@ export function doubleProgression(
   const rirOk = logs.every((l) => l.rir == null || l.rir >= minRir);
   if (!rirOk) {
     return hold(`RIR por debajo de ${minRir}`);
+  }
+
+  if (weightedBodyweight) {
+    const next = roundToStep(
+      round2(currentWeightKg + config.roundingKg),
+      config.roundingKg,
+    );
+    if (next <= currentWeightKg) {
+      return hold("el incremento no produce una carga mayor alcanzable");
+    }
+    return {
+      advance: true,
+      nextWeightKg: next,
+      reason: `tope del rango en todas las series → +${round2(next - currentWeightKg)} kg de lastre`,
+    };
   }
 
   if (equipment === "kettlebell") {

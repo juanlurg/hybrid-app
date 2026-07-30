@@ -172,11 +172,21 @@ export default async function ResumenPage({
     });
 
   /* The engine's word on the next session of this same slot. The number is
-     read off ResolvedExercise — no load is ever computed in a screen. */
+     read off ResolvedExercise — no load is ever computed in a screen.
+     Week+1 only exists INSIDE the phase: at the boundary the next phase
+     has its own slots and progression, and extrapolating here announced
+     weights the engine would never prescribe. */
   const primaryRow = slotExercises.find((e) => e.is_primary);
-  const next = primaryRow
-    ? resolveExercise(primaryRow, session.week + 1, phaseConfig, liftsByKey)
-    : null;
+  const inPhase = sessionPhase == null || session.week + 1 <= sessionPhase.weeks;
+  const next =
+    primaryRow && inPhase
+      ? resolveExercise(primaryRow, session.week + 1, phaseConfig, liftsByKey)
+      : null;
+  const nextPhase =
+    !inPhase && sessionPhase
+      ? (ctx.phases.find((p) => p.position === sessionPhase.position + 1) ??
+        null)
+      : null;
   const nextLift = next?.liftKey
     ? (ctx.lifts.find((l) => l.key === next.liftKey) ?? null)
     : null;
@@ -231,6 +241,12 @@ export default async function ResumenPage({
             },
           ]}
         />
+
+        {session.notes ? (
+          <p className="mx-4 mt-3.5 border-l-[6px] border-hairline py-1 pl-3 text-[12px] leading-[1.5] text-mid">
+            {session.notes}
+          </p>
+        ) : null}
 
         <SectionLabel
           right={
@@ -315,6 +331,23 @@ export default async function ResumenPage({
                   kg.
                   {next.breakdown.isDeload ? " Es semana de descarga." : ""}
                 </>
+              )}
+            </Callout>
+          </div>
+        ) : null}
+
+        {!inPhase && sessionPhase ? (
+          <div className="mx-4 mt-3.5">
+            <Callout eyebrow="La próxima vez" eyebrowTone="text-ok-bright">
+              {nextPhase ? (
+                <>
+                  Última semana de {sessionPhase.name.toLowerCase()}. La semana
+                  que viene empieza {nextPhase.key} —{" "}
+                  {nextPhase.name.toLowerCase()} — y los pesos se recalculan con
+                  su progresión.
+                </>
+              ) : (
+                <>Última semana del plan.</>
               )}
             </Callout>
           </div>

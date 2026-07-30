@@ -105,7 +105,9 @@ export default async function CarreraPage({
       ? (
           await supabase
             .from("run_logs")
-            .select("duration_seconds, distance_km, avg_hr, decoupling_pct")
+            .select(
+              "duration_seconds, distance_km, avg_hr, decoupling_pct, perceived_effort",
+            )
             .eq("session_id", session.id)
             .maybeSingle()
         ).data
@@ -352,6 +354,26 @@ export default async function CarreraPage({
         }}
         targetMinutes={day.estimatedMinutes}
         done={done}
+        logged={
+          runLog
+            ? {
+                durationMinutes:
+                  runLog.duration_seconds == null
+                    ? null
+                    : Math.round(runLog.duration_seconds / 60),
+                distanceKm:
+                  runLog.distance_km == null
+                    ? null
+                    : Number(runLog.distance_km),
+                avgHr: runLog.avg_hr,
+                decouplingPct:
+                  runLog.decoupling_pct == null
+                    ? null
+                    : Number(runLog.decoupling_pct),
+                perceivedEffort: runLog.perceived_effort,
+              }
+            : null
+        }
       />
     </div>
   );

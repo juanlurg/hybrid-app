@@ -49,6 +49,8 @@ export type QueueOp =
       kind: "session_finish";
       localSessionId: string;
       finishedAt: string;
+      /** Optional session note from the explicit finish — "aquíleo molesto". */
+      notes?: string | null;
     }
   | {
       kind: "run_log";
@@ -58,6 +60,8 @@ export type QueueOp =
       distanceKm: number | null;
       avgHr: number | null;
       decouplingPct: number | null;
+      /** RPE 1-10 — absent on ops queued before the field existed. */
+      perceivedEffort?: number | null;
       notes: string;
       loggedAt: string;
     }
@@ -124,7 +128,8 @@ export function pendingCount(state: QueueState): number {
 
 export interface SessionEnvelope {
   localSessionId: string;
-  key: SessionKey;
+  /** Null when the start op was already acked and no local session survives. */
+  key: SessionKey | null;
   startedAt: string | null;
   sets: Array<{
     programExerciseId: string;
@@ -139,7 +144,7 @@ export interface SessionEnvelope {
     loggedAt: string;
   }>;
   undoneFailures: Array<{ position: number; setIndex: number }>;
-  finish: { finishedAt: string } | null;
+  finish: { finishedAt: string; notes?: string | null } | null;
   /** Queue keys this envelope covers — acked together on success. */
   opKeys: string[];
 }
@@ -151,6 +156,7 @@ export interface RunLogEnvelope {
   distanceKm: number | null;
   avgHr: number | null;
   decouplingPct: number | null;
+  perceivedEffort?: number | null;
   notes: string;
   opKey: string;
 }
@@ -176,6 +182,9 @@ export interface SyncSessionResult {
   setsApplied: number;
   status: string;
   banner: { title: string; detail: string; tone: "warn" | "fail" } | null;
+  /** True when the session belongs to an archived programme: history
+      lands, but only the active programme moves the engine. */
+  engineSkipped?: boolean;
 }
 
 export interface SyncResponse {
@@ -183,14 +192,23 @@ export interface SyncResponse {
   error?: string;
   results?: SyncSessionResult[];
   ackedKeys?: string[];
+  /** Envelopes that failed: transient ones stay queued, the rest are dropped and surfaced. */
+  failures?: Array<{ opKeys: string[]; reason: string; transient: boolean }>;
 }
 
 /**
  * Group the queue into envelopes, one per local session plus the
  * standalone run/mobility logs. Pure, so the grouping is testable
  * without touching IndexedDB.
+ *
+ * `sessionKeys` fills the key for envelopes whose session_start op was
+ * already acked — the common online flow. Without it (or a miss) the
+ * key ships null and the server resolves the session by its id.
  */
-export function buildEnvelopes(state: QueueState): {
+export function buildEnvelopes(
+  state: QueueState,
+  sessionKeys?: Map<string, SessionKey>,
+): {
   sessions: SessionEnvelope[];
   runLogs: RunLogEnvelope[];
   mobilityLogs: MobilityLogEnvelope[];
@@ -207,15 +225,7 @@ export function buildEnvelopes(state: QueueState): {
     if (!env) {
       env = {
         localSessionId,
-        key: key ?? {
-          phaseId: "",
-          slotId: "",
-          scheduledOn: "",
-          week: 1,
-          dayIndex: 0,
-          sessionType: "strength",
-          title: "",
-        },
+        key: key ?? sessionKeys?.get(localSessionId) ?? null,
         startedAt: null,
         sets: [],
         undoneFailures: [],
@@ -265,7 +275,7 @@ export function buildEnvelopes(state: QueueState): {
       }
       case "session_finish": {
         const env = envelopeFor(op.localSessionId, null);
-        env.finish = { finishedAt: op.finishedAt };
+        env.finish = { finishedAt: op.finishedAt, notes: op.notes ?? null };
         env.opKeys.push(k);
         break;
       }
@@ -277,6 +287,7 @@ export function buildEnvelopes(state: QueueState): {
           distanceKm: op.distanceKm,
           avgHr: op.avgHr,
           decouplingPct: op.decouplingPct,
+          perceivedEffort: op.perceivedEffort ?? null,
           notes: op.notes,
           opKey: k,
         });

@@ -49,7 +49,7 @@ export function RmRows({ lifts, stepKg }: { lifts: RmRow[]; stepKg: number }) {
               : null;
           const held = heldAtKg != null;
           const status = held
-            ? `en espera · ${formatWeight(heldAtKg)} kg`
+            ? `tope ${formatWeight(heldAtKg)} kg tras fallo · se repite cuando la ola lo alcance`
             : lift.effectiveRmKg != null
               ? `RM −${Math.round(lift.penalty * 100)} % · efectiva ${formatWeight(lift.effectiveRmKg)} kg`
               : "sin fallos";

@@ -24,6 +24,7 @@ import {
   SectionLabel,
 } from "@/components/ui/kit";
 import { accentFor, STATUS_LABEL, statusTone } from "@/components/day-accents";
+import { SkipDayButton } from "@/components/session/start-session-button";
 import { cn } from "@/lib/cn";
 
 import { WeekNav } from "./week-nav";
@@ -244,28 +245,47 @@ export default async function SemanaPage({
               );
 
               const classes = cn(
-                "block px-4 py-3",
+                "flex items-center gap-3 px-4 py-3",
                 isToday ? "bg-sunk" : "bg-paper",
               );
 
-              return href ? (
-                <Link
-                  key={day.date}
-                  id={`dia-${day.dayIndex}`}
-                  href={href}
-                  aria-current={isToday ? "date" : undefined}
-                  className={classes}
-                >
-                  {body}
-                </Link>
-              ) : (
+              // "Hoy no entreno" is a decision, not an omission: a
+              // deliberate skip closes the day as SALTADA instead of
+              // leaving it pending forever.
+              const skippable =
+                (day.group === "strength" || day.group === "run") &&
+                day.slot != null &&
+                day.date >= today &&
+                status === "planned";
+
+              return (
                 <div
                   key={day.date}
                   id={`dia-${day.dayIndex}`}
                   aria-current={isToday ? "date" : undefined}
                   className={classes}
                 >
-                  {body}
+                  {href ? (
+                    <Link href={href} className="block min-w-0 flex-1">
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="min-w-0 flex-1">{body}</div>
+                  )}
+                  {skippable && day.slot ? (
+                    <SkipDayButton
+                      day={{
+                        phaseId: day.phaseId,
+                        slotId: day.slot.id,
+                        scheduledOn: day.date,
+                        week: day.week,
+                        dayIndex: day.dayIndex,
+                        sessionType: day.sessionType,
+                        title: day.title,
+                        group: day.group,
+                      }}
+                    />
+                  ) : null}
                 </div>
               );
             })}

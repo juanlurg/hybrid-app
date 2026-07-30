@@ -37,6 +37,9 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const all = [...PRIMARY, ...SECONDARY];
+  // The runner pins its own action bar to the bottom edge; a tab strip
+  // directly under "Hecho" is pure mis-tap surface mid-set.
+  const inRunner = pathname.startsWith("/sesion/");
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
@@ -77,12 +80,18 @@ export function AppShell({
       </nav>
 
       <div className="relative flex min-h-dvh min-w-0 flex-1 flex-col">
-        <main className="flex min-h-0 flex-1 flex-col pb-[calc(52px+var(--safe-bottom))] md:pb-0">
+        <main
+          className={cn(
+            "flex min-h-0 flex-1 flex-col md:pb-0",
+            inRunner ? "pb-[var(--safe-bottom)]" : "pb-[calc(52px+var(--safe-bottom))]",
+          )}
+        >
           <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col md:max-w-none">
             {children}
           </div>
         </main>
 
+        {inRunner ? null : (
         <nav className="fixed inset-x-0 bottom-0 z-30 flex gap-px bg-ink pb-[var(--safe-bottom)] md:hidden">
           {PRIMARY.map((item) => {
             const active = isActive(pathname, item.href);
@@ -104,6 +113,7 @@ export function AppShell({
             );
           })}
         </nav>
+        )}
       </div>
     </div>
   );

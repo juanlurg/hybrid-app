@@ -266,12 +266,30 @@ export async function shiftProgram(days: number): Promise<Result> {
   return { ok: true };
 }
 
-/** Nudge one step of the wave. Recomputes every future weight in that cycle. */
+/**
+ * Nudge one step of the wave. The editor DISPLAYS the phase-resolved
+ * wave (phaseEngineConfig), so the write must target the same scope:
+ * a phase with its own wave override (F0 today) edits that phase's
+ * wave; only phases riding the program default edit programs.wave.
+ * Fixed-% phases have no wave to edit at all.
+ */
 export async function setWaveStep(index: number, delta: number): Promise<Result> {
   const athlete = await guard();
   if (!athlete) return { ok: false, error: "Sin sesión iniciada." };
 
-  const wave = (athlete.ctx.program.wave ?? []).map(Number);
+  const phase = athlete.ctx.phases.find(
+    (p) => p.id === athlete.placement.phase.id,
+  );
+  if (phase?.progression_mode === "fixed_pct") {
+    return {
+      ok: false,
+      error: "Esta fase va a porcentaje fijo: no hay ola que editar.",
+    };
+  }
+  const phaseWave = (phase?.wave ?? []).map(Number).filter((n) => n > 0);
+  const wave = phaseWave.length
+    ? phaseWave
+    : (athlete.ctx.program.wave ?? []).map(Number);
   if (index < 0 || index >= wave.length) return { ok: false, error: "Paso inválido." };
 
   wave[index] = Math.max(
@@ -280,10 +298,15 @@ export async function setWaveStep(index: number, delta: number): Promise<Result>
   );
 
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("programs")
-    .update({ wave })
-    .eq("id", athlete.ctx.program.id);
+  const { error } = phaseWave.length
+    ? await supabase
+        .from("program_phases")
+        .update({ wave })
+        .eq("id", phase!.id)
+    : await supabase
+        .from("programs")
+        .update({ wave })
+        .eq("id", athlete.ctx.program.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/", "layout");
   return { ok: true };

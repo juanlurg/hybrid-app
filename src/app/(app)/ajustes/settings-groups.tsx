@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 
 import { TONE } from "@/components/day-accents";
+import { SyncStatus } from "@/components/sync-status";
 import {
   Chip,
   Footnote,
@@ -15,6 +16,7 @@ import {
   Toggle,
 } from "@/components/ui/kit";
 import { signOut } from "@/lib/actions/auth";
+import { activateProgram } from "@/lib/actions/onboarding";
 import { shiftProgram } from "@/lib/actions/program";
 import {
   clearHistory,
@@ -33,7 +35,6 @@ export type SettingsProfile = Pick<
   | "display_name"
   | "body_weight_kg"
   | "height_cm"
-  | "units"
   | "bar_kg"
   | "plates_kg"
   | "dumbbell_step_kg"
@@ -53,11 +54,6 @@ export type SettingsProfile = Pick<
   | "keep_screen_awake"
   | "show_plate_breakdown"
   | "lthr"
-  | "zone_model"
-  | "distance_unit"
-  | "notify_session"
-  | "notify_deload"
-  | "notify_weekly_summary"
 >;
 
 export interface SettingsLift {
@@ -130,14 +126,26 @@ function bump(
   return clamp(round2(Number(current) + delta), min, max);
 }
 
+export interface SettingsProgram {
+  id: string;
+  name: string;
+  starts_on: string | null;
+  is_active: boolean;
+}
+
 export function SettingsGroups({
   profile: initialProfile,
   lifts,
   email,
+  programs,
+  exportAgeDays,
 }: {
   profile: SettingsProfile;
   lifts: SettingsLift[];
   email: string | null;
+  programs: SettingsProgram[];
+  /** Whole days since the last export; null = never. Computed server-side. */
+  exportAgeDays: number | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -354,16 +362,6 @@ export function SettingsGroups({
           />
         </SettingRow>
 
-        <SettingRow name="Unidades" sub="El motor calcula siempre en kilos">
-          <ChipRow
-            value={profile.units}
-            options={[
-              { value: "kg", label: "KG" },
-              { value: "lb", label: "LB" },
-            ]}
-            onChange={(units) => save({ units })}
-          />
-        </SettingRow>
       </RowStack>
 
       {/* ── equipo ─────────────────────────────────────────────── */}
@@ -714,64 +712,6 @@ export function SettingsGroups({
             }
           />
         </SettingRow>
-        <SettingRow
-          name="Modelo de zonas"
-          sub="Hoy las cinco zonas se calculan siempre desde el LTHR"
-        >
-          <ChipRow
-            value={profile.zone_model}
-            options={[
-              { value: "lthr", label: "LTHR" },
-              { value: "hrmax", label: "FC MÁX" },
-            ]}
-            onChange={(zone_model) => save({ zone_model })}
-          />
-        </SettingRow>
-        <SettingRow name="Distancia" sub="Solo cambia cómo se muestran los kilómetros">
-          <ChipRow
-            value={profile.distance_unit}
-            options={[
-              { value: "km", label: "KM" },
-              { value: "mi", label: "MI" },
-            ]}
-            onChange={(distance_unit) => save({ distance_unit })}
-          />
-        </SettingRow>
-      </RowStack>
-
-      {/* ── avisos ─────────────────────────────────────────────── */}
-      <SectionLabel right={status()}>Avisos</SectionLabel>
-      <RowStack className="mt-2.5">
-        <SettingRow
-          name="Recordatorio de sesión"
-          sub="El día que toca entrenar, por la mañana"
-        >
-          <Toggle
-            label="Recordatorio de sesión"
-            checked={profile.notify_session}
-            onChange={(notify_session) => save({ notify_session })}
-          />
-        </SettingRow>
-        <SettingRow
-          name="Aviso de semana de descarga"
-          sub="Al empezar la última semana del ciclo"
-        >
-          <Toggle
-            label="Aviso de semana de descarga"
-            checked={profile.notify_deload}
-            onChange={(notify_deload) => save({ notify_deload })}
-          />
-        </SettingRow>
-        <SettingRow
-          name="Resumen semanal"
-          sub="Domingo por la noche, con tonelaje y kilómetros"
-        >
-          <Toggle
-            label="Resumen semanal"
-            checked={profile.notify_weekly_summary}
-            onChange={(notify_weekly_summary) => save({ notify_weekly_summary })}
-          />
-        </SettingRow>
       </RowStack>
 
       {/* ── cuenta ─────────────────────────────────────────────── */}
@@ -807,6 +747,7 @@ export function SettingsGroups({
 
       {/* ── datos ──────────────────────────────────────────────── */}
       <SectionLabel right={status()}>Datos</SectionLabel>
+      <SyncStatus />
       <RowStack className="mt-2.5">
         <a
           href="/api/export"
@@ -817,9 +758,19 @@ export function SettingsGroups({
             <span className="block text-[13px] leading-[1.2] font-bold">
               Exportar histórico (JSON)
             </span>
-            <span className="mt-1 block text-[10.5px] leading-[1.35] text-faint">
-              Todo lo tuyo en un archivo. En el plan gratuito esto ES la copia
-              de seguridad: descárgalo cada semana.
+            <span
+              className={cn(
+                "mt-1 block text-[10.5px] leading-[1.35]",
+                exportAgeDays == null || exportAgeDays > 14
+                  ? "font-semibold text-warn"
+                  : "text-faint",
+              )}
+            >
+              {exportAgeDays == null
+                ? "Nunca descargada. En el plan gratuito esto ES la copia de seguridad."
+                : exportAgeDays > 14
+                  ? `Última copia hace ${exportAgeDays} días. Toca descargar: en el plan gratuito esto ES la copia de seguridad.`
+                  : `Última copia ${exportAgeDays === 0 ? "hoy" : exportAgeDays === 1 ? "ayer" : `hace ${exportAgeDays} días`}. Todo lo tuyo en un archivo.`}
             </span>
           </span>
           <span
@@ -829,6 +780,56 @@ export function SettingsGroups({
             ↓
           </span>
         </a>
+
+        {programs.length > 0 ? (
+          <div className="bg-paper px-4 py-3">
+            <div className="text-[13px] leading-[1.2] font-bold">Programas</div>
+            <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
+              El activo manda en Hoy y en el motor. Los demás quedan
+              archivados con todo su historial.
+            </div>
+            <div className="mt-2.5 flex flex-col gap-2">
+              {programs.map((p) => (
+                <div key={p.id} className="flex items-center gap-2.5">
+                  <span className="min-w-0 flex-1 truncate text-[12px] leading-[1.2] font-semibold">
+                    {p.name}
+                  </span>
+                  {p.starts_on ? (
+                    <span className="num flex-none text-[10px] leading-none text-faint">
+                      {p.starts_on}
+                    </span>
+                  ) : null}
+                  {p.is_active ? (
+                    <span className="flex-none text-[9.5px] leading-none font-extrabold tracking-[0.1em] text-ok uppercase">
+                      Activo
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => {
+                        setError(null);
+                        startTransition(async () => {
+                          const res = await activateProgram(p.id);
+                          if (!res.ok) {
+                            setError(
+                              res.error ?? "No se ha podido activar.",
+                            );
+                            return;
+                          }
+                          router.refresh();
+                        });
+                      }}
+                      className="flex-none border-2 border-ink px-2 py-1.5 text-[9.5px] leading-none font-extrabold tracking-[0.1em] uppercase disabled:opacity-40"
+                    >
+                      Activar
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <Row>
           <div className="flex items-center gap-3">

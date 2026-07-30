@@ -7,7 +7,10 @@ import {
   phaseEngineConfig,
   resolveDay,
 } from "@/lib/domain/plan";
-import { preSessionLiftState } from "@/lib/engine/replay";
+import {
+  parsePreviousLiftState,
+  preSessionLiftState,
+} from "@/lib/engine/replay";
 import { setsForWeek, type LiftState } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { placeDate } from "@/lib/domain/calendar";
@@ -87,9 +90,9 @@ export default async function SessionPage({
       liftStateFrom(liftRow),
       failEvents.map((e) => ({
         createdAt: e.created_at,
-        previous:
-          ((e.payload as { previous?: Record<string, unknown> } | null)
-            ?.previous as Partial<LiftState> | null) ?? null,
+        previous: parsePreviousLiftState(
+          (e.payload as { previous?: unknown } | null)?.previous,
+        ),
       })),
     );
     for (const e of failEvents) {

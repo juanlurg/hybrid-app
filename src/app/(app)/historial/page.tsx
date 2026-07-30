@@ -64,7 +64,7 @@ const LEGEND: Array<{ label: string; background: string; border: string }> = [
   },
   { label: "Parcial", background: TONE.warn, border: "transparent" },
   { label: "Sin registrar", background: TONE.ink, border: "transparent" },
-  { label: "Por venir", background: "transparent", border: "#cdcac1" },
+  { label: "Por venir", background: "transparent", border: TONE.hairline },
 ];
 
 const dayKey = (date: string, slotId: string | null) => `${date}|${slotId ?? ""}`;
@@ -421,6 +421,13 @@ export default async function HistorialPage() {
             runLog?.decoupling_pct == null
               ? "—"
               : `${formatWeight(Number(runLog.decoupling_pct))} %`,
+        },
+        {
+          label: "RPE",
+          value:
+            runLog?.perceived_effort == null
+              ? "—"
+              : String(runLog.perceived_effort),
         },
       );
     } else {

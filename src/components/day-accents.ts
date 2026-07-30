@@ -10,11 +10,14 @@ export const ACCENT: Record<SessionGroup, string> = {
 
 export const TONE = {
   ink: "#111110",
+  ink3: "#7d7c76",
   paper: "#ecebe6",
   mid: "#6e6d67",
   line: "#d7d5cd",
   soft: "#e0ded7",
+  hairline: "#b6b3aa",
   ok: "oklch(0.55 0.14 145)",
+  okBright: "oklch(0.72 0.19 130)",
   warn: "oklch(0.72 0.16 75)",
   fail: "oklch(0.55 0.21 25)",
   tint: "#f2e6cf",
@@ -55,7 +58,7 @@ export function cellColour(
 ): { background: string; border: string } {
   if (group === "rest") return { background: TONE.soft, border: TONE.soft };
   if (isFuture && !status)
-    return { background: "transparent", border: "#cdcac1" };
+    return { background: "transparent", border: TONE.hairline };
   if (!status || status === "planned" || status === "skipped")
     return { background: TONE.ink, border: "transparent" };
   if (status === "partial")

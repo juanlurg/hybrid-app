@@ -131,6 +131,33 @@ describe("doubleProgression", () => {
       doubleProgression(input({ equipment: "bodyweight" }), cfg).advance,
     ).toBe(false);
   });
+
+  it("belt-loaded work progresses by the plate step despite bodyweight equipment", () => {
+    // Dominadas lastradas: equipment is "bodyweight", load_mode says belt.
+    const out = doubleProgression(
+      input({
+        equipment: "bodyweight",
+        loadMode: "weighted_bodyweight",
+        currentWeightKg: 12.5,
+      }),
+      cfg,
+    );
+    expect(out.advance).toBe(true);
+    expect(out.nextWeightKg).toBe(15);
+  });
+
+  it("a belt at 0 kg is a valid start — the first bump adds the lastre", () => {
+    const out = doubleProgression(
+      input({
+        equipment: "dip_bars",
+        loadMode: "weighted_bodyweight",
+        currentWeightKg: 0,
+      }),
+      cfg,
+    );
+    expect(out.advance).toBe(true);
+    expect(out.nextWeightKg).toBe(2.5);
+  });
 });
 
 describe("equipmentIncrementKg", () => {

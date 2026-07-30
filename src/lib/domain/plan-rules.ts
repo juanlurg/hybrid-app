@@ -73,7 +73,12 @@ export function planWarnings(input: PlanRuleInput): PlanWarning[] {
   }
 
   const groups = ordered.map((_, i) => groupAt(i));
-  if (!groups.includes("mobility")) {
+  const strengthDays = groups.filter((g) => g === "strength").length;
+  const runDays = groups.filter((g) => g === "run").length;
+
+  // Mobility guards training weeks. A phase with no strength at all
+  // (F1: caminar ES el entreno) is legitimately mobility-free.
+  if (strengthDays > 0 && !groups.includes("mobility")) {
     warnings.push({
       tone: "fail",
       blocking: true,
@@ -83,8 +88,6 @@ export function planWarnings(input: PlanRuleInput): PlanWarning[] {
     });
   }
 
-  const strengthDays = groups.filter((g) => g === "strength").length;
-  const runDays = groups.filter((g) => g === "run").length;
   if (strengthDays > 3 && runDays >= 2) {
     warnings.push({
       tone: "fail",
@@ -96,4 +99,22 @@ export function planWarnings(input: PlanRuleInput): PlanWarning[] {
   }
 
   return warnings;
+}
+
+/**
+ * The blocking titles `post` introduces that `pre` did not already have.
+ * applyProposal blocks a batch only on THESE: a violation that predates
+ * the batch (a template phase seeded without mobility, a hand-edited
+ * week) must not veto unrelated changes forever.
+ */
+export function newBlockingTitles(
+  pre: PlanWarning[],
+  post: PlanWarning[],
+): string[] {
+  const existing = new Set(
+    pre.filter((w) => w.blocking).map((w) => w.title),
+  );
+  return post
+    .filter((w) => w.blocking && !existing.has(w.title))
+    .map((w) => w.title);
 }
