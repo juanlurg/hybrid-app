@@ -81,7 +81,7 @@ Programa via `SecondaryNav`.
 | `/sesion/[id]/resumen` | Summary — KPIs and what the engine changed |
 | `/semana` | The 7 days + season phase bar |
 | `/progreso` | Per-lift chart, engine breakdown, Pa:HR |
-| `/programa` | RMs, regression rule, engine parameters |
+| `/programa` | RMs, calculadora de RM (Epley), regression rule, engine parameters |
 | `/carrera/[fecha]` | Run blocks, HR zones, mark done |
 | `/movilidad` | Guided / list mobility block |
 | `/historial` | Consistency grid, records, log, engine timeline |

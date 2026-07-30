@@ -15,10 +15,49 @@ import {
   roundToStep,
 } from "@/lib/engine";
 import type { RegressionRule } from "@/lib/engine";
-import { phaseEngineConfig } from "@/lib/domain/plan";
+import { phaseEngineConfig, type LiftRow } from "@/lib/domain/plan";
 import { createClient } from "@/lib/supabase/server";
 
+import { RmCalculator, type RmCalcLift } from "./rm-calculator";
 import { RmRows, type RmRow } from "./rm-rows";
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * The most recent logged set of each basic, to seed the calculator. One query
+ * per lift, one row each: a single ordered query would need a cap, and the cap
+ * would silently drop whatever was not trained lately.
+ */
+async function lastSetPerLift(
+  supabase: Supabase,
+  userId: string,
+  lifts: LiftRow[],
+): Promise<Map<string, { weightKg: number; reps: number; on: string }>> {
+  const rows = await Promise.all(
+    lifts.map(async (lift) => {
+      const { data } = await supabase
+        .from("set_logs")
+        .select("weight_kg, reps, logged_at")
+        .eq("user_id", userId)
+        .eq("lift_key", lift.key)
+        .not("weight_kg", "is", null)
+        .not("reps", "is", null)
+        .order("logged_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data || data.weight_kg == null || data.reps == null) return null;
+      return [
+        lift.key,
+        {
+          weightKg: Number(data.weight_kg),
+          reps: data.reps,
+          on: formatDayShort(data.logged_at.slice(0, 10) as IsoDate),
+        },
+      ] as const;
+    }),
+  );
+  return new Map(rows.filter((row): row is NonNullable<typeof row> => row !== null));
+}
 
 const RULE_LABEL: Record<RegressionRule, string> = {
   conservative: "CONSERVADORA",
@@ -53,14 +92,17 @@ export default async function ProgramaPage() {
 
   // When the last RM re-test was, if there has ever been one.
   const supabase = await createClient();
-  const { data: lastRetest } = await supabase
-    .from("measurements")
-    .select("taken_on")
-    .eq("user_id", athlete.userId)
-    .eq("kind", "rm_estimate")
-    .order("taken_on", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: lastRetest }, lastSetByLift] = await Promise.all([
+    supabase
+      .from("measurements")
+      .select("taken_on")
+      .eq("user_id", athlete.userId)
+      .eq("kind", "rm_estimate")
+      .order("taken_on", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    lastSetPerLift(supabase, athlete.userId, ctx.lifts),
+  ]);
 
   const lifts: RmRow[] = ctx.lifts.map((l) => {
     const e1rmKg = Number(l.e1rm_kg);
@@ -79,6 +121,13 @@ export default async function ProgramaPage() {
           : null,
     };
   });
+
+  const calcLifts: RmCalcLift[] = ctx.lifts.map((l) => ({
+    key: l.key,
+    name: l.name,
+    e1rmKg: Number(l.e1rm_kg),
+    lastSet: lastSetByLift.get(l.key) ?? null,
+  }));
 
   const params: Array<{ label: string; value: string }> = [
     { label: "RIR objetivo", value: profile.target_rir },
@@ -139,7 +188,16 @@ export default async function ProgramaPage() {
           motor.
         </Footnote>
 
-        <Framed className="mx-4">
+        {calcLifts.length > 0 ? (
+          <>
+            <SectionLabel right="NO GUARDA NADA">
+              Calculadora de RM
+            </SectionLabel>
+            <RmCalculator lifts={calcLifts} stepKg={config.roundingKg} />
+          </>
+        ) : null}
+
+        <Framed className="mx-4 mt-5">
           <div className="text-[10px] leading-none font-extrabold tracking-[0.12em] uppercase">
             Regla de regresión · {RULE_LABEL[config.regressionRule]}
           </div>
