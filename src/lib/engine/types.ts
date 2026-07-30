@@ -17,6 +17,33 @@ export type LoadMode =
   | "weighted_bodyweight" // added load on top of bodyweight (dominadas lastradas)
   | "rpe"; // "progresiv." — by feel, nothing to compute
 
+/** What a "rep" in the prescribed range means. */
+export type Effort =
+  | "reps" // count repetitions
+  | "seconds" // timed hold (planchas, isométricos)
+  | "amrap"; // as many reps as possible, minus the prescribed reserve
+
+/** What the load hangs from — decides the rounding arithmetic. */
+export type Equipment =
+  | "barbell"
+  | "dumbbell"
+  | "kettlebell"
+  | "pulley"
+  | "bodyweight"
+  | "band"
+  | "dip_bars"
+  | "machine";
+
+/**
+ * How a phase moves the weight week to week.
+ *
+ * `wave`: the e1RM × wave machinery, with weeks counted INSIDE the
+ * phase so every phase starts at wave[0] — never mid-cycle.
+ * `fixed_pct`: every week at `pctOfRm`, no cycle bumps, no auto
+ * deload. F3's "3×5 @ 80 %" and F4's "manteniendo cargas".
+ */
+export type ProgressionMode = "wave" | "fixed_pct";
+
 /** Engine state for one tracked lift. Mirrors the `lifts` table. */
 export interface LiftState {
   id: string;
@@ -54,11 +81,23 @@ export interface EngineConfig {
   platesKg: readonly number[];
   /** Halve the sets on the deload week. */
   autoDeload: boolean;
+  /** How this block progresses. Defaults to the wave machinery. */
+  progressionMode: ProgressionMode;
+  /** The fixed multiplier when `progressionMode` is `fixed_pct`. */
+  pctOfRm: number | null;
+  /** Smallest jump per dumbbell the athlete owns. */
+  dumbbellStepKg: number;
+  /** Pin spacing of the pulley stack. */
+  pulleyStepKg: number;
+  /** The exact kettlebells available — loads snap to one of these. */
+  kettlebellsKg: readonly number[];
 }
 
 export const DEFAULT_WAVE = [0.75, 0.8, 0.85, 0.7] as const;
 
 export const DEFAULT_PLATES = [25, 20, 15, 10, 5, 2.5, 1.25] as const;
+
+export const DEFAULT_KETTLEBELLS = [12, 16] as const;
 
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   wave: DEFAULT_WAVE,
@@ -70,6 +109,11 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   barKg: 20,
   platesKg: DEFAULT_PLATES,
   autoDeload: true,
+  progressionMode: "wave",
+  pctOfRm: null,
+  dumbbellStepKg: 2.5,
+  pulleyStepKg: 5,
+  kettlebellsKg: DEFAULT_KETTLEBELLS,
 };
 
 /** Full breakdown of how one working weight was arrived at. */

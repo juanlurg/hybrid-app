@@ -9,15 +9,27 @@
 import {
   formatWeight,
   isDeloadWeek,
+  loadableWeight,
   plateBreakdown,
+  roundToStep,
   setsForWeek,
   workingWeight,
+  type Effort,
   type EngineConfig,
+  type Equipment,
   type LiftState,
   type PlateLoad,
+  type ProgressionMode,
   type WeightBreakdown,
 } from "@/lib/engine";
-import { prescriptionMinutes, runBlocks, type RunBlock } from "@/lib/engine/run";
+import {
+  parseStructure,
+  prescriptionMinutes,
+  runBlocks,
+  structuredBlocks,
+  structureMinutes,
+  type RunBlock,
+} from "@/lib/engine/run";
 import type { Database } from "@/lib/supabase/database.types";
 
 import {
@@ -85,6 +97,7 @@ export function engineConfigFrom(
 ): EngineConfig {
   const wave = (program.wave ?? []).map(Number).filter((n) => n > 0);
   const plates = (profile.plates_kg ?? []).map(Number).filter((n) => n > 0);
+  const bells = (profile.kettlebells_kg ?? []).map(Number).filter((n) => n > 0);
   return {
     wave: wave.length ? wave : [0.75, 0.8, 0.85, 0.7],
     cycleWeeks: program.cycle_weeks || 4,
@@ -95,6 +108,32 @@ export function engineConfigFrom(
     barKg: Number(profile.bar_kg ?? 20),
     platesKg: plates.length ? plates : [25, 20, 15, 10, 5, 2.5, 1.25],
     autoDeload: profile.auto_deload ?? true,
+    progressionMode: "wave",
+    pctOfRm: null,
+    dumbbellStepKg: Number(profile.dumbbell_step_kg ?? 2.5),
+    pulleyStepKg: Number(profile.pulley_step_kg ?? 5),
+    kettlebellsKg: bells.length ? bells : [12, 16],
+  };
+}
+
+/**
+ * The program config with this phase's progression laid over it.
+ * This is also where the engine switched from absolute weeks to
+ * phase-local weeks: every phase starts at wave[0], so F2 week 1 is
+ * 75 % — not the deload that absolute week 8 used to land on.
+ */
+export function phaseEngineConfig(
+  config: EngineConfig,
+  phase: PhaseRow,
+): EngineConfig {
+  const phaseWave = (phase.wave ?? []).map(Number).filter((n) => n > 0);
+  const mode = (phase.progression_mode ?? "wave") as ProgressionMode;
+  return {
+    ...config,
+    wave: phaseWave.length ? phaseWave : config.wave,
+    cycleWeeks: phase.cycle_weeks || config.cycleWeeks,
+    progressionMode: mode,
+    pctOfRm: phase.pct_of_rm == null ? null : Number(phase.pct_of_rm),
   };
 }
 
@@ -136,6 +175,9 @@ export interface ResolvedExercise {
   plates: PlateLoad | null;
   breakdown: WeightBreakdown | null;
   notes: string;
+  effort: Effort;
+  supersetGroup: number | null;
+  equipment: Equipment | null;
 }
 
 export interface ResolvedDay {
@@ -200,6 +242,8 @@ export function resolveExercise(
   const plannedSets = row.sets;
   const sets = setsForWeek(plannedSets, week, config);
 
+  const equipment = (row.equipment ?? null) as Equipment | null;
+
   let weightKg: number | null = null;
   let breakdown: WeightBreakdown | null = null;
 
@@ -209,14 +253,22 @@ export function resolveExercise(
       breakdown = workingWeight(lift, week, config);
       weightKg = breakdown.workingKg;
     }
-  } else if (
-    row.load_mode === "fixed" ||
-    row.load_mode === "weighted_bodyweight"
-  ) {
-    weightKg = row.fixed_weight_kg == null ? null : Number(row.fixed_weight_kg);
+  } else if (row.load_mode === "fixed") {
+    // What the plan asks for, snapped to what the equipment can load.
+    weightKg =
+      row.fixed_weight_kg == null
+        ? null
+        : loadableWeight(Number(row.fixed_weight_kg), equipment, config);
+  } else if (row.load_mode === "weighted_bodyweight") {
+    // Added load hangs off a belt: plate arithmetic, no bar.
+    weightKg =
+      row.fixed_weight_kg == null
+        ? null
+        : roundToStep(Number(row.fixed_weight_kg), config.roundingKg);
   }
 
-  const usesBar = row.load_mode === "engine";
+  const usesBar =
+    equipment === "barbell" || (equipment == null && row.load_mode === "engine");
 
   return {
     id: row.id,
@@ -239,6 +291,9 @@ export function resolveExercise(
     plates: usesBar && weightKg != null ? plateBreakdown(weightKg, config) : null,
     breakdown,
     notes: row.notes ?? "",
+    effort: (row.effort ?? "reps") as Effort,
+    supersetGroup: row.superset_group ?? null,
+    equipment,
   };
 }
 
@@ -246,9 +301,9 @@ export interface ResolveOptions {
   ctx: AthleteContext;
   config: EngineConfig;
   phase: PhaseRow;
-  /** 1-based week inside the phase. */
+  /** 1-based week inside the phase — what the engine runs on. */
   week: number;
-  /** Absolute week in the program — what the engine's wave runs on. */
+  /** Absolute week in the program. Display only; the engine ignores it. */
   absoluteWeek: number;
 }
 
@@ -256,8 +311,13 @@ export function resolveDay(
   opts: ResolveOptions,
   dayIndex: number,
 ): ResolvedDay {
-  const { ctx, config, phase, week, absoluteWeek } = opts;
+  const { ctx, config, phase, week } = opts;
   const lthr = ctx.profile.lthr ?? 168;
+
+  // The engine runs on the week INSIDE the phase, with the phase's own
+  // progression. Absolute weeks made F2 week 1 land mid-cycle on the
+  // deload step; phase-local weeks start every phase at wave[0].
+  const phaseConfig = phaseEngineConfig(config, phase);
 
   const dayRow = ctx.days.find(
     (d) => d.phase_id === phase.id && d.day_index === dayIndex,
@@ -279,7 +339,7 @@ export function resolveDay(
       ? ctx.exercises
           .filter((e) => e.slot_id === slot.id)
           .sort((a, b) => a.position - b.position)
-          .map((e) => resolveExercise(e, absoluteWeek, config, liftsByKey))
+          .map((e) => resolveExercise(e, week, phaseConfig, liftsByKey))
       : [];
 
   const prescriptionRow = slot
@@ -289,13 +349,15 @@ export function resolveDay(
       )
     : undefined;
   const prescription = prescriptionRow?.prescription ?? "";
+  const structure = parseStructure(prescriptionRow?.structure ?? null);
 
   const totalSets = exercises.reduce((acc, e) => acc + e.sets, 0);
   const minutes =
     group === "strength"
       ? estimateMinutes(totalSets)
       : group === "run"
-        ? (prescriptionRow?.target_minutes ?? prescriptionMinutes(prescription))
+        ? (prescriptionRow?.target_minutes ??
+          (structure ? structureMinutes(structure) : prescriptionMinutes(prescription)))
         : group === "mobility"
           ? 20
           : 0;
@@ -314,10 +376,17 @@ export function resolveDay(
     exercises,
     primary: exercises.find((e) => e.isPrimary) ?? null,
     prescription,
-    runBlocks: group === "run" && prescription ? runBlocks(prescription, lthr) : [],
+    runBlocks:
+      group === "run"
+        ? structure
+          ? structuredBlocks(structure, lthr)
+          : prescription
+            ? runBlocks(prescription, lthr)
+            : []
+        : [],
     totalSets,
     estimatedMinutes: minutes,
-    isDeload: isDeloadWeek(absoluteWeek, config),
+    isDeload: isDeloadWeek(week, phaseConfig),
     week,
     phaseId: phase.id,
   };

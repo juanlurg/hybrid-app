@@ -1,15 +1,15 @@
 import { requireAthlete } from "@/lib/data/athlete";
-import { liftStateFrom, phaseSpans } from "@/lib/domain/plan";
+import { liftStateFrom, phaseEngineConfig, phaseSpans } from "@/lib/domain/plan";
 import { formatDayShort, placeDate, type IsoDate } from "@/lib/domain/calendar";
 import {
   formatWeight,
   isDeloadWeek,
-  projectLift,
   regressionLadder,
   round2,
   roundToStep,
   weekInCycle,
   workingWeight,
+  workingWeightKg,
 } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { accentFor, TONE } from "@/components/day-accents";
@@ -54,13 +54,34 @@ export default async function ProgresoPage({
 
   /* ── the numbers ─────────────────────────────────────────────── */
 
-  const series = projectLift(lift, seasonWeeks, config);
-  const breakdown = workingWeight(lift, placement.absoluteWeek, config);
+  // Project the season phase by phase: each phase runs its own
+  // progression on its own local weeks (F2's wave, F3/F4's fixed %).
+  const orderedPhases = [...ctx.phases].sort((a, b) => a.position - b.position);
+  const currentPhase =
+    ctx.phases.find((p) => p.id === placement.phase.id) ?? orderedPhases[0];
+  const phaseConfig = phaseEngineConfig(config, currentPhase);
+
+  const cleanLift = { ...lift, hold: false, holdAtKg: null };
+  const series: number[] = [];
+  const deloadFlags: boolean[] = [];
+  for (const p of orderedPhases) {
+    const pc = phaseEngineConfig(config, p);
+    for (let w = 1; w <= p.weeks; w++) {
+      series.push(workingWeightKg(cleanLift, w, pc));
+      deloadFlags.push(isDeloadWeek(w, pc));
+    }
+  }
+
+  const breakdown = workingWeight(lift, placement.week, phaseConfig);
   const currentKg = breakdown.workingKg;
 
-  // Same wave step, first cycle: what this week would have weighed in cycle 1.
-  const cycleOneWeek = weekInCycle(placement.absoluteWeek, config.cycleWeeks) + 1;
-  const baselineKg = series[cycleOneWeek - 1] ?? currentKg;
+  // Same wave step, first cycle of THIS phase: what this week would
+  // have weighed before any cycle bumps.
+  const phaseBase = orderedPhases
+    .slice(0, orderedPhases.findIndex((p) => p.id === currentPhase.id))
+    .reduce((acc, p) => acc + p.weeks, 0);
+  const cycleOneWeek = weekInCycle(placement.week, phaseConfig.cycleWeeks) + 1;
+  const baselineKg = series[phaseBase + cycleOneWeek - 1] ?? currentKg;
   const deltaKg = round2(currentKg - baselineKg);
 
   const maxKg = series.reduce((acc, v) => Math.max(acc, v), 0);
@@ -299,7 +320,7 @@ export default async function ProgresoPage({
               const week = i + 1;
               const failed = failWeeks.has(week);
               const isNow = week === placement.absoluteWeek;
-              const deload = isDeloadWeek(week, config);
+              const deload = deloadFlags[i] ?? false;
               const background = failed
                 ? TONE.fail
                 : isNow

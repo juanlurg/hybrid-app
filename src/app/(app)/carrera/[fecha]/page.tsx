@@ -13,7 +13,13 @@ import { requireAthlete } from "@/lib/data/athlete";
 import { formatDayLong, placeDate, type IsoDate } from "@/lib/domain/calendar";
 import { phaseSpans, resolveDay } from "@/lib/domain/plan";
 import { formatWeight } from "@/lib/engine";
-import { hrZones, type RunBlock, type Zone, type ZoneKey } from "@/lib/engine/run";
+import {
+  hrZones,
+  parseStructure,
+  type RunBlock,
+  type Zone,
+  type ZoneKey,
+} from "@/lib/engine/run";
 import { createClient } from "@/lib/supabase/server";
 
 import { LogRunForm } from "./log-run-form";
@@ -148,11 +154,16 @@ export default async function CarreraPage({
   const widthPct = (z: Zone) =>
     Math.min(100, Math.max(2, Math.round((((z.hiBpm ?? ceiling) - z.loBpm) / dial) * 100)));
 
-  // The LTHR test is a prescription in the plan, not a fixed week.
+  // The LTHR test is a prescription in the plan, not a fixed week. The
+  // structure says so explicitly; free-text rows fall back to the regex.
   const orderedPhases = [...ctx.phases].sort((a, b) => a.position - b.position);
   const tests: TestPoint[] = [];
   for (const row of ctx.prescriptions) {
-    if (!/lthr/i.test(row.prescription ?? "")) continue;
+    const structure = parseStructure(row.structure);
+    const isTest = structure
+      ? structure.some((b) => b.kind === "test")
+      : /lthr/i.test(row.prescription ?? "");
+    if (!isTest) continue;
     const p = orderedPhases.find((x) => x.id === row.phase_id);
     if (p) tests.push({ key: p.key, position: p.position, week: row.week });
   }

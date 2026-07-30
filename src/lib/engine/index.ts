@@ -10,6 +10,7 @@
 import {
   DEFAULT_ENGINE_CONFIG,
   type EngineConfig,
+  type Equipment,
   type LiftKind,
   type LiftState,
   type RegressionOutcome,
@@ -62,14 +63,18 @@ export function weekInCycle(week: number, cycleWeeks = 4): number {
   return (Math.max(1, week) - 1) % len;
 }
 
-/** The wave multiplier for a given week. */
+/** The multiplier for a given week: the wave step, or the fixed %. */
 export function waveFactor(week: number, config: EngineConfig): number {
+  if (config.progressionMode === "fixed_pct") {
+    return config.pctOfRm ?? 0.8;
+  }
   const wave = config.wave.length ? config.wave : DEFAULT_ENGINE_CONFIG.wave;
   return wave[weekInCycle(week, config.cycleWeeks) % wave.length];
 }
 
-/** The last week of every cycle is the deload. */
+/** The last week of every cycle is the deload. Fixed-% blocks never deload. */
 export function isDeloadWeek(week: number, config: EngineConfig): boolean {
+  if (config.progressionMode === "fixed_pct") return false;
   return weekInCycle(week, config.cycleWeeks) === config.cycleWeeks - 1;
 }
 
@@ -79,6 +84,7 @@ export function cycleBump(
   week: number,
   config: EngineConfig,
 ): number {
+  if (config.progressionMode === "fixed_pct") return 0;
   const inc = kind === "lower" ? config.incLowerKg : config.incUpperKg;
   return round2((cycleOf(week, config.cycleWeeks) - 1) * inc);
 }
@@ -108,7 +114,10 @@ export function workingWeight(
     e1rmKg: round2(lift.e1rmKg),
     penalty: lift.penalty,
     cycleBumpKg: bump,
-    cycle: cycleOf(week, config.cycleWeeks),
+    cycle:
+      config.progressionMode === "fixed_pct"
+        ? 1
+        : cycleOf(week, config.cycleWeeks),
     waveFactor: factor,
     isDeload: isDeloadWeek(week, config),
     isHeld: held,
@@ -311,6 +320,46 @@ export function formatPlates(load: PlateLoad): string {
 /** Round a dumbbell to the nearest pair the athlete actually owns. */
 export function roundDumbbell(targetKg: number, stepKg: number): number {
   return roundToStep(targetKg, stepKg > 0 ? stepKg : 2.5);
+}
+
+/* ── load resolver ───────────────────────────────────────────── */
+
+/**
+ * The nearest weight the athlete can actually load for a target, given
+ * what the exercise hangs from. Kettlebells are a discrete set, not a
+ * step: 14 kg does not exist, 12 or 16 does.
+ */
+export function loadableWeight(
+  targetKg: number,
+  equipment: Equipment | null | undefined,
+  config: EngineConfig = DEFAULT_ENGINE_CONFIG,
+): number {
+  if (!Number.isFinite(targetKg)) return 0;
+  switch (equipment) {
+    case "barbell":
+      return roundToStep(targetKg, config.roundingKg);
+    case "dumbbell":
+      return roundDumbbell(targetKg, config.dumbbellStepKg);
+    case "pulley":
+    case "machine":
+      return roundToStep(targetKg, config.pulleyStepKg);
+    case "kettlebell": {
+      const bells = config.kettlebellsKg.filter((k) => k > 0);
+      if (!bells.length) return roundToStep(targetKg, config.roundingKg);
+      // Nearest bell; ties go to the lighter one — never prescribe up.
+      return bells.reduce((best, k) => {
+        const d = Math.abs(k - targetKg);
+        const bd = Math.abs(best - targetKg);
+        return d < bd || (d === bd && k < best) ? k : best;
+      });
+    }
+    case "bodyweight":
+    case "band":
+    case "dip_bars":
+      return round2(targetKg);
+    default:
+      return roundToStep(targetKg, config.roundingKg);
+  }
 }
 
 /* ── warm-up ─────────────────────────────────────────────────── */

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { requireAthlete, weekContext } from "@/lib/data/athlete";
 import {
+  phaseEngineConfig,
   resolveWeek,
   type ResolvedDay,
   type SessionStatus,
@@ -119,17 +120,24 @@ export default async function SemanaPage({
   };
 
   /* ── the note under the title ─────────────────────────────── */
-  const deload = isDeloadWeek(absoluteWeek, config);
-  const cycle = cycleOf(absoluteWeek, config.cycleWeeks);
-  const cycles = Math.max(1, Math.ceil(lastWeek / config.cycleWeeks));
-  const wavePct = Math.round(waveFactor(absoluteWeek, config) * 100);
-  const nextDeload = cycle * config.cycleWeeks;
-  const note = deload
-    ? config.autoDeload
-      ? `Semana de descarga · ola al ${wavePct} % y mitad de series. Los pesos bajan a propósito.`
-      : `Semana de descarga · ola al ${wavePct} %. El auto-descarga está apagado, así que las series no se recortan.`
-    : `Ciclo ${cycle} de ${cycles} · ola al ${wavePct} %.` +
-      (nextDeload <= lastWeek ? ` Descarga en la semana ${nextDeload}.` : "");
+  // The engine reads the phase's own progression and the week inside it.
+  const phaseConfig = phaseEngineConfig(config, phase);
+  const deload = isDeloadWeek(week, phaseConfig);
+  const cycle = cycleOf(week, phaseConfig.cycleWeeks);
+  const cycles = Math.max(1, Math.ceil(phase.weeks / phaseConfig.cycleWeeks));
+  const wavePct = Math.round(waveFactor(week, phaseConfig) * 100);
+  const nextDeload = cycle * phaseConfig.cycleWeeks;
+  const note =
+    phaseConfig.progressionMode === "fixed_pct"
+      ? `Fase a porcentaje fijo · básicos al ${wavePct} % de la RM, sin olas ni descargas automáticas.`
+      : deload
+        ? phaseConfig.autoDeload
+          ? `Semana de descarga · ola al ${wavePct} % y mitad de series. Los pesos bajan a propósito.`
+          : `Semana de descarga · ola al ${wavePct} %. El auto-descarga está apagado, así que las series no se recortan.`
+        : `Ciclo ${cycle} de ${cycles} · ola al ${wavePct} %.` +
+          (nextDeload <= phase.weeks
+            ? ` Descarga en la semana ${nextDeload} de la fase.`
+            : "");
 
   /* ── the season bar ───────────────────────────────────────── */
   const phases = [...ctx.phases].sort((a, b) => a.position - b.position);

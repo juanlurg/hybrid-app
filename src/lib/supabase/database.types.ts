@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -168,6 +168,7 @@ export type Database = {
       engine_events: {
         Row: {
           created_at: string
+          dedup_key: string | null
           detail: string
           id: string
           kind: Database["public"]["Enums"]["engine_event_kind"]
@@ -182,6 +183,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dedup_key?: string | null
           detail?: string
           id?: string
           kind: Database["public"]["Enums"]["engine_event_kind"]
@@ -196,6 +198,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dedup_key?: string | null
           detail?: string
           id?: string
           kind?: Database["public"]["Enums"]["engine_event_kind"]
@@ -237,6 +240,7 @@ export type Database = {
           created_at: string
           cues: string | null
           default_rest_seconds: number
+          equipment: Database["public"]["Enums"]["equipment_kind"]
           id: string
           is_unilateral: boolean
           modality: Database["public"]["Enums"]["load_mode"]
@@ -250,6 +254,7 @@ export type Database = {
           created_at?: string
           cues?: string | null
           default_rest_seconds?: number
+          equipment?: Database["public"]["Enums"]["equipment_kind"]
           id?: string
           is_unilateral?: boolean
           modality?: Database["public"]["Enums"]["load_mode"]
@@ -263,6 +268,7 @@ export type Database = {
           created_at?: string
           cues?: string | null
           default_rest_seconds?: number
+          equipment?: Database["public"]["Enums"]["equipment_kind"]
           id?: string
           is_unilateral?: boolean
           modality?: Database["public"]["Enums"]["load_mode"]
@@ -461,6 +467,7 @@ export type Database = {
         Row: {
           auto_deload: boolean
           auto_rest_timer: boolean
+          available_equipment: Database["public"]["Enums"]["equipment_kind"][]
           bar_kg: number
           body_weight_kg: number | null
           created_at: string
@@ -472,6 +479,7 @@ export type Database = {
           inc_lower_kg: number
           inc_upper_kg: number
           keep_screen_awake: boolean
+          kettlebells_kg: number[]
           locale: string
           lthr: number | null
           notify_deload: boolean
@@ -479,6 +487,7 @@ export type Database = {
           notify_weekly_summary: boolean
           onboarded_at: string | null
           plates_kg: number[]
+          pulley_step_kg: number
           regression_rule: Database["public"]["Enums"]["regression_rule"]
           rest_sound: boolean
           rest_vibration: boolean
@@ -493,6 +502,7 @@ export type Database = {
         Insert: {
           auto_deload?: boolean
           auto_rest_timer?: boolean
+          available_equipment?: Database["public"]["Enums"]["equipment_kind"][]
           bar_kg?: number
           body_weight_kg?: number | null
           created_at?: string
@@ -504,6 +514,7 @@ export type Database = {
           inc_lower_kg?: number
           inc_upper_kg?: number
           keep_screen_awake?: boolean
+          kettlebells_kg?: number[]
           locale?: string
           lthr?: number | null
           notify_deload?: boolean
@@ -511,6 +522,7 @@ export type Database = {
           notify_weekly_summary?: boolean
           onboarded_at?: string | null
           plates_kg?: number[]
+          pulley_step_kg?: number
           regression_rule?: Database["public"]["Enums"]["regression_rule"]
           rest_sound?: boolean
           rest_vibration?: boolean
@@ -525,6 +537,7 @@ export type Database = {
         Update: {
           auto_deload?: boolean
           auto_rest_timer?: boolean
+          available_equipment?: Database["public"]["Enums"]["equipment_kind"][]
           bar_kg?: number
           body_weight_kg?: number | null
           created_at?: string
@@ -536,6 +549,7 @@ export type Database = {
           inc_lower_kg?: number
           inc_upper_kg?: number
           keep_screen_awake?: boolean
+          kettlebells_kg?: number[]
           locale?: string
           lthr?: number | null
           notify_deload?: boolean
@@ -543,6 +557,7 @@ export type Database = {
           notify_weekly_summary?: boolean
           onboarded_at?: string | null
           plates_kg?: number[]
+          pulley_step_kg?: number
           regression_rule?: Database["public"]["Enums"]["regression_rule"]
           rest_sound?: boolean
           rest_vibration?: boolean
@@ -595,6 +610,8 @@ export type Database = {
       program_exercises: {
         Row: {
           created_at: string
+          effort: string
+          equipment: Database["public"]["Enums"]["equipment_kind"] | null
           exercise_id: string | null
           fixed_weight_kg: number | null
           id: string
@@ -609,10 +626,13 @@ export type Database = {
           rest_seconds: number
           sets: number
           slot_id: string
+          superset_group: number | null
           tag: string
         }
         Insert: {
           created_at?: string
+          effort?: string
+          equipment?: Database["public"]["Enums"]["equipment_kind"] | null
           exercise_id?: string | null
           fixed_weight_kg?: number | null
           id?: string
@@ -627,10 +647,13 @@ export type Database = {
           rest_seconds?: number
           sets: number
           slot_id: string
+          superset_group?: number | null
           tag?: string
         }
         Update: {
           created_at?: string
+          effort?: string
+          equipment?: Database["public"]["Enums"]["equipment_kind"] | null
           exercise_id?: string | null
           fixed_weight_kg?: number | null
           id?: string
@@ -645,6 +668,7 @@ export type Database = {
           rest_seconds?: number
           sets?: number
           slot_id?: string
+          superset_group?: number | null
           tag?: string
         }
         Relationships: [
@@ -708,38 +732,50 @@ export type Database = {
       program_phases: {
         Row: {
           created_at: string
+          cycle_weeks: number | null
           emphasis: string
           id: string
           key: string
           name: string
           notes: string
+          pct_of_rm: number | null
           position: number
           program_id: string
+          progression_mode: string
           starts_on: string | null
+          wave: number[] | null
           weeks: number
         }
         Insert: {
           created_at?: string
+          cycle_weeks?: number | null
           emphasis?: string
           id?: string
           key: string
           name: string
           notes?: string
+          pct_of_rm?: number | null
           position: number
           program_id: string
+          progression_mode?: string
           starts_on?: string | null
+          wave?: number[] | null
           weeks: number
         }
         Update: {
           created_at?: string
+          cycle_weeks?: number | null
           emphasis?: string
           id?: string
           key?: string
           name?: string
           notes?: string
+          pct_of_rm?: number | null
           position?: number
           program_id?: string
+          progression_mode?: string
           starts_on?: string | null
+          wave?: number[] | null
           weeks?: number
         }
         Relationships: [
@@ -759,6 +795,7 @@ export type Database = {
           phase_id: string
           prescription: string
           slot_id: string
+          structure: Json | null
           target_minutes: number | null
           week: number
         }
@@ -768,6 +805,7 @@ export type Database = {
           phase_id: string
           prescription: string
           slot_id: string
+          structure?: Json | null
           target_minutes?: number | null
           week: number
         }
@@ -777,6 +815,7 @@ export type Database = {
           phase_id?: string
           prescription?: string
           slot_id?: string
+          structure?: Json | null
           target_minutes?: number | null
           week?: number
         }
@@ -1136,6 +1175,10 @@ export type Database = {
       owns_program: { Args: { p_program_id: string }; Returns: boolean }
       program_of_phase: { Args: { p_phase_id: string }; Returns: string }
       program_of_slot: { Args: { p_slot_id: string }; Returns: string }
+      shift_program: {
+        Args: { p_days: number; p_program_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       ai_proposal_status: "pending" | "applied" | "discarded" | "undone"
@@ -1151,6 +1194,17 @@ export type Database = {
         | "ai_change"
         | "program_created"
         | "phase_started"
+        | "accessory_bump"
+        | "plan_shifted"
+      equipment_kind:
+        | "barbell"
+        | "dumbbell"
+        | "kettlebell"
+        | "pulley"
+        | "bodyweight"
+        | "band"
+        | "dip_bars"
+        | "machine"
       lift_kind: "lower" | "upper"
       load_mode:
         | "engine"
@@ -1311,6 +1365,18 @@ export const Constants = {
         "ai_change",
         "program_created",
         "phase_started",
+        "accessory_bump",
+        "plan_shifted",
+      ],
+      equipment_kind: [
+        "barbell",
+        "dumbbell",
+        "kettlebell",
+        "pulley",
+        "bodyweight",
+        "band",
+        "dip_bars",
+        "machine",
       ],
       lift_kind: ["lower", "upper"],
       load_mode: [

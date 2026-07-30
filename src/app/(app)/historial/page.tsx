@@ -22,6 +22,7 @@ import {
 } from "@/lib/domain/calendar";
 import {
   groupOf,
+  phaseEngineConfig,
   phaseSpans,
   resolveWeek,
   type LiftRow,
@@ -303,10 +304,7 @@ export default async function HistorialPage() {
 
   /* ── consistency grid, current phase ─────────────────────────── */
 
-  const phaseBase = phases
-    .slice(0, phases.findIndex((p) => p.id === phase.id))
-    .reduce((acc, p) => acc + p.weeks, 0);
-
+  const phaseConfig = phaseEngineConfig(config, phase);
   const gridWeeks = Array.from({ length: phase.weeks }, (_, i) => {
     const week = i + 1;
     const days = seasonDays.filter(
@@ -314,7 +312,7 @@ export default async function HistorialPage() {
     );
     return {
       week,
-      label: `S${week}${isDeloadWeek(phaseBase + week, config) ? "D" : ""}`,
+      label: `S${week}${isDeloadWeek(week, phaseConfig) ? "D" : ""}`,
       days,
       pct: tally(days).pct,
     };
@@ -460,7 +458,7 @@ export default async function HistorialPage() {
   const lastSpan = [...spans].sort((a, b) => a.position - b.position).at(-1);
   const seasonEnd = program.ends_on ?? (lastSpan ? phaseEnd(lastSpan) : program.starts_on);
   const season = formatSeasonRange(program.starts_on, seasonEnd).toUpperCase();
-  const cycle = cycleOf(placement.absoluteWeek, config.cycleWeeks);
+  const cycle = cycleOf(placement.week, phaseConfig.cycleWeeks);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

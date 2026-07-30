@@ -12,11 +12,11 @@ import {
   StatGrid,
 } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
-import { formatDayLong, placeDate } from "@/lib/domain/calendar";
+import { formatDayLong } from "@/lib/domain/calendar";
 import {
   groupOf,
   liftStateFrom,
-  phaseSpans,
+  phaseEngineConfig,
   resolveExercise,
   weightLabelFor,
   type LoadMode,
@@ -151,10 +151,11 @@ export default async function ResumenPage({
     .filter(Boolean)
     .join(" · ");
 
-  // The wave runs on the absolute program week, not the week inside the phase.
-  const absoluteWeek =
-    placeDate(phaseSpans(ctx.phases), session.scheduled_on)?.absoluteWeek ??
-    session.week;
+  // The engine runs on the week inside the phase, with that phase's config.
+  const sessionPhase = ctx.phases.find((p) => p.id === session.phase_id) ?? null;
+  const phaseConfig = sessionPhase
+    ? phaseEngineConfig(config, sessionPhase)
+    : config;
 
   const liftsByKey = new Map(
     ctx.lifts.map((l) => [l.key, liftStateFrom(l)] as const),
@@ -163,7 +164,7 @@ export default async function ResumenPage({
     .filter((e) => e.slot_id === session.slot_id)
     .sort((a, b) => a.position - b.position);
   const planned = slotExercises.map((e) =>
-    resolveExercise(e, absoluteWeek, config, liftsByKey),
+    resolveExercise(e, session.week, phaseConfig, liftsByKey),
   );
   const plannedSets = planned.reduce((acc, e) => acc + e.sets, 0);
 
@@ -221,7 +222,7 @@ export default async function ResumenPage({
      read off ResolvedExercise — no load is ever computed in a screen. */
   const primaryRow = slotExercises.find((e) => e.is_primary);
   const next = primaryRow
-    ? resolveExercise(primaryRow, absoluteWeek + 1, config, liftsByKey)
+    ? resolveExercise(primaryRow, session.week + 1, phaseConfig, liftsByKey)
     : null;
   const nextLift = next?.liftKey
     ? (ctx.lifts.find((l) => l.key === next.liftKey) ?? null)

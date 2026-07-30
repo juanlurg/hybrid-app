@@ -15,6 +15,7 @@ import {
   roundToStep,
 } from "@/lib/engine";
 import type { RegressionRule } from "@/lib/engine";
+import { phaseEngineConfig } from "@/lib/domain/plan";
 import { createClient } from "@/lib/supabase/server";
 
 import { RmRows, type RmRow } from "./rm-rows";
@@ -46,7 +47,8 @@ export default async function ProgramaPage() {
     addDays(startsOn, seasonWeeks * 7 - 1)) as IsoDate;
   const season = formatSeasonRange(startsOn, endsOn).toUpperCase();
 
-  const cycle = cycleOf(placement.absoluteWeek, config.cycleWeeks);
+  const phaseConfig = phaseEngineConfig(config, phase);
+  const cycle = cycleOf(placement.week, phaseConfig.cycleWeeks);
   const ladder = regressionLadder(config.regressionRule);
 
   // When the last RM re-test was, if there has ever been one.

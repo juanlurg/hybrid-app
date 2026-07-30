@@ -1,7 +1,12 @@
 import type { LoadedAthlete } from "@/lib/data/athlete";
 import { DAY_LABELS } from "@/lib/domain/calendar";
 import { formatWeight, workingWeightKg } from "@/lib/engine";
-import { liftStateFrom, restLabel, type PhaseRow } from "@/lib/domain/plan";
+import {
+  liftStateFrom,
+  phaseEngineConfig,
+  restLabel,
+  type PhaseRow,
+} from "@/lib/domain/plan";
 
 /**
  * The coaching brief. Everything the model needs to be a useful training
@@ -76,6 +81,7 @@ export function buildPlanContext(
   phase: PhaseRow,
 ): string {
   const { ctx, config, placement } = athlete;
+  const phaseConfig = phaseEngineConfig(config, phase);
   const slots = ctx.slots
     .filter((s) => s.phase_id === phase.id)
     .sort((a, b) => a.position - b.position);
@@ -100,9 +106,15 @@ export function buildPlanContext(
   lines.push("");
 
   lines.push("## Motor de pesos (sólo lectura para ti)");
-  lines.push(
-    `Ola: [${config.wave.map((w) => `${Math.round(w * 100)} %`).join(", ")}] · ciclo de ${config.cycleWeeks} semanas · descarga la última.`,
-  );
+  if (phaseConfig.progressionMode === "fixed_pct") {
+    lines.push(
+      `Esta fase va a porcentaje fijo: básicos al ${Math.round((phaseConfig.pctOfRm ?? 0.8) * 100)} % de la RM, sin olas, sin bumps y sin descargas automáticas.`,
+    );
+  } else {
+    lines.push(
+      `Ola de la fase: [${phaseConfig.wave.map((w) => `${Math.round(w * 100)} %`).join(", ")}] · ciclo de ${phaseConfig.cycleWeeks} semanas · descarga la última · la semana 1 de la fase empieza en el primer paso.`,
+    );
+  }
   lines.push(
     `Regla de regresión: ${config.regressionRule}. Redondeo ${formatWeight(config.roundingKg)} kg. Barra ${formatWeight(config.barKg)} kg.`,
   );
@@ -111,7 +123,7 @@ export function buildPlanContext(
   );
   for (const lift of ctx.lifts) {
     const state = liftStateFrom(lift);
-    const today = workingWeightKg(state, placement.absoluteWeek, config);
+    const today = workingWeightKg(state, placement.week, phaseConfig);
     const flags = [
       state.hold ? `EN ESPERA a ${formatWeight(state.holdAtKg ?? 0)} kg` : null,
       state.penalty > 0 ? `RM penalizada −${Math.round(state.penalty * 100)} %` : null,

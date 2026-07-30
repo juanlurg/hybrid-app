@@ -1,7 +1,12 @@
 import { requireAthlete } from "@/lib/data/athlete";
 import { createClient } from "@/lib/supabase/server";
 import { hasGeminiKey } from "@/lib/ai/gemini";
-import { groupOf, resolveWeek, type SessionGroup } from "@/lib/domain/plan";
+import {
+  groupOf,
+  phaseEngineConfig,
+  resolveWeek,
+  type SessionGroup,
+} from "@/lib/domain/plan";
 import { DAY_LABELS, formatDayShort } from "@/lib/domain/calendar";
 import { cycleOf, isDeloadWeek, weekInCycle } from "@/lib/engine";
 import { changeOpSchema, type ChangeOp } from "@/lib/ai/schema";
@@ -18,6 +23,7 @@ export default async function EditorPage() {
   const athlete = await requireAthlete();
   const { ctx, config, placement } = athlete;
   const phase = ctx.phases.find((p) => p.id === placement.phase.id)!;
+  const phaseConfig = phaseEngineConfig(config, phase);
 
   const slots = ctx.slots
     .filter((s) => s.phase_id === phase.id)
@@ -127,10 +133,10 @@ export default async function EditorPage() {
       phase={{ id: phase.id, key: phase.key, name: phase.name, weeks: phase.weeks }}
       week={placement.week}
       absoluteWeek={placement.absoluteWeek}
-      isDeload={isDeloadWeek(placement.absoluteWeek, config)}
-      cycle={cycleOf(placement.absoluteWeek, config.cycleWeeks)}
-      waveIndex={weekInCycle(placement.absoluteWeek, config.cycleWeeks)}
-      wave={[...config.wave]}
+      isDeload={isDeloadWeek(placement.week, phaseConfig)}
+      cycle={cycleOf(placement.week, phaseConfig.cycleWeeks)}
+      waveIndex={weekInCycle(placement.week, phaseConfig.cycleWeeks)}
+      wave={[...phaseConfig.wave]}
       params={{
         incLowerKg: config.incLowerKg,
         incUpperKg: config.incUpperKg,

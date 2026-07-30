@@ -3,14 +3,21 @@
 import { revalidatePath } from "next/cache";
 
 import {
+  formatWeight,
   isRangeFailure,
   registerCleanSession,
   registerFailure,
   revertFailure,
+  setsForWeek,
   tonnage,
   type LiftState,
 } from "@/lib/engine";
-import { liftStateFrom, type SessionStatus } from "@/lib/domain/plan";
+import { doubleProgression } from "@/lib/engine/progression";
+import {
+  liftStateFrom,
+  phaseEngineConfig,
+  type SessionStatus,
+} from "@/lib/domain/plan";
 import { loadAthlete } from "@/lib/data/athlete";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
@@ -119,7 +126,7 @@ export async function logSet(input: {
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, week, user_id")
+    .select("id, week, user_id, phase_id")
     .eq("id", input.sessionId)
     .maybeSingle();
   if (!session) return { ok: false, error: "Sesión no encontrada." };
@@ -155,11 +162,17 @@ export async function logSet(input: {
     return { ok: true };
   }
 
+  // The engine speaks in phase-local weeks with the phase's own config.
+  const sessionPhase = athlete.ctx.phases.find((p) => p.id === session.phase_id);
+  const phaseConfig = sessionPhase
+    ? phaseEngineConfig(athlete.config, sessionPhase)
+    : athlete.config;
+
   const outcome = registerFailure(
     liftStateFrom(liftRow),
     input.weightKg ?? 0,
-    athlete.placement.absoluteWeek,
-    athlete.config,
+    session.week,
+    phaseConfig,
   );
 
   await supabase
@@ -275,6 +288,16 @@ export async function finishSession(
   const plannedSets = slotExercises.reduce((acc, e) => acc + e.sets, 0);
   const doneSets = setLogs.length;
 
+  /* Re-finishing an already closed session must not re-earn progression. */
+  const alreadyClosed =
+    session.status === "done" || session.status === "partial";
+  const sessionPhase = athlete.ctx.phases.find(
+    (p) => p.id === session.phase_id,
+  );
+  const phaseConfig = sessionPhase
+    ? phaseEngineConfig(athlete.config, sessionPhase)
+    : athlete.config;
+
   const status: SessionStatus =
     plannedSets > 0 && doneSets < plannedSets ? "partial" : "done";
 
@@ -299,6 +322,56 @@ export async function finishSession(
       ),
     })
     .eq("id", sessionId);
+
+  // Double progression: an accessory that hit the top of the range on
+  // every set earns its equipment's increment for the next session.
+  // Only on the first close — re-finishing must not re-earn it.
+  if (!alreadyClosed) {
+    for (const e of slotExercises) {
+      if (e.is_primary) continue;
+      if (e.load_mode !== "fixed" && e.load_mode !== "weighted_bodyweight") {
+        continue;
+      }
+      const rows = setLogs.filter((l) => l.program_exercise_id === e.id);
+      const outcome = doubleProgression(
+        {
+          equipment: e.equipment,
+          effort: e.effort as "reps" | "seconds" | "amrap",
+          repMax: e.rep_max,
+          plannedSets: setsForWeek(e.sets, session.week, phaseConfig),
+          currentWeightKg:
+            e.fixed_weight_kg == null ? null : Number(e.fixed_weight_kg),
+          logs: rows.map((l) => ({
+            reps: l.reps,
+            seconds: l.seconds,
+            rir: l.rir == null ? null : Number(l.rir),
+          })),
+        },
+        phaseConfig,
+      );
+      if (!outcome.advance || outcome.nextWeightKg == null) continue;
+
+      await supabase
+        .from("program_exercises")
+        .update({ fixed_weight_kg: outcome.nextWeightKg })
+        .eq("id", e.id);
+      await supabase.from("engine_events").insert({
+        user_id: athlete.userId,
+        program_id: athlete.ctx.program.id,
+        session_id: sessionId,
+        week: session.week,
+        kind: "accessory_bump",
+        title: `${e.name} · sube a ${formatWeight(outcome.nextWeightKg)} kg`,
+        detail: `Todas las series al tope del rango. La próxima sesión: ${formatWeight(outcome.nextWeightKg)} kg.`,
+        payload: {
+          program_exercise_id: e.id,
+          previous_kg: e.fixed_weight_kg,
+          next_kg: outcome.nextWeightKg,
+          reason: outcome.reason,
+        },
+      });
+    }
+  }
 
   // A clean run of the basic releases the hold and resets the counter.
   const primary = slotExercises.find((e) => e.is_primary && e.lift_key);
