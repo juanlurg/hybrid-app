@@ -15,6 +15,7 @@ import {
   Toggle,
 } from "@/components/ui/kit";
 import { signOut } from "@/lib/actions/auth";
+import { shiftProgram } from "@/lib/actions/program";
 import {
   clearHistory,
   togglePlate,
@@ -145,6 +146,9 @@ export function SettingsGroups({
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [cleared, setCleared] = useState(false);
+  const [shiftDays, setShiftDays] = useState(7);
+  const [confirmShift, setConfirmShift] = useState(false);
+  const [shifted, setShifted] = useState<number | null>(null);
 
   const plates = (profile.plates_kg ?? [])
     .map(Number)
@@ -230,6 +234,20 @@ export function SettingsGroups({
     // Bodyweight is not a chip: it can never be toggled away.
     if (!next.includes("bodyweight")) next.push("bodyweight");
     save({ available_equipment: next });
+  }
+
+  function doShift() {
+    setConfirmShift(false);
+    setError(null);
+    startTransition(async () => {
+      const res = await shiftProgram(shiftDays);
+      if (!res.ok) {
+        setError(res.error ?? "No se ha podido desplazar el plan.");
+        return;
+      }
+      setShifted(shiftDays);
+      router.refresh();
+    });
   }
 
   function wipeHistory() {
@@ -811,6 +829,54 @@ export function SettingsGroups({
             ↓
           </span>
         </a>
+
+        <Row>
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] leading-[1.2] font-bold">
+                Desplazar el plan
+              </div>
+              <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
+                El calendario manda: lo no hecho se pierde. Esto mueve todas
+                las fases en bloque; lo ya registrado y la carrera no se
+                mueven.
+              </div>
+            </div>
+            <Stepper
+              label="días de desplazamiento"
+              value={`${shiftDays > 0 ? "+" : ""}${shiftDays} d`}
+              onDecrement={() =>
+                setShiftDays((d) => Math.max(-90, d - 1 === 0 ? -1 : d - 1))
+              }
+              onIncrement={() =>
+                setShiftDays((d) => Math.min(90, d + 1 === 0 ? 1 : d + 1))
+              }
+            />
+          </div>
+          <div className="mt-2.5 flex items-center gap-1.5">
+            {confirmShift ? (
+              <>
+                <Chip
+                  active
+                  onClick={doShift}
+                  className="border-ink bg-ink text-paper"
+                >
+                  Sí, {shiftDays > 0 ? "+" : ""}
+                  {shiftDays} días
+                </Chip>
+                <Chip onClick={() => setConfirmShift(false)}>Cancelar</Chip>
+              </>
+            ) : (
+              <Chip onClick={() => setConfirmShift(true)}>Desplazar…</Chip>
+            )}
+            {shifted != null ? (
+              <span className="text-[10.5px] leading-none text-mid">
+                Plan desplazado {shifted > 0 ? "+" : ""}
+                {shifted} días.
+              </span>
+            ) : null}
+          </div>
+        </Row>
 
         {confirmClear ? (
           <Row className="flex items-center gap-3">

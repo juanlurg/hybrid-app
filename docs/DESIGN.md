@@ -95,5 +95,18 @@ Programa via `SecondaryNav`.
 2. **Only the basic of the day moves the engine.** Accessories never trigger
    a regression — say so in the UI where it matters.
 3. **The AI proposes, the athlete disposes.** Changes are a diff to tick.
-   The AI never edits `lifts`.
+   The AI never edits `lifts`. It picks exercises from the catalogue by
+   slug — it never invents a name.
 4. **Every engine action is undoable and logged** in `engine_events`.
+5. **The calendar rules.** The plan lives on dates; a missed day is lost,
+   never re-queued. Moving the season is a bulk shift (`shift_program`,
+   Ajustes → Datos): phases move together, logged sessions keep their real
+   dates, the race does not move.
+6. **The engine speaks phase-local weeks.** Every phase starts at wave[0]
+   with its own progression (`program_phases.progression_mode`): F2 waves,
+   F3/F4 hold a fixed %RM. Never feed `absoluteWeek` to the engine.
+7. **One write path for the session.** The runner writes to the local
+   queue (IndexedDB) and `/api/sync` replays the engine idempotently
+   (`engine_events.dedup_key`). No per-set server actions — ever again.
+8. **The export is the backup.** Free tier, no snapshots: the JSON from
+   Ajustes → Datos is the only copy of the only irreplaceable thing.

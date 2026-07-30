@@ -242,6 +242,30 @@ export async function setDaySlot(
   return { ok: true };
 }
 
+/**
+ * Move the whole season N days in one call. The explicit rule this
+ * implements: the calendar rules — missed days are lost; moving the
+ * plan is a bulk shift, never a re-queue. Logged sessions keep their
+ * real dates and the race day does not move.
+ */
+export async function shiftProgram(days: number): Promise<Result> {
+  const athlete = await guard();
+  if (!athlete) return { ok: false, error: "Sin sesión iniciada." };
+  if (!Number.isInteger(days) || days === 0 || Math.abs(days) > 90) {
+    return { ok: false, error: "Indica entre 1 y 90 días, hacia delante o atrás." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("shift_program", {
+    p_program_id: athlete.ctx.program.id,
+    p_days: days,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 /** Nudge one step of the wave. Recomputes every future weight in that cycle. */
 export async function setWaveStep(index: number, delta: number): Promise<Result> {
   const athlete = await guard();
