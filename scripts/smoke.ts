@@ -19,6 +19,7 @@ import {
   DEFAULT_ENGINE_CONFIG,
   formatWeight,
 } from "../src/lib/engine";
+import { parseStructure } from "../src/lib/engine/run";
 
 /* ── env ─────────────────────────────────────────────────────── */
 
@@ -385,6 +386,187 @@ async function main() {
       .from("ai_proposals")
       .select("id");
     check("B cannot see A's proposals", bSeesProposals?.length === 0);
+
+    section("Primer 10K template");
+    const { data: tenK } = await admin
+      .from("programs")
+      .select("id, name")
+      .eq("is_template", true)
+      .eq("slug", "plan-10k-base")
+      .maybeSingle();
+    check("the Primer 10K template exists", Boolean(tenK));
+    if (!tenK) throw new Error("no 10k template — run `npm run db:reset` first");
+
+    const { data: tenKPhases } = await admin
+      .from("program_phases")
+      .select("id, key, weeks, progression_mode, pct_of_rm, wave, cycle_weeks")
+      .eq("program_id", tenK.id)
+      .order("position");
+    check("it has 4 phases over 18 weeks", tenKPhases?.length === 4);
+    check(
+      "the weeks add up to 18",
+      tenKPhases?.reduce((sum, p) => sum + p.weeks, 0) === 18,
+      `got ${tenKPhases?.reduce((sum, p) => sum + p.weeks, 0)}`,
+    );
+    check(
+      "every phase wave is as long as its cycle",
+      tenKPhases!.every((p) => !p.wave || p.wave.length === p.cycle_weeks),
+      "a shorter wave than cycle_weeks makes the editor print NaN %",
+    );
+    check(
+      "F3 holds a fixed % instead of waving",
+      tenKPhases!.find((p) => p.key === "F3")?.progression_mode === "fixed_pct",
+    );
+
+    const tenKPhaseIds = tenKPhases!.map((p) => p.id);
+    const { data: tenKSlots } = await admin
+      .from("program_slots")
+      .select("id, key, phase_id, session_type")
+      .in("phase_id", tenKPhaseIds);
+    const { data: tenKDays } = await admin
+      .from("program_days")
+      .select("phase_id, day_index, slot_id")
+      .in("phase_id", tenKPhaseIds);
+    const slotById = new Map(tenKSlots!.map((s) => [s.id, s]));
+
+    check(
+      "every phase has its 7 days",
+      tenKPhaseIds.every(
+        (id) => tenKDays!.filter((d) => d.phase_id === id).length === 7,
+      ),
+    );
+    // The three blocking rules in src/lib/domain/plan-rules.ts, per phase.
+    check(
+      "every week has a mobility day, 2 strength days and 3 run days",
+      tenKPhaseIds.every((id) => {
+        const types = tenKDays!
+          .filter((d) => d.phase_id === id)
+          .map((d) => slotById.get(d.slot_id)!.session_type);
+        return (
+          types.filter((t) => t === "mobility").length === 1 &&
+          types.filter((t) => t === "strength").length === 2 &&
+          types.filter((t) => t.startsWith("run")).length === 3
+        );
+      }),
+    );
+
+    const { data: tenKExercises } = await admin
+      .from("program_exercises")
+      .select(
+        "slot_id, name, is_primary, exercise_id, load_mode, lift_key, fixed_weight_kg, equipment",
+      )
+      .in(
+        "slot_id",
+        tenKSlots!.filter((s) => s.session_type === "strength").map((s) => s.id),
+      );
+    const strengthSlotIds = tenKSlots!
+      .filter((s) => s.session_type === "strength")
+      .map((s) => s.id);
+    check(
+      "every strength slot has exactly one basic",
+      strengthSlotIds.every(
+        (id) =>
+          tenKExercises!.filter((e) => e.slot_id === id && e.is_primary).length === 1,
+      ),
+    );
+    check(
+      "every exercise resolved against the catalogue",
+      tenKExercises!.every((e) => e.exercise_id !== null),
+      tenKExercises!.find((e) => e.exercise_id === null)?.name,
+    );
+    check(
+      "no fixed row is missing its start load",
+      tenKExercises!.every(
+        (e) => e.load_mode !== "fixed" || e.fixed_weight_kg !== null,
+      ),
+      "a fixed row without a weight renders “—”",
+    );
+    const { data: tenKDefaults } = await admin
+      .from("program_lift_defaults")
+      .select("lift_key, default_e1rm_kg")
+      .eq("program_id", tenK.id);
+    const seededKeys = new Set(tenKDefaults!.map((d) => d.lift_key));
+    check(
+      "every engine row has a seeded RM behind it",
+      tenKExercises!.every(
+        (e) => e.load_mode !== "engine" || seededKeys.has(e.lift_key!),
+      ),
+      "an engine row without a lift renders “—” forever",
+    );
+
+    const { data: tenKRuns } = await admin
+      .from("program_run_sessions")
+      .select("phase_id, slot_id, week, prescription, target_minutes, structure")
+      .in("phase_id", tenKPhaseIds);
+    check("there are 54 run sessions", tenKRuns?.length === 54, `got ${tenKRuns?.length}`);
+    check(
+      "every run slot covers every week of its phase",
+      tenKPhases!.every((phase) =>
+        tenKSlots!
+          .filter((s) => s.phase_id === phase.id && s.session_type.startsWith("run"))
+          .every(
+            (slot) =>
+              new Set(
+                tenKRuns!.filter((r) => r.slot_id === slot.id).map((r) => r.week),
+              ).size === phase.weeks,
+          ),
+      ),
+    );
+    check(
+      "every run session carries its own minutes",
+      tenKRuns!.every((r) => r.target_minutes !== null),
+      "structureMinutes prices km at 5:30/km — too fast for this athlete",
+    );
+    const unparsed = tenKRuns!.find((r) => parseStructure(r.structure) === null);
+    check(
+      "every run structure parses",
+      !unparsed,
+      unparsed && `${unparsed.prescription}: ${JSON.stringify(unparsed.structure)}`,
+    );
+
+    section("Athlete C — the 10K plan");
+    const c = await makeAthlete("c");
+    created.push(c.id);
+    const { data: programCId, error: onboardCError } = await c.client.rpc(
+      "onboard_athlete",
+      {
+        p_display_name: "Atleta C",
+        p_template_slug: "plan-10k-base",
+        p_starts_on: "2026-09-14",
+      },
+    );
+    check("onboarding onto the 10K plan succeeds", !onboardCError, onboardCError?.message);
+
+    const { data: phasesC } = await c.client
+      .from("program_phases")
+      .select("key, weeks, starts_on")
+      .eq("program_id", programCId!)
+      .order("position");
+    check("the clone has 4 phases", phasesC?.length === 4);
+    check(
+      "F1 starts four weeks in, on 12 Oct 2026",
+      phasesC?.find((p) => p.key === "F1")?.starts_on === "2026-10-12",
+      phasesC?.find((p) => p.key === "F1")?.starts_on,
+    );
+
+    const { data: liftsC } = await c.client
+      .from("lifts")
+      .select("key, e1rm_kg")
+      .eq("user_id", c.id)
+      .order("key");
+    check(
+      "only the two basics are tracked",
+      liftsC?.length === 2,
+      `got ${liftsC?.map((l) => l.key).join(", ")}`,
+    );
+    check(
+      "no militar lift, because the plan uses the landmine",
+      !liftsC?.some((l) => l.key === "militar"),
+    );
+    check(
+      "the squat starts at a beginner-scale 35 kg",
+      Number(liftsC?.find((l) => l.key === "sentadilla")?.e1rm_kg) === 35,
+    );
   } finally {
     await cleanup(created);
   }

@@ -20,7 +20,7 @@ comments are English.
 | `src/components/ui/` | the kit — `ScreenHeader`, `RowStack`, `Row`, `SessionRow`, steppers, chips |
 | `supabase/migrations/` | ordered SQL, timestamp-prefixed |
 | `docs/DESIGN.md` | design spec + the eight non-negotiables |
-| `docs/*-juanlu.md` | the athlete's own programme, strength and running plans |
+| `docs/PROGRAMA-*.md` | one per athlete — the programme each template seeds (`*-juanlu.md` also splits out strength and running) |
 
 ## Read before you write
 

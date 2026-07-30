@@ -83,6 +83,30 @@ describe("structuredBlocks", () => {
     expect(structuredBlocks([{ kind: "rest" }], LTHR)).toEqual([]);
   });
 
+  it("renders short Z4 intervals — the 10k-specific work of plan-10k-base", () => {
+    const s: RunStructure = [
+      { kind: "interval", repeat: 4, workMin: 4, zone: "Z4", recMin: 2 },
+    ];
+    const blocks = structuredBlocks(s, LTHR);
+    expect(blocks.map((b) => b.title)).toEqual([
+      "Calentamiento",
+      "4 × 4′ Z4",
+      "Vuelta a la calma",
+    ]);
+    expect(blocks[1].tone).toBe("threshold");
+  });
+
+  it("a warm-up before a race renders as two blocks and no cool-down", () => {
+    // plan-10k-base F3 week 2: a bare race block gets no warm-up at all,
+    // so the plan writes the jog in front of it explicitly.
+    const s: RunStructure = [
+      { kind: "steady", workMin: 10, zone: "Z2" },
+      { kind: "race", workKm: 10 },
+    ];
+    const blocks = structuredBlocks(s, LTHR);
+    expect(blocks.map((b) => b.title)).toEqual(["Rodaje continuo", "10K a tope"]);
+  });
+
   it("RM segments inside a long run stay visible", () => {
     const s: RunStructure = [
       { kind: "steady", workKm: 12, zone: "Z2" },

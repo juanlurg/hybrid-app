@@ -107,6 +107,42 @@ describe("phaseEngineConfig · fixed_pct mode", () => {
   });
 });
 
+describe("beginner-scale loads · why the 10K plan asks for 1.25 kg rounding", () => {
+  // A 35 kg squat is a real starting RM (plan-10k-base). At the default
+  // 2.5 kg rounding the wave loses its resolution: two different steps
+  // prescribe the same bar. Halving the rounding gives it back.
+  const beginner: LiftState = { ...squat, e1rmKg: 35 };
+  const f1 = phase({ key: "F1", wave: [0.7, 0.75, 0.8, 0.65], cycle_weeks: 4 });
+
+  it("collapses weeks 2 and 3 onto the same weight at 2.5 kg", () => {
+    const cfg = phaseEngineConfig(DEFAULT_ENGINE_CONFIG, f1);
+    // 35 × 0.75 = 26.25 and 35 × 0.80 = 28 both round to 27.5.
+    expect(workingWeight(beginner, 2, cfg).workingKg).toBe(27.5);
+    expect(workingWeight(beginner, 3, cfg).workingKg).toBe(27.5);
+  });
+
+  it("separates them at 1.25 kg", () => {
+    const cfg = phaseEngineConfig(
+      { ...DEFAULT_ENGINE_CONFIG, roundingKg: 1.25 },
+      f1,
+    );
+    expect(workingWeight(beginner, 2, cfg).workingKg).toBe(26.25);
+    expect(workingWeight(beginner, 3, cfg).workingKg).toBe(27.5);
+  });
+
+  it("never drops below the bar: every step of the wave is rackable", () => {
+    const cfg = phaseEngineConfig(
+      { ...DEFAULT_ENGINE_CONFIG, roundingKg: 1.25 },
+      f1,
+    );
+    for (const week of [1, 2, 3, 4]) {
+      expect(workingWeight(beginner, week, cfg).workingKg).toBeGreaterThanOrEqual(
+        cfg.barKg,
+      );
+    }
+  });
+});
+
 describe("loadableWeight", () => {
   const cfg = DEFAULT_ENGINE_CONFIG; // rounding 2.5, dumbbell 2.5, pulley 5, KBs 12/16
 
