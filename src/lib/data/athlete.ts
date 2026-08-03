@@ -9,7 +9,6 @@ import {
   engineConfigFrom,
   phaseSpans,
   type AthleteContext,
-  type PhaseRow,
   type ProfileRow,
 } from "@/lib/domain/plan";
 import {
@@ -43,58 +42,39 @@ export const loadAthlete = cache(async (): Promise<LoadedAthlete | null> => {
 
   const supabase = await createClient();
 
-  const [profileRes, programRes] = await Promise.all([
+  // One parallel round trip: the whole plan comes embedded through the
+  // FKs (phases → slots → exercises, days, run sessions) instead of a
+  // four-stage waterfall.
+  const [profileRes, programRes, liftsRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase
       .from("programs")
-      .select("*")
+      .select(
+        "*, program_phases(*, program_slots(*, program_exercises(*)), program_days(*), program_run_sessions(*))",
+      )
       .eq("user_id", user.id)
       .eq("is_active", true)
       .maybeSingle(),
-  ]);
-
-  const profile = profileRes.data as ProfileRow | null;
-  const program = programRes.data;
-  if (!profile || !program) return null;
-
-  const phasesRes = await supabase
-    .from("program_phases")
-    .select("*")
-    .eq("program_id", program.id)
-    .order("position");
-
-  const phases = (phasesRes.data ?? []) as PhaseRow[];
-  const phaseIds = phases.map((p) => p.id);
-
-  const [slotsRes, daysRes, runsRes, liftsRes] = await Promise.all([
-    supabase
-      .from("program_slots")
-      .select("*")
-      .in("phase_id", phaseIds)
-      .order("position"),
-    supabase.from("program_days").select("*").in("phase_id", phaseIds),
-    supabase.from("program_run_sessions").select("*").in("phase_id", phaseIds),
     supabase.from("lifts").select("*").eq("user_id", user.id).order("key"),
   ]);
 
-  const slots = (slotsRes.data ?? []) as AthleteContext["slots"];
-  const exercisesRes = await supabase
-    .from("program_exercises")
-    .select("*")
-    .in(
-      "slot_id",
-      slots.map((s) => s.id),
-    )
-    .order("position");
+  const profile = profileRes.data as ProfileRow | null;
+  if (!profile || !programRes.data) return null;
+  const { program_phases: phaseRows, ...program } = programRes.data;
+
+  const byPosition = (a: { position: number }, b: { position: number }) =>
+    a.position - b.position;
+  const phases = [...phaseRows].sort(byPosition);
+  const slots = phases.flatMap((p) => p.program_slots).sort(byPosition);
 
   const ctx: AthleteContext = {
     profile,
     program,
     phases,
     slots,
-    days: (daysRes.data ?? []) as AthleteContext["days"],
-    exercises: (exercisesRes.data ?? []) as AthleteContext["exercises"],
-    prescriptions: (runsRes.data ?? []) as AthleteContext["prescriptions"],
+    days: phases.flatMap((p) => p.program_days),
+    exercises: slots.flatMap((s) => s.program_exercises).sort(byPosition),
+    prescriptions: phases.flatMap((p) => p.program_run_sessions),
     lifts: (liftsRes.data ?? []) as AthleteContext["lifts"],
   };
 

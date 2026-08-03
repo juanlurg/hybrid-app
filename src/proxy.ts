@@ -40,9 +40,12 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims verifies the JWT locally against the project's asymmetric
+  // keys (JWKS cached across requests) — no Auth round trip per
+  // navigation. An expired token still refreshes: getClaims reads the
+  // session via getSession(), which renews and re-sets the cookie.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims ?? null;
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some(

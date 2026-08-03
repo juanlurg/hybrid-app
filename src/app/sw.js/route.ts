@@ -36,7 +36,11 @@ const STATIC_URLS = [
   "/icons/icon-512.svg",
 ];
 
-const NETWORK_TIMEOUT_MS = 3500;
+// Last resort for lie-fi (a connection that hangs without failing). A
+// real network error falls back to the shell immediately via catch; the
+// timer must sit far above a cold start + full render, or a slow-but-
+// alive navigation gets hijacked into the offline shell while online.
+const NETWORK_TIMEOUT_MS = 12000;
 
 // Fetch the shell rejecting redirects (a redirect here means auth got in
 // the way — cache nothing, fail the install loudly, the old worker keeps

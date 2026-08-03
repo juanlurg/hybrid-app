@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
@@ -52,11 +54,15 @@ export function createAdminClient() {
   );
 }
 
-/** The signed-in user, or null. */
-export async function getUser() {
+/**
+ * The signed-in user, or null. Verifies the JWT locally via `getClaims()`
+ * (asymmetric keys in prod, so no Auth round trip) and is cached per
+ * request — layout, page and `loadAthlete` share one verification.
+ */
+export const getUser = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
-}
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims;
+  if (!claims?.sub) return null;
+  return { id: claims.sub, email: claims.email ?? null };
+});
