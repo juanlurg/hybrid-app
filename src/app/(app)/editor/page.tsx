@@ -114,6 +114,7 @@ export default async function EditorPage() {
         slotId: e.slot_id,
         sets: e.sets,
         isPrimary: e.is_primary,
+        liftKey: e.lift_key,
       })),
     days: week.map((d) => ({
       dayIndex: d.dayIndex,
