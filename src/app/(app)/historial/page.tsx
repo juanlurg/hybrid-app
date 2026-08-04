@@ -63,6 +63,7 @@ const LEGEND: Array<{ label: string; background: string; border: string }> = [
     border: "transparent",
   },
   { label: "Parcial", background: TONE.warn, border: "transparent" },
+  { label: "Saltada", background: TONE.fail, border: "transparent" },
   { label: "Sin registrar", background: TONE.ink, border: "transparent" },
   { label: "Por venir", background: "transparent", border: TONE.hairline },
 ];
@@ -443,6 +444,10 @@ export default async function HistorialPage() {
       );
     }
 
+    // The athlete's own words — session notes, or the run log's for runs.
+    const notes = (s.notes || (group === "run" ? (runLog?.notes ?? "") : ""))
+      .trim();
+
     return {
       id: s.id,
       group,
@@ -455,6 +460,7 @@ export default async function HistorialPage() {
       headline,
       dateLabel: formatDayShort(s.scheduled_on),
       incomplete: s.status === "partial" || s.status === "skipped",
+      notes,
       details,
     };
   });
@@ -494,7 +500,9 @@ export default async function HistorialPage() {
                   : adherence >= 90
                     ? "text-ok"
                     : adherence < 70
-                      ? "text-warn"
+                      ? // text-warn on paper is ~2:1 — ink on a warn block
+                        // is the treatment that actually reads.
+                        "bg-warn px-1 text-ink"
                       : undefined,
             },
             { value: registered, label: "Sesiones registradas" },

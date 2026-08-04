@@ -4,11 +4,12 @@ import { requireAthlete } from "@/lib/data/athlete";
 import { resolveWeek, type ResolvedDay } from "@/lib/domain/plan";
 import { createClient } from "@/lib/supabase/server";
 import { formatWeight } from "@/lib/engine";
-import { DAY_INITIALS } from "@/lib/domain/calendar";
+import { DAY_INITIALS, daysBetween } from "@/lib/domain/calendar";
 import { Callout, PlateChips } from "@/components/ui/kit";
 import { StartSessionButton } from "@/components/session/start-session-button";
 import { SyncStatus } from "@/components/sync-status";
 import { accentFor, GROUP_LABEL, TONE } from "@/components/day-accents";
+import { cn } from "@/lib/cn";
 
 export default async function HoyPage() {
   const athlete = await requireAthlete();
@@ -25,21 +26,28 @@ export default async function HoyPage() {
   const day = week[placement.dayIndex];
 
   const supabase = await createClient();
-  const [{ data: sessions }, { data: heldLifts }] = await Promise.all([
-    supabase
-      .from("sessions")
-      .select("id, slot_id, status, scheduled_on")
-      .eq("user_id", athlete.userId)
-      .in(
-        "scheduled_on",
-        week.map((d) => d.date),
-      ),
-    supabase
-      .from("lifts")
-      .select("id, key, name, hold, hold_at_kg, fail_count, penalty")
-      .eq("user_id", athlete.userId)
-      .or("hold.eq.true,fail_count.gt.0"),
-  ]);
+  const [{ data: sessions }, { data: heldLifts }, { data: mobilityLog }] =
+    await Promise.all([
+      supabase
+        .from("sessions")
+        .select("id, slot_id, status, scheduled_on")
+        .eq("user_id", athlete.userId)
+        .in(
+          "scheduled_on",
+          week.map((d) => d.date),
+        ),
+      supabase
+        .from("lifts")
+        .select("id, key, name, hold, hold_at_kg, fail_count, penalty")
+        .eq("user_id", athlete.userId)
+        .or("hold.eq.true,fail_count.gt.0"),
+      supabase
+        .from("mobility_logs")
+        .select("completed_slugs, total_items")
+        .eq("user_id", athlete.userId)
+        .eq("performed_on", athlete.today)
+        .maybeSingle(),
+    ]);
 
   const sessionFor = (d: ResolvedDay) =>
     (sessions ?? []).find(
@@ -48,6 +56,22 @@ export default async function HoyPage() {
   const todaySession = sessionFor(day);
   const accent = accentFor(day.group);
   const held = (heldLifts ?? []).filter((l) => l.hold && l.hold_at_kg);
+
+  // Today's mobility block, same reading as Historial: item count against
+  // the block's own total.
+  const mobilityCount = mobilityLog?.completed_slugs.length ?? 0;
+  const mobilityTotal = mobilityLog?.total_items ?? 0;
+  const mobilityDone = mobilityTotal > 0 && mobilityCount >= mobilityTotal;
+
+  // Non-negotiable 8: the export IS the backup. Stale past 14 days.
+  const exportAgeDays =
+    ctx.profile.last_export_at == null
+      ? null
+      : Math.max(
+          0,
+          daysBetween(ctx.profile.last_export_at.slice(0, 10), athlete.today),
+        );
+  const backupStale = exportAgeDays == null || exportAgeDays > 14;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -219,21 +243,57 @@ export default async function HoyPage() {
           </div>
         ))}
 
+        {backupStale ? (
+          <Link href="/ajustes" className="mx-4 mt-3.5 block">
+            <Callout
+              eyebrow={
+                exportAgeDays == null
+                  ? "copia de seguridad · nunca"
+                  : `copia de seguridad · hace ${exportAgeDays} días`
+              }
+            >
+              El export de Ajustes → Datos es la única copia de tu historial
+              en el plan gratuito. Exportar ahora →
+            </Callout>
+          </Link>
+        ) : null}
+
         <Link
           href="/movilidad"
-          className="mx-4 mt-3.5 mb-5 flex items-center gap-3 border-2 border-ink px-3.5 py-3"
+          className={cn(
+            "mx-4 mt-3.5 mb-5 flex items-center gap-3 border-2 px-3.5 py-3",
+            mobilityDone ? "border-hairline" : "border-ink",
+          )}
         >
-          <span className="h-[30px] w-[30px] flex-none bg-run" />
+          <span
+            className="h-[30px] w-[30px] flex-none"
+            style={{ background: mobilityDone ? TONE.ok : accentFor("run") }}
+          />
           <span className="flex-1">
-            <span className="block text-[13.5px] leading-[1.2] font-bold">
+            <span
+              className={cn(
+                "block text-[13.5px] leading-[1.2] font-bold",
+                mobilityDone && "text-mid",
+              )}
+            >
               Movilidad y correctivos
             </span>
-            <span className="mt-1 block text-[11px] leading-none font-medium text-mid">
-              20′ · DIARIO · INNEGOCIABLE
+            <span className="num mt-1 block text-[11px] leading-none font-medium text-mid">
+              {mobilityDone
+                ? "20′ · ✓ hecha hoy"
+                : mobilityCount > 0
+                  ? `20′ · ${mobilityCount}/${mobilityTotal} · INNEGOCIABLE`
+                  : "20′ · DIARIO · INNEGOCIABLE"}
             </span>
           </span>
-          <span aria-hidden className="text-[16px] leading-none font-bold">
-            →
+          <span
+            aria-hidden
+            className={cn(
+              "text-[16px] leading-none font-bold",
+              mobilityDone && "text-mid",
+            )}
+          >
+            {mobilityDone ? "✓" : "→"}
           </span>
         </Link>
       </div>

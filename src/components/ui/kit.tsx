@@ -239,6 +239,7 @@ export function SessionRow({
   accent,
   title,
   subtitle,
+  note,
   primary,
   secondary,
   status,
@@ -251,6 +252,8 @@ export function SessionRow({
   accent: string;
   title: ReactNode;
   subtitle?: ReactNode;
+  /** A quiet third line — e.g. the athlete's own session note. */
+  note?: ReactNode;
   primary?: ReactNode;
   secondary?: ReactNode;
   status?: string;
@@ -292,6 +295,16 @@ export function SessionRow({
             )}
           >
             {subtitle}
+          </div>
+        ) : null}
+        {note ? (
+          <div
+            className={cn(
+              "mt-1 truncate text-[10.5px] leading-[1.35] font-normal",
+              muted ? "text-hairline" : "text-faint",
+            )}
+          >
+            {note}
           </div>
         ) : null}
       </div>

@@ -124,7 +124,7 @@ export function SkipDayButton({ day }: { day: DayTarget }) {
           });
         })
       }
-      className="text-[10px] leading-none font-semibold tracking-[0.08em] text-mid underline uppercase"
+      className="flex h-10 flex-none items-center border-2 border-ink px-3 text-[10px] leading-none font-bold tracking-[0.08em] uppercase disabled:opacity-40"
     >
       {pending ? "…" : "Saltar"}
     </button>

@@ -20,6 +20,7 @@ import { activateProgram } from "@/lib/actions/onboarding";
 import { shiftProgram } from "@/lib/actions/program";
 import {
   clearHistory,
+  markExported,
   togglePlate,
   updateProfile,
 } from "@/lib/actions/profile";
@@ -157,6 +158,8 @@ export function SettingsGroups({
   const [shiftDays, setShiftDays] = useState(7);
   const [confirmShift, setConfirmShift] = useState(false);
   const [shifted, setShifted] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportedNow, setExportedNow] = useState(false);
 
   const plates = (profile.plates_kg ?? [])
     .map(Number)
@@ -258,6 +261,51 @@ export function SettingsGroups({
     });
   }
 
+  /**
+   * Download the JSON, and only once the blob is saved on the device stamp
+   * `last_export_at` — the route no longer stamps, so an aborted download
+   * can never pass for a backup.
+   */
+  function doExport() {
+    setError(null);
+    setExporting(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/export", { credentials: "same-origin" });
+        if (!res.ok) throw new Error(`export ${res.status}`);
+        const blob = await res.blob();
+        const name =
+          /filename="([^"]+)"/.exec(
+            res.headers.get("Content-Disposition") ?? "",
+          )?.[1] ?? `bloques-export-${new Date().toISOString().slice(0, 10)}.json`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        const stamped = await markExported();
+        if (!stamped.ok) {
+          setError(
+            stamped.error ??
+              "La copia se ha descargado pero la fecha no se ha podido guardar.",
+          );
+          return;
+        }
+        setExportedNow(true);
+      } catch {
+        setError(
+          "No se ha podido descargar la copia. La fecha de última copia solo se mueve con el archivo en el móvil.",
+        );
+      } finally {
+        setExporting(false);
+      }
+    })();
+  }
+
   function wipeHistory() {
     setConfirmClear(false);
     setError(null);
@@ -276,6 +324,9 @@ export function SettingsGroups({
     const list = lifts.filter((l) => l.kind === kind).map((l) => l.name);
     return list.length ? list.join(" · ") : fallback;
   };
+
+  // The server prop goes stale the moment an export lands on this device.
+  const shownExportAgeDays = exportedNow ? 0 : exportAgeDays;
 
   /**
    * The save indicator rides every section label rather than only the first:
@@ -749,10 +800,11 @@ export function SettingsGroups({
       <SectionLabel right={status()}>Datos</SectionLabel>
       <SyncStatus />
       <RowStack className="mt-2.5">
-        <a
-          href="/api/export"
-          download
-          className="flex w-full items-center gap-3 bg-paper px-4 py-3 text-left"
+        <button
+          type="button"
+          onClick={doExport}
+          disabled={exporting}
+          className="flex w-full items-center gap-3 bg-paper px-4 py-3 text-left disabled:opacity-40"
         >
           <span className="min-w-0 flex-1">
             <span className="block text-[13px] leading-[1.2] font-bold">
@@ -760,26 +812,27 @@ export function SettingsGroups({
             </span>
             <span
               className={cn(
-                "mt-1 block text-[10.5px] leading-[1.35]",
-                exportAgeDays == null || exportAgeDays > 14
-                  ? "font-semibold text-warn"
+                "mt-1 block w-fit text-[10.5px] leading-[1.35]",
+                // text-warn on paper is ~2:1 — ink on a warn block reads.
+                shownExportAgeDays == null || shownExportAgeDays > 14
+                  ? "bg-warn px-1 font-semibold text-ink"
                   : "text-faint",
               )}
             >
-              {exportAgeDays == null
+              {shownExportAgeDays == null
                 ? "Nunca descargada. En el plan gratuito esto ES la copia de seguridad."
-                : exportAgeDays > 14
-                  ? `Última copia hace ${exportAgeDays} días. Toca descargar: en el plan gratuito esto ES la copia de seguridad.`
-                  : `Última copia ${exportAgeDays === 0 ? "hoy" : exportAgeDays === 1 ? "ayer" : `hace ${exportAgeDays} días`}. Todo lo tuyo en un archivo.`}
+                : shownExportAgeDays > 14
+                  ? `Última copia hace ${shownExportAgeDays} días. Toca descargar: en el plan gratuito esto ES la copia de seguridad.`
+                  : `Última copia ${shownExportAgeDays === 0 ? "hoy" : shownExportAgeDays === 1 ? "ayer" : `hace ${shownExportAgeDays} días`}. Todo lo tuyo en un archivo.`}
             </span>
           </span>
           <span
             aria-hidden
             className="flex-none text-[16px] leading-none font-bold"
           >
-            ↓
+            {exporting ? "…" : "↓"}
           </span>
-        </a>
+        </button>
 
         {programs.length > 0 ? (
           <div className="bg-paper px-4 py-3">

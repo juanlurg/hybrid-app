@@ -161,6 +161,13 @@ export default async function SemanaPage({
       </ScreenHeader>
 
       <div className="flex-1 overflow-auto">
+        {phase.notes.trim() ? (
+          // The phase's own priority ladder — what to drop first when the
+          // week breaks. Written by the plan, read here.
+          <p className="px-4 pt-3 text-[10px] leading-[1.6] font-extrabold tracking-[0.14em] text-mid uppercase">
+            {phase.notes}
+          </p>
+        ) : null}
         {planned === 0 ? (
           <Footnote>
             Esta fase todavía no tiene días asignados, así que la semana está
@@ -175,6 +182,10 @@ export default async function SemanaPage({
               const figure = figureFor(day);
               const isToday = day.date === today;
               const rest = day.group === "rest";
+              // A past day nobody closed is lost, not pending — the
+              // calendar rules and Historial already counts it as a miss.
+              // Calm terminal state: no red, no guilt.
+              const missed = status === "planned" && day.date < today;
               const subtitle =
                 day.group === "run"
                   ? day.prescription || day.subtitle
@@ -233,10 +244,10 @@ export default async function SemanaPage({
                         <div
                           className={cn(
                             "mt-1.5 text-[9.5px] leading-none font-semibold tracking-[0.1em]",
-                            statusTone(status),
+                            missed ? "text-mid" : statusTone(status),
                           )}
                         >
-                          {STATUS_LABEL[status]}
+                          {missed ? "PERDIDA" : STATUS_LABEL[status]}
                         </div>
                       ) : null}
                     </div>
@@ -251,11 +262,11 @@ export default async function SemanaPage({
 
               // "Hoy no entreno" is a decision, not an omission: a
               // deliberate skip closes the day as SALTADA instead of
-              // leaving it pending forever.
+              // leaving it pending forever. Past days too — a lost day
+              // can still be closed honestly after the fact.
               const skippable =
                 (day.group === "strength" || day.group === "run") &&
                 day.slot != null &&
-                day.date >= today &&
                 status === "planned";
 
               return (

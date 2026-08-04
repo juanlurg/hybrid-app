@@ -16,6 +16,7 @@ import {
 } from "@/lib/domain/plan";
 import { createLocalSession } from "@/lib/offline/local-session";
 import { openOfflineStore } from "@/lib/offline/db";
+import type { QueueOp } from "@/lib/offline/queue";
 import {
   SNAPSHOT_KEY,
   validateSnapshot,
@@ -37,6 +38,8 @@ type ShellState =
       snapshot: AthleteSnapshot;
       today: ResolvedDay | null;
       activeSessionId: string | null;
+      /** Today's run already sits in the queue — marked on this device. */
+      runQueued: boolean;
       stale: boolean;
     };
 
@@ -48,6 +51,7 @@ type ShellState =
 export function OfflineShell() {
   const [state, setState] = useState<ShellState>({ phase: "loading" });
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [runMarked, setRunMarked] = useState(false);
 
   useEffect(() => {
     attachSyncTriggers();
@@ -87,13 +91,21 @@ export function OfflineShell() {
         // session holds the key the flush hydrates envelopes with.
         const todayDate = todayIso();
         const sessions = await allLocalSessions();
-        const queued = await store.getAll<{
-          op: { localSessionId?: string };
-        }>("queue");
+        const queued = await store.getAll<{ op: QueueOp }>("queue");
         const withQueuedOps = new Set(
           queued
-            .map((r) => r.value.op.localSessionId)
+            .map((r) =>
+              "localSessionId" in r.value.op
+                ? r.value.op.localSessionId
+                : undefined,
+            )
             .filter((id): id is string => Boolean(id)),
+        );
+        const runQueued = queued.some(
+          (r) =>
+            r.value.op.kind === "run_log" &&
+            r.value.op.key.scheduledOn === todayDate &&
+            r.value.op.key.slotId === today?.slot?.id,
         );
         for (const s of sessions) {
           if (
@@ -118,6 +130,7 @@ export function OfflineShell() {
           snapshot,
           today,
           activeSessionId: active?.localSessionId ?? null,
+          runQueued,
           stale:
             Date.now() - new Date(snapshot.savedAt).getTime() >
             24 * 3600 * 1000,
@@ -141,7 +154,7 @@ export function OfflineShell() {
     );
   }
 
-  const { snapshot, today, activeSessionId, stale } = state;
+  const { snapshot, today, activeSessionId, runQueued, stale } = state;
 
   async function startToday() {
     if (!today?.slot) return;
@@ -164,6 +177,36 @@ export function OfflineShell() {
       startedAt,
     });
     setRunningId(localId);
+  }
+
+  /**
+   * One tap, same op the Carrera form sends: the run lands in the queue
+   * and /api/sync upserts it when the network returns. The watch data can
+   * be added later from /carrera — same key, same upsert, idempotent.
+   */
+  async function markRunDone() {
+    if (!today?.slot) return;
+    await enqueueOp({
+      kind: "run_log",
+      key: {
+        phaseId: today.phaseId,
+        slotId: today.slot.id,
+        scheduledOn: today.date,
+        week: today.week,
+        dayIndex: today.dayIndex,
+        sessionType: today.sessionType,
+        title: today.title,
+      },
+      prescription: today.prescription,
+      durationMinutes: null,
+      distanceKm: null,
+      avgHr: null,
+      decouplingPct: null,
+      perceivedEffort: null,
+      notes: "",
+      loggedAt: new Date().toISOString(),
+    });
+    setRunMarked(true);
   }
 
   return (
@@ -203,10 +246,21 @@ export function OfflineShell() {
               </div>
             ))}
           </div>
+        ) : today && today.group === "run" && today.slot ? (
+          <div className="px-4 py-5">
+            <p className="text-[13.5px] leading-[1.3] font-bold">
+              {today.prescription || today.title}
+            </p>
+            <p className="mt-2 text-[12px] leading-[1.5] text-mid">
+              Sal y corre: el detalle queda en el reloj. Márcala hecha aquí y
+              se sube al volver la red; los datos del reloj se añaden después
+              desde Carrera.
+            </p>
+          </div>
         ) : (
           <p className="px-4 py-5 text-[12px] leading-[1.5] text-mid">
             {today
-              ? "Hoy no toca fuerza. Las carreras y la movilidad se marcan desde sus pantallas al volver la red — o sal y corre: el detalle queda en el reloj."
+              ? "Hoy no toca fuerza. La movilidad se marca desde su pantalla al volver la red."
               : "Hoy queda fuera del plan guardado."}
           </p>
         )}
@@ -233,6 +287,20 @@ export function OfflineShell() {
         >
           Empezar sin conexión <span className="font-medium">→</span>
         </button>
+      ) : today && today.group === "run" && today.slot ? (
+        runMarked || runQueued ? (
+          <div className="flex h-16 flex-none items-center justify-center gap-3 bg-ink text-[15px] leading-none font-extrabold tracking-[0.1em] text-ok-bright uppercase">
+            ✓ Registrada · se sube con red
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void markRunDone()}
+            className="flex h-16 flex-none items-center justify-center gap-2.5 bg-run text-[16px] leading-none font-extrabold tracking-[0.1em] text-paper uppercase"
+          >
+            Marcar hecha <span className="font-medium">✓</span>
+          </button>
+        )
       ) : null}
     </div>
   );

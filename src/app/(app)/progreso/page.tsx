@@ -1,6 +1,13 @@
 import { requireAthlete } from "@/lib/data/athlete";
 import { liftStateFrom, phaseEngineConfig, phaseSpans } from "@/lib/domain/plan";
-import { formatDayShort, placeDate, type IsoDate } from "@/lib/domain/calendar";
+import {
+  addDays,
+  daysBetween,
+  formatDayShort,
+  placeDate,
+  startOfWeek,
+  type IsoDate,
+} from "@/lib/domain/calendar";
 import {
   formatWeight,
   isDeloadWeek,
@@ -16,6 +23,7 @@ import { accentFor, TONE } from "@/components/day-accents";
 import { Framed, ScreenHeader, SectionLabel } from "@/components/ui/kit";
 import { cn } from "@/lib/cn";
 
+import { BodyEntry } from "./body-entry";
 import { LiftPicker } from "./lift-picker";
 
 /** Height of the season chart, in px. */
@@ -118,7 +126,7 @@ export default async function ProgresoPage({
 
   const supabase = await createClient();
 
-  const [failRes, runSessionRes] = await Promise.all([
+  const [failRes, runSessionRes, bodyRes] = await Promise.all([
     supabase
       .from("engine_events")
       .select("session_id")
@@ -135,6 +143,13 @@ export default async function ProgresoPage({
       .in("session_type", ["run_easy", "run_long", "run_quality", "run_test"])
       .order("scheduled_on", { ascending: false })
       .limit(400),
+    // The scale, last ~12 weeks — F2's target is written in kg/semana.
+    supabase
+      .from("body_metrics")
+      .select("on_date, weight_kg, waist_cm")
+      .eq("user_id", athlete.userId)
+      .gte("on_date", addDays(athlete.today, -12 * 7))
+      .order("on_date", { ascending: true }),
   ]);
 
   const failEvents = failRes.data ?? [];
@@ -202,6 +217,45 @@ export default async function ProgresoPage({
     kmByWeek.set(week, (kmByWeek.get(week) ?? 0) + Number(log.distance_km));
   }
   const maxWeekKm = Math.max(0, ...kmByWeek.values());
+
+  /* ── the scale ───────────────────────────────────────────────── */
+
+  const bodyRows = (bodyRes.data ?? []).filter((r) => r.weight_kg != null);
+  // Weekly averages — the plan measures the physique on the media semanal,
+  // never on a single morning.
+  const byBodyWeek = new Map<IsoDate, { sum: number; n: number }>();
+  for (const r of bodyRows) {
+    const wk = startOfWeek(r.on_date as IsoDate);
+    const cur = byBodyWeek.get(wk) ?? { sum: 0, n: 0 };
+    cur.sum += Number(r.weight_kg);
+    cur.n += 1;
+    byBodyWeek.set(wk, cur);
+  }
+  const weeklyBody = [...byBodyWeek.entries()]
+    .map(([weekStart, v]) => ({ weekStart, avgKg: v.sum / v.n }))
+    .sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
+  const minBodyKg = Math.min(...weeklyBody.map((w) => w.avgKg));
+  const maxBodyKg = Math.max(...weeklyBody.map((w) => w.avgKg));
+
+  const latestBody = bodyRows.at(-1) ?? null;
+  const todayBody =
+    latestBody?.on_date === athlete.today ? latestBody : null;
+  // Current vs the closest reading at least 4 weeks back.
+  const bodyCutoff = addDays(athlete.today, -28);
+  const fourWeeksAgo =
+    [...bodyRows].reverse().find((r) => r.on_date <= bodyCutoff) ?? null;
+  const bodyDeltaKg =
+    latestBody && fourWeeksAgo
+      ? round2(Number(latestBody.weight_kg) - Number(fourWeeksAgo.weight_kg))
+      : null;
+  const bodySpanWeeks =
+    latestBody && fourWeeksAgo
+      ? daysBetween(fourWeeksAgo.on_date as IsoDate, latestBody.on_date as IsoDate) / 7
+      : 0;
+  const bodyRateKg =
+    bodyDeltaKg != null && bodySpanWeeks > 0
+      ? Math.round((bodyDeltaKg / bodySpanWeeks) * 100) / 100
+      : null;
 
   /* ── the audit ───────────────────────────────────────────────── */
 
@@ -561,6 +615,112 @@ export default async function ProgresoPage({
             </Framed>
           </div>
         ) : null}
+
+        {/* ── the scale ────────────────────────────────────────── */}
+        <div className="px-4 pb-6">
+          <Framed>
+            <div className="flex items-baseline gap-3">
+              <span className="text-[10px] leading-none font-extrabold tracking-[0.12em] text-strength uppercase">
+                Peso corporal
+              </span>
+              {latestBody ? (
+                <span className="num ml-auto text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                  ÚLTIMA {formatDayShort(latestBody.on_date as IsoDate)}
+                </span>
+              ) : null}
+            </div>
+
+            {latestBody ? (
+              <div className="mt-3.5 flex gap-px bg-line">
+                <div className="min-w-0 flex-1 bg-paper py-1 pr-2">
+                  <div className="num text-[21px] leading-none font-black tracking-[-0.03em]">
+                    {formatWeight(Number(latestBody.weight_kg))}
+                    <span className="text-[11px] font-extrabold"> kg</span>
+                  </div>
+                  <div className="mt-2 text-[9.5px] leading-none font-semibold tracking-[0.08em] text-mid uppercase">
+                    Actual
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 bg-paper py-1 px-2">
+                  <div className="num text-[21px] leading-none font-black tracking-[-0.03em]">
+                    {bodyDeltaKg == null
+                      ? "—"
+                      : `${bodyDeltaKg > 0 ? "+" : bodyDeltaKg < 0 ? "−" : ""}${formatWeight(Math.abs(bodyDeltaKg))}`}
+                    <span className="text-[11px] font-extrabold">
+                      {bodyDeltaKg == null ? "" : " kg"}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[9.5px] leading-none font-semibold tracking-[0.08em] text-mid uppercase">
+                    vs hace 4 sem
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 bg-paper py-1 pl-2">
+                  <div className="num text-[21px] leading-none font-black tracking-[-0.03em]">
+                    {bodyRateKg == null
+                      ? "—"
+                      : `${bodyRateKg > 0 ? "+" : bodyRateKg < 0 ? "−" : ""}${formatWeight(Math.abs(bodyRateKg))}`}
+                    <span className="text-[11px] font-extrabold">
+                      {bodyRateKg == null ? "" : " kg/sem"}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[9.5px] leading-none font-semibold tracking-[0.08em] text-mid uppercase">
+                    Ritmo semanal
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {weeklyBody.length >= 2 ? (
+              <>
+                <div className="mt-3.5 flex h-[54px] items-end gap-px">
+                  {weeklyBody.map((w) => (
+                    <div
+                      key={w.weekStart}
+                      className="min-w-0 flex-1"
+                      title={`Semana del ${formatDayShort(w.weekStart)} · ${formatWeight(round2(w.avgKg))} kg`}
+                      style={{
+                        height: `${Math.round(
+                          15 +
+                            85 *
+                              ((w.avgKg - minBodyKg) /
+                                (maxBodyKg - minBodyKg || 1)),
+                        )}%`,
+                        background: TONE.ink,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-1 flex justify-between">
+                  <span className="num text-[8.5px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
+                    {formatDayShort(weeklyBody[0].weekStart)}
+                  </span>
+                  <span className="num text-[8.5px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
+                    {formatDayShort(weeklyBody[weeklyBody.length - 1].weekStart)}
+                  </span>
+                </div>
+              </>
+            ) : null}
+
+            <BodyEntry
+              initialWeight={
+                todayBody?.weight_kg == null
+                  ? ""
+                  : formatWeight(Number(todayBody.weight_kg))
+              }
+              initialWaist={
+                todayBody?.waist_cm == null
+                  ? ""
+                  : formatWeight(Number(todayBody.waist_cm))
+              }
+            />
+
+            <p className="mt-3 text-[10.5px] leading-[1.45] text-faint">
+              Media semanal de lo que anotes; una báscula al día basta. En F2
+              el objetivo es +0,2 a 0,3 kg/semana — si la báscula no se mueve,
+              mandan las fotos y la cinta, no el peso.
+            </p>
+          </Framed>
+        </div>
       </div>
     </div>
   );

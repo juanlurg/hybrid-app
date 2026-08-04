@@ -48,6 +48,24 @@ function bpmRange(z: Zone): string {
   return `${z.loBpm}–${z.hiBpm}`;
 }
 
+/** The plan's own feel description per zone (CARRERA §1) — what a block
+ *  runs on when there is no LTHR to hang bpm numbers off. */
+const ZONE_FEEL: Record<string, string> = {
+  Z1: "muy fácil, respiración nasal posible",
+  Z2: "conversación en frases completas",
+  Z3: "frases cortas",
+  Z4: "palabras sueltas",
+  Z5: "insostenible más de 5-6′",
+};
+
+/** Without LTHR the engine leaves the bpm label null: run by feel. */
+function hrLabel(block: RunBlock): string {
+  const hr = block.hr ?? null;
+  if (hr != null) return hr;
+  const feel = ZONE_FEEL[block.zone];
+  return feel ? `por sensación — ${feel}` : "por sensación";
+}
+
 /** Where an LTHR test sits in the season. Read from the plan, never assumed. */
 interface TestPoint {
   key: string;
@@ -106,7 +124,7 @@ export default async function CarreraPage({
           await supabase
             .from("run_logs")
             .select(
-              "duration_seconds, distance_km, avg_hr, decoupling_pct, perceived_effort",
+              "duration_seconds, distance_km, avg_hr, decoupling_pct, perceived_effort, notes",
             )
             .eq("session_id", session.id)
             .maybeSingle()
@@ -244,7 +262,7 @@ export default async function CarreraPage({
                         </span>
                       </div>
                       <div className="num mt-1 text-[11px] leading-[1.35] text-mid">
-                        {block.duration} · {block.hr}
+                        {block.duration} · {hrLabel(block)}
                       </div>
                       {block.note ? (
                         <p className="mt-1.5 text-[11px] leading-[1.45] text-faint">
@@ -371,6 +389,7 @@ export default async function CarreraPage({
                     ? null
                     : Number(runLog.decoupling_pct),
                 perceivedEffort: runLog.perceived_effort,
+                notes: runLog.notes ?? null,
               }
             : null
         }

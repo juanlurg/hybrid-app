@@ -18,6 +18,8 @@ export interface HistoryEntry {
   headline: string;
   dateLabel: string;
   incomplete: boolean;
+  /** What the athlete wrote when closing the session. Empty = nothing. */
+  notes: string;
   details: Array<{ label: string; value: string }>;
 }
 
@@ -91,6 +93,7 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
                   accent={entry.accent}
                   title={entry.title}
                   subtitle={entry.subtitle}
+                  note={entry.notes ? `nota · ${entry.notes}` : undefined}
                   status={entry.statusLabel}
                   statusTone={entry.statusTone}
                   primary={entry.headline}
@@ -100,6 +103,11 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
                 />
                 {open ? (
                   <div className="flex flex-col gap-2 bg-sunk px-4 py-3.5">
+                    {entry.notes ? (
+                      <p className="text-[11.5px] leading-[1.5] text-mid">
+                        {entry.notes}
+                      </p>
+                    ) : null}
                     {entry.details.map((d) => (
                       <div key={d.label} className="flex items-baseline gap-3">
                         <span className="flex-1 text-[10px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">

@@ -59,7 +59,11 @@ export function cellColour(
   if (group === "rest") return { background: TONE.soft, border: TONE.soft };
   if (isFuture && !status)
     return { background: "transparent", border: TONE.hairline };
-  if (!status || status === "planned" || status === "skipped")
+  // A deliberate skip is a decision, not an omission — it must not paint
+  // like a day that was never registered.
+  if (status === "skipped")
+    return { background: TONE.fail, border: "transparent" };
+  if (!status || status === "planned")
     return { background: TONE.ink, border: "transparent" };
   if (status === "partial")
     return { background: TONE.warn, border: "transparent" };
