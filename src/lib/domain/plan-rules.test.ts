@@ -68,6 +68,48 @@ describe("planWarnings", () => {
   });
 });
 
+describe("quality run the day after heavy legs", () => {
+  const TITLE = "Fricción · PIERNA el día antes de la calidad";
+  const week = (legsDay: number, qualityDay: number, liftKey: string) => ({
+    slots: [
+      slot("legs", "strength", "PIERNA"),
+      slot("quality", "run_quality"),
+      slot("mov", "mobility"),
+      slot("off", "rest"),
+    ],
+    exercises: [
+      { slotId: "legs", sets: 3, isPrimary: true, liftKey },
+      { slotId: "legs", sets: 3, isPrimary: false },
+    ],
+    days: Array.from({ length: 7 }, (_, i) => ({
+      dayIndex: i,
+      slotId: i === legsDay ? "legs" : i === qualityDay ? "quality" : i === 2 ? "mov" : "off",
+    })),
+  });
+
+  it("warns — advisory, not blocking — on the 24 h adjacency", () => {
+    const w = planWarnings(week(0, 1, "sentadilla"));
+    const hit = w.find((x) => x.title === TITLE);
+    expect(hit).toBeDefined();
+    expect(hit!.blocking).toBe(false);
+  });
+
+  it("48 h of separation is fine", () => {
+    const w = planWarnings(week(0, 3, "sentadilla"));
+    expect(w.some((x) => x.title === TITLE)).toBe(false);
+  });
+
+  it("an upper-body primary does not trigger it", () => {
+    const w = planWarnings(week(0, 1, "banca"));
+    expect(w.some((x) => x.title === TITLE)).toBe(false);
+  });
+
+  it("Sunday → Monday wraps", () => {
+    const w = planWarnings(week(6, 0, "rdl"));
+    expect(w.some((x) => x.title === TITLE)).toBe(true);
+  });
+});
+
 describe("newBlockingTitles", () => {
   it("only violations the batch introduced count — pre-existing ones never veto", () => {
     const pre = planWarnings({

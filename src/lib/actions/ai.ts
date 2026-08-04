@@ -186,12 +186,18 @@ function snapshotOf(athlete: LoadedAthlete, phaseId: string): PlanSnapshot {
   };
 }
 
-/** Exact restore: ids and all, so anything referencing them still resolves. */
+/**
+ * Exact restore: ids and all, so anything referencing them still resolves.
+ * Every statement runs (a later one may still land after an earlier one
+ * failed) and every error is collected — a caller must never tell the
+ * athlete "el plan ha vuelto a como estaba" on a restore that did not.
+ */
 async function restoreSnapshot(
   supabase: SupabaseServer,
   athlete: LoadedAthlete,
   snapshot: PlanSnapshot,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
+  const errors: string[] = [];
   const slotIds = athlete.ctx.slots
     .filter((s) => s.phase_id === snapshot.phaseId)
     .map((s) => s.id);
@@ -202,9 +208,10 @@ async function restoreSnapshot(
   // Surviving rows are updated in place; only strays the snapshot lacks
   // are deleted.
   if (snapshot.exercises.length > 0) {
-    await supabase
+    const { error } = await supabase
       .from("program_exercises")
       .upsert(snapshot.exercises, { onConflict: "id" });
+    if (error) errors.push(error.message);
   }
   if (slotIds.length > 0) {
     const keepIds = snapshot.exercises.map((e) => e.id);
@@ -215,10 +222,11 @@ async function restoreSnapshot(
     if (keepIds.length > 0) {
       strays = strays.not("id", "in", `(${keepIds.join(",")})`);
     }
-    await strays;
+    const { error } = await strays;
+    if (error) errors.push(error.message);
   }
   for (const day of snapshot.days) {
-    await supabase.from("program_days").upsert(
+    const { error } = await supabase.from("program_days").upsert(
       {
         phase_id: snapshot.phaseId,
         day_index: day.day_index,
@@ -226,6 +234,7 @@ async function restoreSnapshot(
       },
       { onConflict: "phase_id,day_index" },
     );
+    if (error) errors.push(error.message);
   }
   {
     const keepDays = snapshot.days.map((d) => d.day_index);
@@ -236,21 +245,25 @@ async function restoreSnapshot(
     if (keepDays.length > 0) {
       strayDays = strayDays.not("day_index", "in", `(${keepDays.join(",")})`);
     }
-    await strayDays;
+    const { error } = await strayDays;
+    if (error) errors.push(error.message);
   }
   const programWave = snapshot.programWave ?? snapshot.wave;
   if (programWave) {
-    await supabase
+    const { error } = await supabase
       .from("programs")
       .update({ wave: programWave })
       .eq("id", athlete.ctx.program.id);
+    if (error) errors.push(error.message);
   }
   if (snapshot.phaseWave !== undefined) {
-    await supabase
+    const { error } = await supabase
       .from("program_phases")
       .update({ wave: snapshot.phaseWave })
       .eq("id", snapshot.phaseId);
+    if (error) errors.push(error.message);
   }
+  return errors.length > 0 ? { ok: false, error: errors[0] } : { ok: true };
 }
 
 export interface DroppedChange {
@@ -296,11 +309,15 @@ function filterOwnedChanges(
     ) {
       return "el ejercicio no está en el catálogo disponible";
     }
-    // Never let a proposal orphan or mutate the regression trigger.
+    // Never let a proposal orphan or mutate the regression trigger:
+    // its scheme is what the engine reads, so set_sets/set_reps on it
+    // would turn normal top sets into range failures. Rest is harmless.
     if (
       (c.op === "remove_exercise" ||
         c.op === "move_exercise" ||
-        c.op === "rename_exercise") &&
+        c.op === "rename_exercise" ||
+        c.op === "set_sets" ||
+        c.op === "set_reps") &&
       c.exerciseId &&
       exercisesById.get(c.exerciseId)?.is_primary
     ) {
@@ -636,7 +653,8 @@ export async function applyProposal(
         ({ error } = await supabase
           .from("program_exercises")
           .update({ sets: op.sets! })
-          .eq("id", op.exerciseId!));
+          .eq("id", op.exerciseId!)
+          .eq("is_primary", false));
         break;
       }
 
@@ -644,7 +662,8 @@ export async function applyProposal(
         ({ error } = await supabase
           .from("program_exercises")
           .update({ rep_min: op.repMin!, rep_max: op.repMax! })
-          .eq("id", op.exerciseId!));
+          .eq("id", op.exerciseId!)
+          .eq("is_primary", false));
         break;
       }
 
@@ -711,7 +730,13 @@ export async function applyProposal(
   }
 
   if (failures.length > 0) {
-    await restoreSnapshot(supabase, athlete, snapshot);
+    const restore = await restoreSnapshot(supabase, athlete, snapshot);
+    if (!restore.ok) {
+      return {
+        ok: false,
+        error: `No se ha podido deshacer del todo — revisa el editor antes de tocar nada. (${restore.error})`,
+      };
+    }
     return {
       ok: false,
       error: `No se ha aplicado nada — algo falló a mitad y el plan ha vuelto a como estaba. (${failures[0]})`,
@@ -731,6 +756,7 @@ export async function applyProposal(
       slotId: e.slot_id,
       sets: e.sets,
       isPrimary: e.is_primary,
+      liftKey: e.lift_key,
     })),
     days: snapshot.days.map((d) => ({
       dayIndex: d.day_index,
@@ -743,9 +769,9 @@ export async function applyProposal(
     slotIds.length
       ? supabase
           .from("program_exercises")
-          .select("slot_id, sets, is_primary")
+          .select("slot_id, sets, is_primary, lift_key")
           .in("slot_id", slotIds)
-      : Promise.resolve({ data: [] as Array<{ slot_id: string; sets: number; is_primary: boolean }> }),
+      : Promise.resolve({ data: [] as Array<{ slot_id: string; sets: number; is_primary: boolean; lift_key: string | null }> }),
     supabase
       .from("program_days")
       .select("day_index, slot_id")
@@ -758,6 +784,7 @@ export async function applyProposal(
       slotId: e.slot_id,
       sets: e.sets,
       isPrimary: e.is_primary,
+      liftKey: e.lift_key,
     })),
     days: (freshDays ?? []).map((d) => ({
       dayIndex: d.day_index,
@@ -767,14 +794,57 @@ export async function applyProposal(
 
   const blocking = newBlockingTitles(preWarnings, postWarnings);
   if (blocking.length > 0) {
-    await restoreSnapshot(supabase, athlete, snapshot);
+    const restore = await restoreSnapshot(supabase, athlete, snapshot);
+    if (!restore.ok) {
+      return {
+        ok: false,
+        error: `No se ha podido deshacer del todo — revisa el editor antes de tocar nada. (${restore.error})`,
+      };
+    }
     return {
       ok: false,
       error: `El lote dejaría el plan en un estado inválido y se ha deshecho entero: ${blocking.join(" · ")}.`,
     };
   }
 
-  // Both gates passed: NOW the changes are real — log them.
+  // Claim the terminal status atomically — the pending check at the top
+  // is read-only, so two rapid taps both get here with the batch written.
+  // Only the tap that flips pending → applied keeps its batch; the other
+  // matches zero rows and undoes its writes. The status enum has no
+  // intermediate value, so the guarded update IS the claim.
+  const { data: claimed, error: claimError } = await supabase
+    .from("ai_proposals")
+    .update({
+      status: "applied",
+      // The indices that actually landed, not the raw client array —
+      // the editor shows this count as "applied".
+      accepted_indices: appliedOps
+        .map((op) => indexByOp.get(op))
+        .filter((i): i is number => i !== undefined),
+      snapshot: snapshot as unknown as Json,
+      applied_at: new Date().toISOString(),
+    })
+    .eq("id", proposalId)
+    .eq("status", "pending")
+    .select("id");
+
+  if (claimError || !claimed?.length) {
+    const restore = await restoreSnapshot(supabase, athlete, snapshot);
+    if (!restore.ok) {
+      return {
+        ok: false,
+        error: `No se ha podido deshacer del todo — revisa el editor antes de tocar nada. (${restore.error ?? claimError?.message})`,
+      };
+    }
+    return {
+      ok: false,
+      error: claimError
+        ? `No se ha podido cerrar la propuesta y el plan ha vuelto a como estaba. (${claimError.message})`
+        : "Esa propuesta ya se ha resuelto: este intento no ha aplicado nada.",
+    };
+  }
+
+  // The claim held: NOW the changes are real — log them.
   if (appliedOps.length > 0) {
     await supabase.from("engine_events").insert(
       appliedOps.map((op) => ({
@@ -788,20 +858,6 @@ export async function applyProposal(
       })),
     );
   }
-
-  await supabase
-    .from("ai_proposals")
-    .update({
-      status: "applied",
-      // The indices that actually landed, not the raw client array —
-      // the editor shows this count as "applied".
-      accepted_indices: appliedOps
-        .map((op) => indexByOp.get(op))
-        .filter((i): i is number => i !== undefined),
-      snapshot: snapshot as unknown as Json,
-      applied_at: new Date().toISOString(),
-    })
-    .eq("id", proposalId);
 
   if (proposal.thread_id) {
     const appliedTitles = appliedOps.map((o) => o.title).join(" · ");
@@ -862,7 +918,15 @@ export async function undoProposal(
   const snapshot = proposal.snapshot as unknown as PlanSnapshot | null;
   if (!snapshot) return { ok: false, error: "No hay copia previa que restaurar." };
 
-  await restoreSnapshot(supabase, athlete, snapshot);
+  // The proposal only flips to "undone" if the restore actually landed —
+  // otherwise the athlete sees "deshecho" over a plan that is not.
+  const restore = await restoreSnapshot(supabase, athlete, snapshot);
+  if (!restore.ok) {
+    return {
+      ok: false,
+      error: `No se ha podido deshacer del todo — revisa el editor antes de tocar nada. (${restore.error})`,
+    };
+  }
 
   await supabase
     .from("ai_proposals")
@@ -989,8 +1053,13 @@ export async function rebuildProgram(input: {
       slot.exercises = slot.exercises.filter((e) => catalog.has(e.exerciseSlug));
       if (slot.sessionType !== "strength") continue;
       const primaries = slot.exercises.filter((e) => e.isPrimary);
-      if (primaries.length === 0 && slot.exercises.length > 0) {
-        slot.exercises[0].isPrimary = true;
+      if (primaries.length === 0) {
+        // Promote only an exercise that can drive the engine: a primary
+        // without a liftKey satisfies "sin básico" vacuously yet never
+        // moves a weight. No candidate → leave the slot without one so
+        // the blocking warning fires honestly in the preview.
+        const candidate = slot.exercises.find((e) => e.liftKey);
+        if (candidate) candidate.isPrimary = true;
       } else if (primaries.length > 1) {
         primaries.slice(1).forEach((e) => (e.isPrimary = false));
       }
@@ -1158,6 +1227,7 @@ export async function rebuildProgram(input: {
           slotId: s.key,
           sets: e.sets,
           isPrimary: e.isPrimary,
+          liftKey: e.liftKey ?? null,
         })),
       ),
       days: phase.days.map((d) => ({

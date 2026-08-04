@@ -10,7 +10,13 @@ import type { SessionType } from "./plan";
 
 export interface PlanRuleInput {
   slots: Array<{ id: string; label: string; sessionType: SessionType }>;
-  exercises: Array<{ slotId: string; sets: number; isPrimary: boolean }>;
+  exercises: Array<{
+    slotId: string;
+    sets: number;
+    isPrimary: boolean;
+    /** The primary's engine lift, when the caller has it — feeds the heavy-legs adjacency rule. */
+    liftKey?: string | null;
+  }>;
   /** The weekly template: dayIndex 0-6 → slot. */
   days: Array<{ dayIndex: number; slotId: string | null }>;
 }
@@ -45,6 +51,34 @@ export function planWarnings(input: PlanRuleInput): PlanWarning[] {
       title: `Fricción · ${prev.label} el día antes de la larga`,
       detail:
         "Menos de 18 h entre cadena posterior pesada y la tirada larga. Si la larga se cae dos semanas seguidas, mueve la fuerza al jueves antes de tocar volumen.",
+    });
+  }
+
+  // The risky direction too: a quality run the day AFTER heavy legs —
+  // a strength slot whose primary is sentadilla or rdl. Sunday → Monday
+  // wraps: the week template repeats.
+  const heavyLegSlots = new Set(
+    input.exercises
+      .filter(
+        (e) =>
+          e.isPrimary && (e.liftKey === "sentadilla" || e.liftKey === "rdl"),
+      )
+      .map((e) => e.slotId),
+  );
+  const slotAtDay = new Map(
+    input.days.map((d) => [d.dayIndex, d.slotId ? slotById.get(d.slotId) : null]),
+  );
+  for (let day = 0; day < 7; day += 1) {
+    const slot = slotAtDay.get(day);
+    if (!slot || !heavyLegSlots.has(slot.id)) continue;
+    const next = slotAtDay.get((day + 1) % 7);
+    if (next?.sessionType !== "run_quality") continue;
+    warnings.push({
+      tone: "warn",
+      blocking: false,
+      title: `Fricción · ${slot.label} el día antes de la calidad`,
+      detail:
+        "Calidad de carrera 24 h después de pierna pesada: sepáralas 48 h si puedes.",
     });
   }
 
