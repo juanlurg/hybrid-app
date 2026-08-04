@@ -189,14 +189,43 @@ async function main() {
       .from("program_phases")
       .select("*", { count: "exact", head: true })
       .eq("program_id", template!.id);
-    check("it has 5 phases", phaseCount === 5, `got ${phaseCount}`);
+    check("it has 6 phases", phaseCount === 6, `got ${phaseCount}`);
 
     const { data: maestroF4 } = await admin
       .from("program_phases")
-      .select("id, weeks, starts_on")
+      .select("id, weeks, starts_on, auto_deload")
       .eq("program_id", template!.id)
       .eq("key", "F4")
       .single();
+    check(
+      "F4 runs 10 weeks and halves strength sets on run-deload weeks",
+      maestroF4!.weeks === 10 && maestroF4!.auto_deload === true,
+      `weeks ${maestroF4!.weeks}, auto_deload ${maestroF4!.auto_deload}`,
+    );
+    const { data: maestroF4T } = await admin
+      .from("program_phases")
+      .select("id, weeks, starts_on, progression_mode, pct_of_rm")
+      .eq("program_id", template!.id)
+      .eq("key", "F4T")
+      .single();
+    check(
+      "the taper holds 2 weeks at a fixed 70 %",
+      maestroF4T!.weeks === 2 &&
+        maestroF4T!.progression_mode === "fixed_pct" &&
+        Number(maestroF4T!.pct_of_rm) === 0.7,
+    );
+    const { data: maestroF3 } = await admin
+      .from("program_phases")
+      .select("progression_mode, wave, cycle_weeks")
+      .eq("program_id", template!.id)
+      .eq("key", "F3")
+      .single();
+    check(
+      "F3 waves at 80-85 % — mantenimiento-plus, deload on Navidad/Reyes",
+      maestroF3!.progression_mode === "wave" &&
+        maestroF3!.wave?.length === maestroF3!.cycle_weeks &&
+        Number(maestroF3!.wave![2]) === 0.85,
+    );
     const [{ data: f4Days }, { data: f4Slots }] = await Promise.all([
       admin
         .from("program_days")
@@ -220,10 +249,70 @@ async function main() {
       .eq("id", template!.id)
       .single();
     check(
-      "race_on is the Saturday of F4's final week — the MEDIA MARATÓN day",
-      maestroRow?.race_on ===
-        addDays(maestroF4!.starts_on!, (maestroF4!.weeks - 1) * 7 + 5),
+      "race_on is the Saturday of the taper's final week — the MEDIA MARATÓN day",
+      maestroRow?.race_on === addDays(maestroF4T!.starts_on!, 7 + 5) &&
+        maestroRow?.race_on === "2027-04-24",
       maestroRow?.race_on ?? "null",
+    );
+
+    const { data: maestroPhaseList } = await admin
+      .from("program_phases")
+      .select("id, key")
+      .eq("program_id", template!.id);
+    const { data: maestroSlots } = await admin
+      .from("program_slots")
+      .select("id, key, phase_id, session_type")
+      .in(
+        "phase_id",
+        maestroPhaseList!.map((p) => p.id),
+      );
+    const { data: maestroStrength } = await admin
+      .from("program_exercises")
+      .select("name, is_primary, load_mode, fixed_weight_kg, equipment")
+      .in(
+        "slot_id",
+        maestroSlots!
+          .filter((s) => s.session_type === "strength")
+          .map((s) => s.id),
+      );
+    check(
+      "only the basic of each slot rides the engine",
+      maestroStrength!.every((e) => e.is_primary || e.load_mode !== "engine"),
+      maestroStrength!.find((e) => !e.is_primary && e.load_mode === "engine")
+        ?.name,
+    );
+    const goblet = maestroStrength!.find(
+      (e) => e.name === "Sentadilla goblet o frontal",
+    );
+    check(
+      "the F0 goblet fits the 16 kg kettlebell",
+      goblet?.load_mode === "fixed" &&
+        Number(goblet.fixed_weight_kg) === 16 &&
+        goblet.equipment === "kettlebell",
+    );
+    const z1Slots = maestroSlots!.filter(
+      (s) =>
+        s.key === "z1" &&
+        maestroPhaseList!.some(
+          (p) => p.id === s.phase_id && ["F2", "F3"].includes(p.key),
+        ),
+    );
+    check(
+      "F2 and F3 close the week with an optional Z1",
+      z1Slots.length === 2,
+      `got ${z1Slots.length}`,
+    );
+    const { data: z1Runs } = await admin
+      .from("program_run_sessions")
+      .select("slot_id, week")
+      .in(
+        "slot_id",
+        z1Slots.map((s) => s.id),
+      );
+    check(
+      "the Z1 slots cover every week (12 + 8)",
+      z1Runs?.length === 20,
+      `got ${z1Runs?.length}`,
     );
 
     section("Athlete A — signup and onboarding");
@@ -257,7 +346,7 @@ async function main() {
       .select("key, weeks, starts_on")
       .eq("program_id", programAId!)
       .order("position");
-    check("the clone has 5 phases", phasesA?.length === 5);
+    check("the clone has 6 phases", phasesA?.length === 6);
     check(
       "F2 starts on 14 Sep 2026, as the plan says",
       phasesA?.find((p) => p.key === "F2")?.starts_on === "2026-09-14",
