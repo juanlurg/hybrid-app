@@ -77,10 +77,10 @@ Programa via `SecondaryNav`.
 | Route | Screen |
 |---|---|
 | `/` | Hoy — today's session, big weight, start bar |
-| `/sesion/[id]` | Live runner — set pills, rest timer, regression banner |
+| `/sesion/[id]` | Live runner — set pills, rest timer, regression banner, warm-up + me molesta hints |
 | `/sesion/[id]/resumen` | Summary — KPIs and what the engine changed |
 | `/semana` | The 7 days + season phase bar |
-| `/progreso` | Per-lift chart, engine breakdown, Pa:HR |
+| `/progreso` | Per-lift chart, engine breakdown, Pa:HR, peso |
 | `/programa` | RMs, calculadora de RM (Epley), regression rule, engine parameters |
 | `/carrera/[fecha]` | Run blocks, HR zones, mark done |
 | `/movilidad` | Guided / list mobility block |

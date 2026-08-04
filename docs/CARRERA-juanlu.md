@@ -1,6 +1,10 @@
 # Carrera — Zonas, sesiones y planificación
  
 Objetivos: **bajar pulsaciones en Z2**, reintroducir intensidad de forma escalonada, y llegar fino a la **media maratón de asfalto (segunda quincena de abril 2027)**.
+
+Reglas transversales, en todas las fases:
+- ≤10% de incremento semanal (en re-entrada tras parón, ≤15%).
+- Molestia que altera la pisada → 2-3 días off + caminar; se retoma donde tocaría, no se "recupera" lo perdido.
  
 ---
  
@@ -17,6 +21,8 @@ Objetivos: **bajar pulsaciones en Z2**, reintroducir intensidad de forma escalon
 | Z3 | 90-93% | Frases cortas | Evitar el "gris" salvo finales progresivos |
 | Z4 (umbral) | 94-99% | Palabras sueltas | Tempo, cruise intervals |
 | Z5 | ≥100% | Insostenible >5-6' | Cuestas, VO2 |
+
+Hasta que haya LTHR de test, la app no pinta pulsaciones — marca "por sensación": Z2 = conversación en frases completas.
  
 **Cómo se bajan las pulsaciones de verdad:** meses de Z2 consistente + una dosis semanal de calidad + disciplina de no correr los días fáciles en Z3. La métrica de progreso no es la FC de un día (varía con calor, sueño, café): es el **desacople Pa:HR en tiradas de 60-90' — deriva <5% = tu base mejora**. El Camino te dará un empujón aeróbico enorme; F2 lo consolida, F3 lo amplía y F4 lo afila.
  
@@ -47,7 +53,7 @@ La carrera aquí es mantenimiento aeróbico de calidad: poco volumen, muy limpio
 | 11 | 10' Z2 + **3×8' Z4** (rec 3') + 10' Z2 | 90' Z2, últimos 10' progresivos a Z3 |
 | 12 | Descarga: 40' Z2 + 4 strides | 60' Z2 |
  
-Volumen: ~1h30 → ~2h15/sem. Los tempos de las semanas 9 y 11 son el "abrir boca" de la intensidad que pides — suficientes para no empezar F3 desde cero, sin comprometer el bloque de fuerza.
+Volumen: ~1h30 → ~2h15/sem. Semanas 1-2, re-entrada: si el sóleo/aquíleo avisa, 6×5' correr / 1' caminar la primera semana. Los tempos de las semanas 9 y 11 son el "abrir boca" de la intensidad que pides — suficientes para no empezar F3 desde cero, sin comprometer el bloque de fuerza — y pueden moverse al jueves para alejarlos de la pierna del lunes.
  
 **Opcional recomendado:** un 3er rodaje dominical Z1 muy suave de 30-40'. Dos sesiones son el mínimo justo para conservar la base aeróbica del Camino durante 12 semanas; este rodaje la protege mejor con coste de recuperación casi nulo. Si la semana viene cargada, es lo primero que se cae.
  
@@ -55,9 +61,9 @@ Volumen: ~1h30 → ~2h15/sem. Los tempos de las semanas 9 y 11 son el "abrir boc
  
 ## 4. F3 — Base híbrida (8 semanas · 3 sesiones/sem · 7 dic – 31 ene)
  
-Sube el volumen y entra el tempo de verdad. Martes calidad · jueves (o miércoles) Z2 · sábado larga.
+Sube el volumen y entra el tempo de verdad. Martes Z2 · miércoles calidad · sábado larga.
  
-| Sem | Calidad (martes) | Z2 (jueves) | Larga (sábado) |
+| Sem | Calidad (miércoles) | Z2 (martes) | Larga (sábado) |
 |---|---|---|---|
 | 1 | 3×8' Z4 (rec 3') | 40' | 75' Z2 |
 | 2 | 20' Z4 continuo | 45' | 80' Z2 |
@@ -74,9 +80,9 @@ Volumen: ~2h30 → ~3h15/sem. Las semanas navideñas están diseñadas para cump
  
 ## 5. F4 — Específico media maratón (12 semanas · 1 feb – carrera ~2ª quincena de abril)
  
-Estructura: martes calidad · miércoles Z2 40-50' · sábado tirada larga · domingo Z1 30-40' opcional. "RM" = ritmo objetivo de media (referencia inicial: ritmo del 10K de la sem 7 + 15-20 s/km; hasta entonces, ritmo del tempo Z4 + 10-15 s/km).
+Estructura: martes Z2 40-50' · miércoles calidad · sábado tirada larga · domingo Z1 30-40' opcional. "RM" = ritmo objetivo de media (referencia inicial: ritmo del 10K de la sem 7 + 15-20 s/km; hasta entonces, ritmo del tempo Z4 + 10-15 s/km).
  
-| Sem | Calidad (martes) | Larga (sábado) | Vol. aprox |
+| Sem | Calidad (miércoles) | Larga (sábado) | Vol. aprox |
 |---|---|---|---|
 | 1 | 5×5' Z4 (rec 90") | 12 km Z2 | 3h |
 | 2 | 6×3' Z5 (rec 2'30") — toque de VO2max | 13 km Z2 | 3h10 |
@@ -92,11 +98,10 @@ Estructura: martes calidad · miércoles Z2 40-50' · sábado tirada larga · do
 | 12 | 20' Z2 con 3×3' a RM (martes o miérc.) | — | **MEDIA MARATÓN** |
  
 Reglas F4:
-- **4-6 strides de 20" tras la Z2 del miércoles, todas las semanas** (mantienen velocidad y economía mientras el bloque se vuelve de umbral; coste casi cero).
-- Incremento semanal ≤10%; la larga crece ~1-1.5 km/semana.
+- **4-6 strides de 20" tras la Z2 del martes, todas las semanas** (mantienen velocidad y economía mientras el bloque se vuelve de umbral; coste casi cero).
+- La larga crece ~1-1.5 km/semana.
 - Todo lo que no es calidad ni segmento a RM es Z1-Z2 disciplinado.
 - Nutrición: 40-60 g CH/h en tiradas ≥90' desde la sem 3; ensaya desayuno, gel y zapatillas de carrera en las semanas 9-10.
-- Molestia que altera la pisada → 2-3 días off + caminar; se retoma donde tocaría, no se "recupera" lo perdido.
 - Día de carrera: primeros 5 km ligeramente por debajo de RM, negativo si es posible. La media se gana no pasándose al principio.
 ---
  
@@ -108,3 +113,4 @@ Reglas F4:
 - **Cruise intervals (3-5 × 8-10' Z4, rec 2-3'):** más volumen de umbral que el tempo con menos coste mental.
 - **Segmentos a ritmo de media dentro de la larga:** la sesión más específica del plan — enseña a correr a RM con fatiga.
 - **Larga progresiva:** último 15-20% subiendo a Z3. Solo F3 tardía y F4.
+- **Cadencia:** si la rodilla habla al correr, sube la cadencia ~5% (metrónomo del reloj) antes de recortar volumen; vigila el overstriding en los segmentos a RM de la larga.

@@ -27,7 +27,7 @@ La simetría es deliberada: bloque de fuerza en otoño → media en abril → bl
  
 ### F0 — Puente verano (4-5 días)
 - 2× Fuerza corta (40', ver `01_fuerza.md`)
-- 2× Carrera Z2 45-60'
+- 1-2× Carrera Z2 45-60' (mínimo 1; la 2ª es la primera en caerse)
 - 1× Caminata larga con la mochila del Camino (crítica las 2 últimas semanas)
 - Cero intensidad, cero fallo. Objetivo: no perder y no lesionarse.
 ### F2 — Hipertrofia/Fuerza (5 días)
@@ -45,8 +45,9 @@ La simetría es deliberada: bloque de fuerza en otoño → media en abril → bl
 | Día | Sesión |
 |---|---|
 | Lunes | Fuerza A |
-| Martes | Carrera calidad ligera (tempo corto) |
-| Jueves | Fuerza B + carrera Z2 40-50' (mañana/tarde, o mover la Z2 a miércoles) |
+| Martes | Carrera Z2 40-50' |
+| Miércoles | Carrera calidad ligera (tempo corto) |
+| Jueves | Fuerza B |
 | Sábado | Carrera larga Z2 (75-100') |
 | Domingo | Descanso o Z1 30' |
  
@@ -54,12 +55,14 @@ La simetría es deliberada: bloque de fuerza en otoño → media en abril → bl
 | Día | Sesión |
 |---|---|
 | Lunes | Fuerza A (mantenimiento 40-45') |
-| Martes | Carrera CALIDAD (cruise intervals / tempo / ritmo de media) |
-| Miércoles | Carrera Z2 40-50' |
+| Martes | Carrera Z2 40-50' (+ strides) |
+| Miércoles | Carrera CALIDAD (cruise intervals / tempo / ritmo de media) |
 | Jueves | Fuerza B (mantenimiento 40-45') |
 | Viernes | Descanso |
 | Sábado | **Tirada larga** (12→20 km, con segmentos a ritmo objetivo) |
 | Domingo | Z1 30-40' opcional o descanso |
+
+Taper: las 2 últimas semanas son su propia mini-fase — solo Fuerza A a 2 series @ 70%, jueves libre.
  
 ---
  
@@ -71,9 +74,9 @@ La simetría es deliberada: bloque de fuerza en otoño → media en abril → bl
 4. **Orden de prioridad si faltan días:**
    - F2: Fuerza A > Fuerza B > Z2 sábado > Fuerza C > Z2 martes
    - F3: Fuerza A > Larga > Calidad > Fuerza B > Z2 suelta
-   - F4: Tirada larga > Calidad > Fuerza A > Z2 miércoles > Fuerza B
+   - F4: Tirada larga > Calidad > Fuerza A > Z2 martes > Fuerza B
 5. **Descarga cada 4ª semana:** −40-50% de volumen en todo.
-6. **Separación de estímulos:** pierna pesada y calidad de carrera nunca en días consecutivos (las plantillas lo respetan).
+6. **Separación de estímulos:** en F3 y F4 la calidad de carrera va 48 h después de la pierna pesada (lunes fuerza → miércoles calidad). En F2 la intensidad del martes son strides/cuestas, baratas a propósito; las dos semanas de tempo (9 y 11) llevan nota de moverse al jueves.
 7. **Correctivos y movilidad** (activación glútea, psoas/core, tobillo/cadera): siguen como bloque diario de ~20' con el protocolo que ya tienes. Innegociables, pero no cuentan como entrenamiento.
 ---
  
@@ -98,6 +101,8 @@ La simetría es deliberada: bloque de fuerza en otoño → media en abril → bl
 - **F3:** transición a mantenimiento.
 - **F4:** mantenimiento con carbohidratos periodizados (más en calidad y tirada larga). Nada de déficit con la carga alta de las semanas 5-10. La definición "sale sola" del volumen aeróbico.
 - **Tiradas ≥90':** practica 40-60 g de carbohidrato/hora desde F4 sem 3, y ensaya el desayuno de carrera en las tiradas con ritmo objetivo.
+- **Carga de carbohidratos:** 8-10 g/kg/día los 2 días previos a la media, baja en fibra.
+- **Mañana de carrera:** lo ensayado en las semanas 9-10 — desayuno 3 h antes, gel a mano, calentamiento 15'.
 - **Sueño ≥7.5 h.** Si el sueño cae, se recorta la sesión de menor prioridad, nunca el sueño.
 ---
  

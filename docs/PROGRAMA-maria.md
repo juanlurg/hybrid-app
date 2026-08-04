@@ -114,7 +114,7 @@ Ya no se gana fondo: se llega descansada. La sesión del jueves de la semana 2 e
 
 ## 4. Fuerza
 
-Dos sesiones de cuerpo completo. La estructura no cambia de fase en fase: cambian las series y los pesos.
+Dos sesiones de cuerpo completo. Los ejercicios no cambian de fase en fase: cambian las series, los rangos de repeticiones y los pesos.
 
 **Fuerza A** — lunes
 
@@ -138,7 +138,7 @@ Dos sesiones de cuerpo completo. La estructura no cambia de fase en fase: cambia
 | Pallof press | 1-2 × 10-12 | 45″ | Por lado · superserie ↓ |
 | Sóleo excéntrico | 1-2 × 12-15 | 1′ | Bajada de 3″. Seguro anti-aquíleo |
 
-**Cómo progresa.** Solo la sentadilla y el RDL van al motor: la app calcula el peso cada semana como un % de tu RM (65 → 70 → 75 % y una semana suave), y sube la RM al cerrar cada ciclo de cuatro semanas. Los demás llevan peso fijo, y lo subes tú cuando cierres el rango alto de todas las series — 2,5 kg en barra, 5 kg en polea. Los saltos entre fases ya vienen puestos en el plan.
+**Cómo progresa.** Solo la sentadilla y el RDL van al motor: la app calcula el peso cada semana como un % de tu RM y sube la RM al cerrar cada ciclo de cuatro semanas. La onda depende de la fase: 65 → 70 → 75 % en F0, 70 → 75 → 80 % en F1 y F2 (la cuarta semana siempre es la suave), y en F3 un 70 % fijo — ya no se progresa, se llega descansada. Los demás llevan peso fijo, y lo subes tú cuando cierres el rango alto de todas las series — 2,5 kg en barra, 5 kg en polea. Los saltos entre fases ya vienen puestos en el plan.
 
 **Volumen por fase:** 13 series en F0 (aprender), 15 en F1, 14 en F2 (la carrera empieza a mandar), 10 en F3. Ninguna sesión pasa de una hora.
 
