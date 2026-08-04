@@ -32,7 +32,12 @@ export async function signIn(
   }
 
   revalidatePath("/", "layout");
-  redirect(next.startsWith("/") ? next : "/");
+  // Same-origin paths only: "//host" and "/\host" parse as external URLs.
+  redirect(
+    next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
+      ? next
+      : "/",
+  );
 }
 
 export async function signUp(
@@ -46,6 +51,20 @@ export async function signUp(
   if (!email || !password) return { error: "Faltan el correo o la contraseña." };
   if (password.length < 8)
     return { error: "La contraseña necesita al menos 8 caracteres." };
+
+  // AUTH_ALLOWED_EMAILS (comma-separated, case-insensitive) closes sign-up on a deployed single-athlete instance; unset = open (local dev, tests).
+  const allowed = process.env.AUTH_ALLOWED_EMAILS;
+  if (
+    allowed &&
+    !allowed
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .includes(email.toLowerCase())
+  ) {
+    return {
+      error: "el registro está cerrado: pide acceso al dueño de la instancia.",
+    };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({

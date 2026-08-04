@@ -13,7 +13,9 @@ export const dynamic = "force-dynamic";
  * PostgREST max_rows cap (a season of set_logs blows past 1000 rows —
  * a silently truncated dump certified as complete is worse than none),
  * and any read error fails the whole download with a 500 instead of
- * shipping a hollow file and stamping it as a fresh copy.
+ * shipping a hollow file. The freshness stamp (last_export_at) is NOT
+ * written here: the client stamps via markExported() only after the
+ * blob lands, so an aborted download never resets the counter.
  */
 
 const PAGE = 1000;
@@ -204,13 +206,6 @@ export async function GET() {
       aiMessages,
       aiProposals,
     };
-
-    // The staleness stamp behind "última copia hace N días" in Ajustes —
-    // only after every read succeeded.
-    await supabase
-      .from("profiles")
-      .update({ last_export_at: new Date().toISOString() })
-      .eq("id", user.id);
 
     const stamp = new Date().toISOString().slice(0, 10);
     return new NextResponse(JSON.stringify(payload, null, 2), {

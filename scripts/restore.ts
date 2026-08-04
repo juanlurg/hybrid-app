@@ -10,8 +10,10 @@
  *
  * Ids are preserved verbatim (the restoreSnapshot pattern: anything
  * referencing them still resolves); only two links cross environments
- * and are re-mapped via slug against the target's seeded catalogue:
- * program_exercises.exercise_id and lifts.exercise_id.
+ * and are re-mapped via slug against the target's catalogue:
+ * program_exercises.exercise_id and lifts.exercise_id. Athlete-created
+ * exercises (owner_id set) ride the dump and are restored first, so
+ * their links survive too — only unknown global slugs drop.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -124,11 +126,39 @@ async function main() {
   }
   console.log(`restoring as user ${targetUserId}`);
 
+  /* ── athlete-created exercises ride the dump ─────────────────── */
+  // The target's seeded catalogue only has the global rows; custom ones
+  // (owner_id set) must land first or their links re-map to null. Matched
+  // by slug against the owner-scoped unique key, owner rewritten.
+  const customExercises = (payload.exercisesCatalog ?? []).filter(
+    (e) => e.owner_id != null,
+  );
+  if (customExercises.length) {
+    const { data: owned, error: ownedError } = await admin
+      .from("exercises")
+      .select("slug")
+      .eq("owner_id", targetUserId);
+    if (ownedError) throw new Error(`exercises: ${ownedError.message}`);
+    const ownedSlugs = new Set((owned ?? []).map((e) => e.slug));
+    await upsertAll(
+      "exercises",
+      customExercises.filter((e) => !ownedSlugs.has(e.slug as string)),
+      (r) => ({ ...r, owner_id: targetUserId }),
+    );
+  }
+
   /* ── slug maps: the only cross-environment links ─────────────── */
-  const { data: targetExercises } = await admin
+  const { data: targetExercises, error: exercisesError } = await admin
     .from("exercises")
-    .select("id, slug");
-  const targetBySlug = new Map((targetExercises ?? []).map((e) => [e.slug, e.id]));
+    .select("id, slug, owner_id")
+    .or(`owner_id.is.null,owner_id.eq.${targetUserId}`);
+  if (exercisesError) throw new Error(`exercises: ${exercisesError.message}`);
+  // The athlete's rows shadow a same-slug global row, like the app does.
+  const targetBySlug = new Map<string, string>();
+  for (const e of targetExercises ?? []) {
+    if (e.owner_id === null && targetBySlug.has(e.slug)) continue;
+    targetBySlug.set(e.slug, e.id);
+  }
   const dumpById = new Map(
     (payload.exercisesCatalog ?? []).map((e) => [e.id as string, e.slug as string]),
   );

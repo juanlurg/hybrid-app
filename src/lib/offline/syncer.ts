@@ -160,6 +160,13 @@ export async function oldestPendingAt(): Promise<number | null> {
 
 /* ── flush ───────────────────────────────────────────────────── */
 
+/** Per-POST slices, comfortably under the /api/sync schema caps
+    (30 sessions, 60 logs each): a long-offline queue drains in loops
+    instead of 400ing forever. The server replays each envelope
+    idempotently, so slicing is safe. */
+const SESSIONS_PER_POST = 20;
+const LOGS_PER_POST = 40;
+
 async function doFlush(): Promise<SyncResponse | null> {
   const { state, seqByKey } = await loadQueueState();
   if (state.order.length === 0) return null;
@@ -171,48 +178,79 @@ async function doFlush(): Promise<SyncResponse | null> {
     locals.map((s) => [s.localSessionId, s.key]),
   );
   const { sessions, runLogs, mobilityLogs } = buildEnvelopes(state, sessionKeys);
-  const body = {
-    protocolVersion: 1 as const,
-    deviceId: await deviceId(),
-    sessions,
-    runLogs,
-    mobilityLogs,
-  };
+  const device = await deviceId();
 
-  const res = await fetch("/api/sync", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    credentials: "same-origin",
-  });
+  const allResults: NonNullable<SyncResponse["results"]> = [];
+  const allAcked: string[] = [];
+  const allFailures: NonNullable<SyncResponse["failures"]> = [];
 
-  if (res.status === 401) {
-    // Cookie expired mid-gym. The queue survives; the next authenticated
-    // navigation refreshes the session and the flush retries.
-    await noteBlocked("not_authenticated");
-    return { ok: false, error: "not_authenticated" };
+  let si = 0;
+  let ri = 0;
+  let mi = 0;
+  while (si < sessions.length || ri < runLogs.length || mi < mobilityLogs.length) {
+    const chunkSessions = sessions.slice(si, si + SESSIONS_PER_POST);
+    si += chunkSessions.length;
+    const chunkRunLogs = runLogs.slice(ri, ri + LOGS_PER_POST);
+    ri += chunkRunLogs.length;
+    const chunkMobilityLogs = mobilityLogs.slice(
+      mi,
+      mi + (LOGS_PER_POST - chunkRunLogs.length),
+    );
+    mi += chunkMobilityLogs.length;
+
+    const res = await fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        protocolVersion: 1 as const,
+        deviceId: device,
+        sessions: chunkSessions,
+        runLogs: chunkRunLogs,
+        mobilityLogs: chunkMobilityLogs,
+      }),
+      credentials: "same-origin",
+    });
+
+    if (res.status === 401) {
+      // Cookie expired mid-gym. The queue survives; the next authenticated
+      // navigation refreshes the session and the flush retries.
+      await noteBlocked("not_authenticated");
+      return { ok: false, error: "not_authenticated" };
+    }
+    if (res.status === 409) {
+      // Signed in but no active programme — nothing to sync against
+      // until one is activated from Ajustes → Datos.
+      await noteBlocked("no_active_program");
+      return { ok: false, error: "no_active_program" };
+    }
+    if (res.status === 400) {
+      // Protocol mismatch (old client, new server). Keep the queue and
+      // stop hammering — a reload brings matching code.
+      await noteBlocked("bad_request");
+      return { ok: false, error: "bad_request" };
+    }
+    if (!res.ok) throw new Error(`sync ${res.status}`);
+
+    // Ack per chunk: an interrupted drain must not resend what this
+    // POST already applied.
+    const chunk = (await res.json()) as SyncResponse;
+    const acked = chunk.ackedKeys ?? [];
+    if (acked.length) {
+      ackFlushed(state, acked); // keeps the reducer honest in tests
+      for (const key of acked) await deleteIfUnchanged(key, seqByKey);
+      allAcked.push(...acked);
+    }
+    allFailures.push(...(chunk.failures ?? []));
+    allResults.push(...(chunk.results ?? []));
   }
-  if (res.status === 409) {
-    // Signed in but no active programme — nothing to sync against
-    // until one is activated from Ajustes → Datos.
-    await noteBlocked("no_active_program");
-    return { ok: false, error: "no_active_program" };
-  }
-  if (res.status === 400) {
-    // Protocol mismatch (old client, new server). Keep the queue and
-    // stop hammering — a reload brings matching code.
-    await noteBlocked("bad_request");
-    return { ok: false, error: "bad_request" };
-  }
-  if (!res.ok) throw new Error(`sync ${res.status}`);
   await getStore().delete("meta", "lastSyncBlocked");
 
-  const data = (await res.json()) as SyncResponse;
-  const acked = data.ackedKeys ?? [];
-  if (acked.length) {
-    ackFlushed(state, acked); // keeps the reducer honest in tests
-    for (const key of acked) await deleteIfUnchanged(key, seqByKey);
-  }
+  const data: SyncResponse = {
+    ok: true,
+    results: allResults,
+    ackedKeys: allAcked,
+    failures: allFailures,
+  };
 
   // Non-transient failures will never land no matter how often we
   // retry: surface them (the meta summary feeds the sync indicator)

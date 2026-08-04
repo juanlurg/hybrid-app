@@ -12,9 +12,12 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(
-        `${origin}${next.startsWith("/") ? next : "/"}`,
-      );
+      // Same-origin paths only: "//host" and "/\host" parse as external URLs.
+      const path =
+        next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
+          ? next
+          : "/";
+      return NextResponse.redirect(`${origin}${path}`);
     }
   }
 

@@ -18,6 +18,8 @@ interface Snapshot {
   /** Older than 24 h with the network up — no longer "just waiting". */
   stuck: boolean;
   alerts: SyncAlerts;
+  /** navigator.storage.persisted() — null where the API is missing. */
+  persisted: boolean | null;
 }
 
 /**
@@ -32,10 +34,15 @@ export function SyncStatus() {
 
   const refresh = useCallback(async () => {
     try {
-      const [pending, oldestAt, alerts] = await Promise.all([
+      const [pending, oldestAt, alerts, persisted] = await Promise.all([
         pendingOps(),
         oldestPendingAt(),
         readSyncAlerts(),
+        // Whether the browser has promised not to evict the queue.
+        navigator.storage?.persisted().then(
+          (v) => v,
+          () => null,
+        ) ?? null,
       ]);
       const ageMs = oldestAt == null ? 0 : Date.now() - oldestAt;
       setSnap({
@@ -43,6 +50,7 @@ export function SyncStatus() {
         ageDays: Math.floor(ageMs / (24 * 3600 * 1000)),
         stuck: pending > 0 && ageMs > 24 * 3600 * 1000 && navigator.onLine,
         alerts,
+        persisted,
       });
     } catch {
       // No IndexedDB (SSR pass, private mode): stay hidden.
@@ -65,7 +73,7 @@ export function SyncStatus() {
   }, [refresh]);
 
   if (!snap) return null;
-  const { pending, ageDays: days, stuck, alerts } = snap;
+  const { pending, ageDays: days, stuck, alerts, persisted } = snap;
   const rejected = alerts.failure;
   if (pending === 0 && !rejected) return null;
 
@@ -75,7 +83,7 @@ export function SyncStatus() {
       : alerts.blocked?.error === "not_authenticated"
         ? "la sesión ha caducado — abre cualquier pantalla para renovarla."
         : alerts.blocked?.error === "bad_request"
-          ? "el servidor no entiende este cliente — recarga la app."
+          ? "el servidor no aceptó la petición — recarga la app; si sigue pasando, exporta una copia de seguridad en Ajustes → Datos."
           : null;
 
   return (
@@ -116,6 +124,9 @@ export function SyncStatus() {
               desde hace <span className="num font-bold">{days}</span>{" "}
               {days === 1 ? "día" : "días"} con red —{" "}
               {blockedCopy ?? "algo lo está bloqueando."}
+              {persisted == null
+                ? null
+                : ` almacenamiento persistente: ${persisted ? "sí" : "no"}.`}
             </>
           ) : blockedCopy ? (
             <> — {blockedCopy}</>
