@@ -59,31 +59,79 @@ function tx<T>(
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
+/* Once IndexedDB fails (private-mode Safari, quota, eviction mid-write)
+ * every operation moves to a tab-lifetime memory store shared by all
+ * callers, so logging and the flush keep working online. The UI asks
+ * `storageHealthy()` before promising "guardada en este móvil". */
+let degradedStore: OfflineStore | null = null;
+
+export function storageHealthy(): boolean {
+  return degradedStore == null;
+}
+
+function degrade(): OfflineStore {
+  degradedStore ??= memoryStore();
+  return degradedStore;
+}
+
 /** The real store. Reuses one connection for the tab's lifetime. */
 export function openOfflineStore(): OfflineStore {
   const db = () => (dbPromise ??= openDb());
+  const run = async <T>(
+    viaFallback: (s: OfflineStore) => Promise<T>,
+    real: () => Promise<T>,
+  ): Promise<T> => {
+    if (degradedStore) return viaFallback(degradedStore);
+    try {
+      return await real();
+    } catch {
+      return viaFallback(degrade());
+    }
+  };
   return {
-    async get<T>(store: StoreName, key: string) {
-      return tx<T | undefined>(await db(), store, "readonly", (s) =>
-        s.get(key),
+    get<T>(store: StoreName, key: string) {
+      return run(
+        (s) => s.get<T>(store, key),
+        async () =>
+          tx<T | undefined>(await db(), store, "readonly", (s) => s.get(key)),
       );
     },
-    async getAll<T>(store: StoreName) {
-      const d = await db();
-      const [keys, values] = await Promise.all([
-        tx<IDBValidKey[]>(d, store, "readonly", (s) => s.getAllKeys()),
-        tx<T[]>(d, store, "readonly", (s) => s.getAll()),
-      ]);
-      return keys.map((key, i) => ({ key: String(key), value: values[i] }));
+    getAll<T>(store: StoreName) {
+      return run(
+        (s) => s.getAll<T>(store),
+        async () => {
+          const d = await db();
+          const [keys, values] = await Promise.all([
+            tx<IDBValidKey[]>(d, store, "readonly", (s) => s.getAllKeys()),
+            tx<T[]>(d, store, "readonly", (s) => s.getAll()),
+          ]);
+          return keys.map((key, i) => ({ key: String(key), value: values[i] }));
+        },
+      );
     },
-    async put(store, key, value) {
-      await tx(await db(), store, "readwrite", (s) => s.put(value, key));
+    put(store, key, value) {
+      return run(
+        (s) => s.put(store, key, value),
+        async () => {
+          await tx(await db(), store, "readwrite", (s) => s.put(value, key));
+        },
+      );
     },
-    async delete(store, key) {
-      await tx(await db(), store, "readwrite", (s) => s.delete(key));
+    delete(store, key) {
+      return run(
+        (s) => s.delete(store, key),
+        async () => {
+          await tx(await db(), store, "readwrite", (s) => s.delete(key));
+        },
+      );
     },
-    async clear(store) {
-      await tx(await db(), store, "readwrite", (s) => s.clear());
+    clear(store) {
+      return run(
+        (s) => s.clear(store),
+        async () => {
+          await tx(await db(), store, "readwrite", (s) => s.clear());
+        },
+      );
     },
   };
 }

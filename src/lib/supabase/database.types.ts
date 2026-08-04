@@ -168,6 +168,36 @@ export type Database = {
           },
         ]
       }
+      body_metrics: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string
+          on_date: string
+          user_id: string
+          waist_cm: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string
+          on_date: string
+          user_id: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string
+          on_date?: string
+          user_id?: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Relationships: []
+      }
       engine_events: {
         Row: {
           created_at: string
@@ -719,6 +749,7 @@ export type Database = {
       }
       program_phases: {
         Row: {
+          auto_deload: boolean | null
           created_at: string
           cycle_weeks: number | null
           emphasis: string
@@ -735,6 +766,7 @@ export type Database = {
           weeks: number
         }
         Insert: {
+          auto_deload?: boolean | null
           created_at?: string
           cycle_weeks?: number | null
           emphasis?: string
@@ -751,6 +783,7 @@ export type Database = {
           weeks: number
         }
         Update: {
+          auto_deload?: boolean | null
           created_at?: string
           cycle_weeks?: number | null
           emphasis?: string
