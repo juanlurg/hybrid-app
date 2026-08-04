@@ -11,6 +11,7 @@ import {
   isDeloadWeek,
   loadableWeight,
   plateBreakdown,
+  repFloor,
   roundToStep,
   setsForWeek,
   workingWeight,
@@ -110,6 +111,7 @@ export function engineConfigFrom(
     autoDeload: profile.auto_deload ?? true,
     progressionMode: "wave",
     pctOfRm: null,
+    deloadOverride: null,
     dumbbellStepKg: Number(profile.dumbbell_step_kg ?? 2.5),
     pulleyStepKg: Number(profile.pulley_step_kg ?? 5),
     kettlebellsKg: bells.length ? bells : [12, 16],
@@ -134,6 +136,7 @@ export function phaseEngineConfig(
     cycleWeeks: phase.cycle_weeks || config.cycleWeeks,
     progressionMode: mode,
     pctOfRm: phase.pct_of_rm == null ? null : Number(phase.pct_of_rm),
+    deloadOverride: phase.auto_deload ?? null,
   };
 }
 
@@ -163,6 +166,8 @@ export interface ResolvedExercise {
   plannedSets: number;
   repMin: number;
   repMax: number;
+  /** The minimum that counts as a miss this week (one under on the 85 % week). */
+  repFloor: number;
   repsLabel: string;
   schemeLabel: string;
   restSeconds: number;
@@ -240,19 +245,23 @@ export function resolveExercise(
   liftsByKey: Map<string, LiftState>,
 ): ResolvedExercise {
   const plannedSets = row.sets;
-  const sets = setsForWeek(plannedSets, week, config);
+  const lift = row.lift_key ? liftsByKey.get(row.lift_key) : undefined;
+  // Third strike on the basic: the forced deload registerFailure promises
+  // — 2 sets at the 70 %-capped weight. `plannedSets` keeps the plan's
+  // own number; a clean session resets failCount and releases the cap.
+  const forcedDeload = row.is_primary && lift != null && lift.failCount >= 3;
+  const sets = forcedDeload
+    ? Math.min(setsForWeek(plannedSets, week, config), 2)
+    : setsForWeek(plannedSets, week, config);
 
   const equipment = (row.equipment ?? null) as Equipment | null;
 
   let weightKg: number | null = null;
   let breakdown: WeightBreakdown | null = null;
 
-  if (row.load_mode === "engine" && row.lift_key) {
-    const lift = liftsByKey.get(row.lift_key);
-    if (lift) {
-      breakdown = workingWeight(lift, week, config);
-      weightKg = breakdown.workingKg;
-    }
+  if (row.load_mode === "engine" && lift) {
+    breakdown = workingWeight(lift, week, config);
+    weightKg = breakdown.workingKg;
   } else if (row.load_mode === "fixed") {
     // What the plan asks for, snapped to what the equipment can load.
     weightKg =
@@ -279,6 +288,7 @@ export function resolveExercise(
     plannedSets,
     repMin: row.rep_min,
     repMax: row.rep_max,
+    repFloor: repFloor(row.rep_min, week, config),
     repsLabel: repsLabel(row.rep_min, row.rep_max),
     schemeLabel: `${sets} × ${repsLabel(row.rep_min, row.rep_max)}${
       row.effort === "seconds" ? "″" : ""
@@ -314,7 +324,9 @@ export function resolveDay(
   dayIndex: number,
 ): ResolvedDay {
   const { ctx, config, phase, week } = opts;
-  const lthr = ctx.profile.lthr ?? 168;
+  // Null until the week-4 LTHR test: blocks render "por sensación"
+  // instead of zones derived from a number nobody measured.
+  const lthr = ctx.profile.lthr;
 
   // The engine runs on the week INSIDE the phase, with the phase's own
   // progression. Absolute weeks made F2 week 1 land mid-cycle on the

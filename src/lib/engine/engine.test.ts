@@ -15,7 +15,7 @@ import {
   regressionLadder,
   registerCleanSession,
   registerFailure,
-  revertFailure,
+  repFloor,
   roundToStep,
   setsForWeek,
   tonnage,
@@ -85,6 +85,40 @@ describe("cycles and waves", () => {
     expect(isDeloadWeek(4, DEFAULT_ENGINE_CONFIG)).toBe(true);
     expect(isDeloadWeek(8, DEFAULT_ENGINE_CONFIG)).toBe(true);
     expect(isDeloadWeek(3, DEFAULT_ENGINE_CONFIG)).toBe(false);
+  });
+
+  it("deloadOverride false: a wave phase that never deloads", () => {
+    const cfg: EngineConfig = { ...DEFAULT_ENGINE_CONFIG, deloadOverride: false };
+    expect(isDeloadWeek(4, cfg)).toBe(false);
+    expect(isDeloadWeek(8, cfg)).toBe(false);
+    // The wave itself is untouched: week 4 still prescribes 70 %.
+    expect(waveFactor(4, cfg)).toBe(0.7);
+    expect(setsForWeek(4, 4, cfg)).toBe(4);
+  });
+
+  it("deloadOverride true: fixed-% deloads on the cycle's last week — sets halve, % stays", () => {
+    const cfg: EngineConfig = {
+      ...DEFAULT_ENGINE_CONFIG,
+      progressionMode: "fixed_pct",
+      pctOfRm: 0.8,
+      deloadOverride: true,
+    };
+    expect(isDeloadWeek(4, cfg)).toBe(true);
+    expect(isDeloadWeek(3, cfg)).toBe(false);
+    expect(waveFactor(4, cfg)).toBe(0.8);
+    expect(setsForWeek(4, 4, cfg)).toBe(2);
+    // The weight itself does not drop: 150 × 0.80 = 120 on the deload week.
+    expect(workingWeightKg(hipThrust, 4, cfg)).toBe(120);
+  });
+
+  it("deloadOverride null keeps the mode defaults", () => {
+    const fixed: EngineConfig = {
+      ...DEFAULT_ENGINE_CONFIG,
+      progressionMode: "fixed_pct",
+      pctOfRm: 0.8,
+    };
+    expect(isDeloadWeek(4, fixed)).toBe(false);
+    expect(isDeloadWeek(4, DEFAULT_ENGINE_CONFIG)).toBe(true);
   });
 
   it("adds the cycle bump once per completed cycle", () => {
@@ -160,6 +194,30 @@ describe("working weight", () => {
     expect(workingWeightKg(hurt, 3)).toBe(120);
   });
 
+  it("third strike caps the factor at 70 % — the forced deload is real", () => {
+    const struck: LiftState = { ...hipThrust, penalty: 0.1, failCount: 3 };
+    // Penalised RM 135; week 3 would be 85 % (114.75 → 115) but the cap
+    // holds it at 135 × 0.70 = 94.5 → 95.
+    const b = workingWeight(struck, 3);
+    expect(b.waveFactor).toBe(0.7);
+    expect(b.workingKg).toBe(95);
+    expect(b.isForcedDeload).toBe(true);
+    // The deload week already prescribes 70 % — the cap changes nothing.
+    const b4 = workingWeight(struck, 4);
+    expect(b4.waveFactor).toBe(0.7);
+    expect(b4.isForcedDeload).toBe(true);
+  });
+
+  it("a clean session releases the forced deload", () => {
+    const struck: LiftState = { ...hipThrust, penalty: 0.1, failCount: 3 };
+    const released = registerCleanSession(struck);
+    expect(released.failCount).toBe(0);
+    const b = workingWeight(released, 3);
+    expect(b.isForcedDeload).toBe(false);
+    // Back on the wave from the (still penalised) RM: 135 × 0.85 → 115.
+    expect(b.workingKg).toBe(115);
+  });
+
   it("exposes every term of the derivation", () => {
     const b = workingWeight(hipThrust, 6);
     expect(b).toMatchObject({
@@ -194,6 +252,23 @@ describe("regression", () => {
     expect(isRangeFailure(4, 5)).toBe(true);
     expect(isRangeFailure(5, 5)).toBe(false);
     expect(isRangeFailure(6, 5)).toBe(false);
+  });
+
+  it("repFloor allows one rep under on the 85 % week only", () => {
+    expect(repFloor(5, 1, DEFAULT_ENGINE_CONFIG)).toBe(5); // 75 %
+    expect(repFloor(5, 2, DEFAULT_ENGINE_CONFIG)).toBe(5); // 80 %
+    expect(repFloor(5, 3, DEFAULT_ENGINE_CONFIG)).toBe(4); // 85 %
+    expect(repFloor(5, 4, DEFAULT_ENGINE_CONFIG)).toBe(5); // 70 %
+    // Never below one rep.
+    expect(repFloor(1, 3, DEFAULT_ENGINE_CONFIG)).toBe(1);
+    // A fixed 85 % block sanctions it every week; a fixed 80 % never.
+    const heavy: EngineConfig = {
+      ...DEFAULT_ENGINE_CONFIG,
+      progressionMode: "fixed_pct",
+      pctOfRm: 0.85,
+    };
+    expect(repFloor(5, 2, heavy)).toBe(4);
+    expect(repFloor(5, 2, { ...heavy, pctOfRm: 0.8 })).toBe(5);
   });
 
   it("freezes the weight on the first miss (standard)", () => {
@@ -252,16 +327,6 @@ describe("regression", () => {
     const c = registerFailure(b.lift, 127.5, 3, cfg);
     expect(c.action).toBe("penalty");
     expect(c.lift.penalty).toBe(0.05);
-  });
-
-  it("undoes the last failure", () => {
-    const failed = registerFailure(hipThrust, 127.5, 3).lift;
-    expect(revertFailure(failed)).toMatchObject({
-      failCount: 0,
-      hold: false,
-      holdAtKg: null,
-      penalty: 0,
-    });
   });
 
   it("clears the counter after a clean session but keeps the penalty", () => {

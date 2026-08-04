@@ -77,7 +77,8 @@ export interface RunBlock {
   title: string;
   zone: string;
   duration: string;
-  hr: string;
+  /** Null when there is no LTHR yet — the screen renders "por sensación". */
+  hr: string | null;
   note: string;
   /** Which accent the coloured rule uses. */
   tone: "easy" | "threshold" | "hard";
@@ -109,11 +110,11 @@ export function prescriptionMinutes(text: string): number {
  * Recognises the shapes actually used by the plan: LTHR test, cruise
  * intervals, hill reps, strides, and plain Z2 running.
  */
-export function runBlocks(text: string, lthr: number): RunBlock[] {
-  const z = hrZones(lthr);
-  const z2 = z.find((x) => x.key === "Z2")!;
-  const z4 = z.find((x) => x.key === "Z4")!;
-  const hrZ2 = `${z2.loBpm}–${z2.hiBpm} ppm`;
+export function runBlocks(text: string, lthr: number | null): RunBlock[] {
+  const z = lthr == null ? null : hrZones(lthr);
+  const z2 = z?.find((x) => x.key === "Z2") ?? null;
+  const z4 = z?.find((x) => x.key === "Z4") ?? null;
+  const hrZ2 = z2 ? `${z2.loBpm}–${z2.hiBpm} ppm` : null;
 
   if (/test\s*lthr/i.test(text)) {
     return lthrTestBlocks(z2, "");
@@ -136,7 +137,7 @@ export function runBlocks(text: string, lthr: number): RunBlock[] {
         title: `${reps} × ${mins}′ cruise intervals`,
         zone: "Z4",
         duration: `${reps * mins}′ + rec 3′`,
-        hr: `${z4.loBpm}–${z4.hiBpm}`,
+        hr: z4 ? `${z4.loBpm}–${z4.hiBpm}` : null,
         note: "Cómodamente duro. Palabras sueltas, no frases.",
         tone: "threshold",
       },
@@ -167,7 +168,7 @@ export function runBlocks(text: string, lthr: number): RunBlock[] {
         title: `Tempo continuo ${mins}′`,
         zone: "Z4",
         duration: `${mins}′`,
-        hr: `${z4.loBpm}–${z4.hiBpm}`,
+        hr: z4 ? `${z4.loBpm}–${z4.hiBpm}` : null,
         note: "El motor del umbral. Ritmo constante, sin picos.",
         tone: "threshold",
       },
@@ -175,7 +176,7 @@ export function runBlocks(text: string, lthr: number): RunBlock[] {
         title: "Vuelta a la calma",
         zone: "Z1",
         duration: "10′",
-        hr: `< ${z2.loBpm}`,
+        hr: z2 ? `< ${z2.loBpm}` : null,
         note: "",
         tone: "easy",
       },
@@ -188,7 +189,7 @@ export function runBlocks(text: string, lthr: number): RunBlock[] {
       title: "Calentamiento",
       zone: "Z1→Z2",
       duration: "10′",
-      hr: `< ${z2.hiBpm}`,
+      hr: z2 ? `< ${z2.hiBpm}` : null,
       note: "",
       tone: "easy",
     },
@@ -230,7 +231,7 @@ export function runBlocks(text: string, lthr: number): RunBlock[] {
     title: "Vuelta a la calma",
     zone: "Z1",
     duration: "5′",
-    hr: `< ${z2.loBpm}`,
+    hr: z2 ? `< ${z2.loBpm}` : null,
     note: "",
     tone: "easy",
   });
@@ -301,13 +302,13 @@ function fmtMin(min: number): string {
 }
 
 /** The canonical 3-block LTHR test, shared with the legacy parser. */
-function lthrTestBlocks(z2: Zone, note: string): RunBlock[] {
+function lthrTestBlocks(z2: Zone | null, note: string): RunBlock[] {
   return [
     {
       title: "Calentamiento",
       zone: "Z1–Z2",
       duration: "15′",
-      hr: `< ${z2.hiBpm}`,
+      hr: z2 ? `< ${z2.hiBpm}` : null,
       note: "Progresivo, terminar suelto.",
       tone: "easy",
     },
@@ -323,7 +324,7 @@ function lthrTestBlocks(z2: Zone, note: string): RunBlock[] {
       title: "Vuelta a la calma",
       zone: "Z1",
       duration: "10′",
-      hr: `< ${z2.loBpm}`,
+      hr: z2 ? `< ${z2.loBpm}` : null,
       note: "",
       tone: "easy",
     },
@@ -337,16 +338,16 @@ function lthrTestBlocks(z2: Zone, note: string): RunBlock[] {
  */
 export function structuredBlocks(
   structure: RunStructure,
-  lthr: number,
+  lthr: number | null,
 ): RunBlock[] {
-  const zones = hrZones(lthr);
-  const zoneBy = (key: ZoneKey) => zones.find((z) => z.key === key)!;
-  const z2 = zoneBy("Z2");
+  const zones = lthr == null ? null : hrZones(lthr);
+  const z2 = zones?.find((z) => z.key === "Z2") ?? null;
 
-  const hrFor = (zone: StructureZone | undefined): string => {
+  const hrFor = (zone: StructureZone | undefined): string | null => {
     if (zone === "RM") return "ritmo de media, no pulso";
     if (!zone) return "";
-    const z = zoneBy(zone);
+    if (!zones) return null;
+    const z = zones.find((x) => x.key === zone)!;
     return z.hiBpm == null ? `≥ ${z.loBpm}` : `${z.loBpm}–${z.hiBpm}`;
   };
 
@@ -462,7 +463,7 @@ export function structuredBlocks(
       title: "Calentamiento",
       zone: "Z2",
       duration: "10′",
-      hr: `${z2.loBpm}–${z2.hiBpm}`,
+      hr: z2 ? `${z2.loBpm}–${z2.hiBpm}` : null,
       note: "",
       tone: "easy",
     });
@@ -473,7 +474,7 @@ export function structuredBlocks(
       title: "Vuelta a la calma",
       zone: "Z1",
       duration: "10′",
-      hr: `< ${z2.loBpm}`,
+      hr: z2 ? `< ${z2.loBpm}` : null,
       note: "",
       tone: "easy",
     });
@@ -482,7 +483,7 @@ export function structuredBlocks(
       title: "Vuelta a la calma",
       zone: "Z1",
       duration: "5′",
-      hr: `< ${z2.loBpm}`,
+      hr: z2 ? `< ${z2.loBpm}` : null,
       note: "",
       tone: "easy",
     });

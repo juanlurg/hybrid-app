@@ -6,6 +6,7 @@ import {
   formatWeight,
   isDeloadWeek,
   isRangeFailure,
+  repFloor,
   setsForWeek,
   tonnage,
   type LiftState,
@@ -15,6 +16,7 @@ import {
   parsePreviousLiftState,
   preSessionLiftState,
   replayEngine,
+  shouldYieldToManualEdit,
 } from "@/lib/engine/replay";
 import { doubleProgression } from "@/lib/engine/progression";
 import { liftStateFrom, phaseEngineConfig } from "@/lib/domain/plan";
@@ -216,9 +218,15 @@ export async function POST(request: Request) {
             seconds: s.seconds,
             rir: s.rir,
             weight_kg: s.weightKg,
-            missed_range: exercise
-              ? isRangeFailure(achieved, exercise.rep_min)
-              : false,
+            // A substituted set (pain-day swap) never counts as a miss;
+            // otherwise the floor allows one rep under on the 85 % week.
+            missed_range:
+              exercise && !s.substituted
+                ? isRangeFailure(
+                    achieved,
+                    repFloor(exercise.rep_min, session.week, phaseConfig),
+                  )
+                : false,
             logged_at: s.loggedAt,
           };
         });
@@ -257,7 +265,9 @@ export async function POST(request: Request) {
 
       const { data: dbLogs } = await supabase
         .from("set_logs")
-        .select("program_exercise_id, position, set_index, reps, seconds, weight_kg")
+        .select(
+          "program_exercise_id, position, set_index, reps, seconds, weight_kg, missed_range",
+        )
         .eq("session_id", sessionId)
         .order("set_index");
 
@@ -297,6 +307,23 @@ export async function POST(request: Request) {
             if (m) undone.push({ position: +m[1], setIndex: +m[2] });
           }
 
+          // Substituted flags live on the envelope, never in set_logs.
+          // For sets from an earlier flush the stored missed_range is the
+          // tell: this route computes it with the same floor, so a stored
+          // false on reps under the floor means the writing flush was
+          // told "substituted" — infer it back so a later finish-only
+          // flush cannot mint the fail events the first one refused.
+          const substitutedKeys = new Set(
+            env.sets
+              .filter((s) => s.substituted)
+              .map((s) => `${s.position}:${s.setIndex}`),
+          );
+          const primaryFloor = repFloor(
+            primaryRow.rep_min,
+            session.week,
+            phaseConfig,
+          );
+
           const replay = replayEngine({
             sessionId,
             lift: pre,
@@ -313,6 +340,11 @@ export async function POST(request: Request) {
               reps: l.reps,
               seconds: l.seconds,
               weightKg: l.weight_kg == null ? null : Number(l.weight_kg),
+              substituted:
+                substitutedKeys.has(`${l.position}:${l.set_index}`) ||
+                (l.program_exercise_id === primaryRow.id &&
+                  !l.missed_range &&
+                  isRangeFailure(l.reps ?? l.seconds ?? 0, primaryFloor)),
             })),
             undone,
             week: session.week,
@@ -376,10 +408,32 @@ export async function POST(request: Request) {
             staleReverted > 0 ||
             replay.released;
           if (touched && replay.lift) {
-            await supabase
-              .from("lifts")
-              .update(persistLift(replay.lift))
-              .eq("id", liftRow.id);
+            // A manual RM edit or re-test made after this session's fail
+            // events were first persisted is newer truth than the fold:
+            // preSessionLiftState rewinds to the fail event's `previous`
+            // snapshot as absolute state, and manual_rm/rm_retest events
+            // carry no session_id, so the fold cannot see them. A late
+            // re-flush must not wipe the edit — the lifts row-write
+            // yields; set_logs, statuses and this session's events land
+            // as usual.
+            let yieldsToEdit = false;
+            if (failEvents.length > 0) {
+              const { data: manualEdits } = await supabase
+                .from("engine_events")
+                .select("created_at")
+                .eq("lift_id", liftRow.id)
+                .in("kind", ["manual_rm", "rm_retest"]);
+              yieldsToEdit = shouldYieldToManualEdit(
+                failEvents.map((e) => e.created_at),
+                (manualEdits ?? []).map((m) => m.created_at),
+              );
+            }
+            if (!yieldsToEdit) {
+              await supabase
+                .from("lifts")
+                .update(persistLift(replay.lift))
+                .eq("id", liftRow.id);
+            }
           }
 
           if (replay.released) {
@@ -410,8 +464,6 @@ export async function POST(request: Request) {
       /* ── finish ───────────────────────────────────────────── */
       let status = session.status;
       if (env.finish) {
-        const alreadyClosed =
-          session.status === "done" || session.status === "partial";
         const plannedSets = slotExercises.reduce(
           (acc, e) => acc + setsForWeek(e.sets, session.week, phaseConfig),
           0,
@@ -454,17 +506,22 @@ export async function POST(request: Request) {
           .eq("id", sessionId);
         if (error) throw new Error(error.message);
 
-        // Double progression for accessories — deduped per exercise so
-        // a repeated flush can never award the jump twice. Never on the
-        // deload (topping a halved-volume session proves nothing) and
-        // never for an archived programme.
-        if (
-          !alreadyClosed &&
-          !archived &&
-          !isDeloadWeek(session.week, phaseConfig)
-        ) {
+        // Double progression for accessories — the `:bump:` dedup key
+        // (insert-or-nothing, weight written only on a fresh insert) is
+        // what makes the award at-most-once, so a session already marked
+        // done still enters the loop: a first flush that died between
+        // the status write and the bumps must land them on retry. Never
+        // on the deload (topping a halved-volume session proves nothing)
+        // and never for an archived programme.
+        if (!archived && !isDeloadWeek(session.week, phaseConfig)) {
+          const substitutedExercises = new Set(
+            env.sets.filter((s) => s.substituted).map((s) => s.programExerciseId),
+          );
           for (const e of slotExercises) {
             if (e.is_primary) continue;
+            // Pain-day swap: the logs are another exercise's, so they
+            // prove nothing about this load.
+            if (substitutedExercises.has(e.id)) continue;
             if (e.load_mode !== "fixed" && e.load_mode !== "weighted_bodyweight") {
               continue;
             }

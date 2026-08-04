@@ -104,6 +104,25 @@ describe("buildEnvelopes output vs the /api/sync schema", () => {
     expect(parsed.success && parsed.data.sessions[0].key).toBeNull();
   });
 
+  it("the substituted flag round-trips, and old envelopes without it still parse", () => {
+    const q = enqueue(EMPTY_QUEUE, { ...set, substituted: true });
+    const parts = buildEnvelopes(q, new Map([[LOCAL_ID, KEY]]));
+    const parsed = syncRequestSchema.safeParse(request(parts));
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.sessions[0].sets[0].substituted).toBe(
+      true,
+    );
+
+    // An envelope serialised before the field existed (queued pre-deploy).
+    const legacy = buildEnvelopes(enqueue(EMPTY_QUEUE, set), new Map([[LOCAL_ID, KEY]]));
+    delete (legacy.sessions[0].sets[0] as { substituted?: boolean }).substituted;
+    const legacyParsed = syncRequestSchema.safeParse(request(legacy));
+    expect(legacyParsed.success).toBe(true);
+    expect(
+      legacyParsed.success && legacyParsed.data.sessions[0].sets[0].substituted,
+    ).toBeUndefined();
+  });
+
   it("run and mobility envelopes parse", () => {
     let q = enqueue(EMPTY_QUEUE, {
       kind: "run_log",

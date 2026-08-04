@@ -67,6 +67,19 @@ describe("local session reducers", () => {
     expect(s.rest).toBeNull();
   });
 
+  it("keeps the substituted flag so the local fold agrees with the server", () => {
+    const s = recordLocalSet(base(), {
+      position: 1, setIndex: 0, value: 3, missed: false, weightKg: 40,
+      rir: null, timed: false, substituted: true, loggedAt: "t",
+    });
+    expect(s.logs["1:0"].substituted).toBe(true);
+    const plain = recordLocalSet(base(), {
+      position: 1, setIndex: 0, value: 5, missed: false, weightKg: 90,
+      rir: null, timed: false, loggedAt: "t",
+    });
+    expect(plain.logs["1:0"].substituted).toBe(false);
+  });
+
   it("undo is recorded once, no matter how many taps", () => {
     let s = undoLocalFailure(base(), 1, 0);
     s = undoLocalFailure(s, 1, 0);

@@ -7,7 +7,9 @@ import {
   hrZones,
   prescriptionMinutes,
   runBlocks,
+  structuredBlocks,
   zoneRange,
+  type RunStructure,
 } from "./run";
 
 describe("heart-rate zones", () => {
@@ -76,6 +78,46 @@ describe("run blocks", () => {
     const b = runBlocks("90' Z2, últimos 10' progresivos", 168);
     expect(b[1].title).toBe("Rodaje continuo");
     expect(b[1].hr).toBe("136–150 ppm");
+  });
+});
+
+describe("no LTHR yet — before the week-4 test", () => {
+  it("runBlocks keeps the structure but nulls every bpm label", () => {
+    const b = runBlocks('45\' Z2 + 6 cuestas 20"', null);
+    expect(b.map((x) => x.title)).toEqual(
+      runBlocks('45\' Z2 + 6 cuestas 20"', 168).map((x) => x.title),
+    );
+    expect(b[0].hr).toBeNull();
+    expect(b[1].hr).toBeNull();
+    // Labels that never depended on LTHR survive.
+    const hills = b.find((x) => x.title.includes("cuesta"))!;
+    expect(hills.hr).toBe("sin mirar el pulso");
+  });
+
+  it("cruise intervals and the LTHR test also render without zones", () => {
+    const cruise = runBlocks("10' Z2 + 3×8' Z4 (rec 3') + 10' Z2", null);
+    expect(cruise[1].title).toBe("3 × 8′ cruise intervals");
+    expect(cruise.every((x) => x.hr === null)).toBe(true);
+    const test = runBlocks("Test LTHR 30'", null);
+    expect(test[1].hr).toBe("llano, constante");
+    expect(test[0].hr).toBeNull();
+  });
+
+  it("structuredBlocks nulls zone bands but keeps RM and feel labels", () => {
+    const s: RunStructure = [
+      { kind: "steady", workMin: 45, zone: "Z2" },
+      { kind: "interval", repeat: 3, workKm: 3, zone: "RM", recMin: 3 },
+      { kind: "hills", repeat: 6, workSec: 20 },
+    ];
+    const blocks = structuredBlocks(s, null);
+    expect(blocks.find((b) => b.title === "Rodaje continuo")!.hr).toBeNull();
+    expect(blocks.find((b) => b.title === "3 × 3 km a RM")!.hr).toBe(
+      "ritmo de media, no pulso",
+    );
+    expect(blocks.find((b) => b.title.includes("cuesta"))!.hr).toBe(
+      "sin mirar el pulso",
+    );
+    expect(blocks.at(-1)!.hr).toBeNull(); // cool-down
   });
 });
 

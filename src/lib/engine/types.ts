@@ -85,6 +85,13 @@ export interface EngineConfig {
   progressionMode: ProgressionMode;
   /** The fixed multiplier when `progressionMode` is `fixed_pct`. */
   pctOfRm: number | null;
+  /**
+   * Per-phase deload override (`program_phases.auto_deload`). Null =
+   * the mode's default: wave deloads on the last week of each cycle,
+   * fixed_pct never. True forces the deload (sets halve, the % stays);
+   * false makes a wave phase that never deloads.
+   */
+  deloadOverride: boolean | null;
   /** Smallest jump per dumbbell the athlete owns. */
   dumbbellStepKg: number;
   /** Pin spacing of the pulley stack. */
@@ -111,6 +118,7 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   autoDeload: true,
   progressionMode: "wave",
   pctOfRm: null,
+  deloadOverride: null,
   dumbbellStepKg: 2.5,
   pulleyStepKg: 5,
   kettlebellsKg: DEFAULT_KETTLEBELLS,
@@ -132,6 +140,8 @@ export interface WeightBreakdown {
   waveFactor: number;
   /** True when the wave step is the deload. */
   isDeload: boolean;
+  /** Third strike: the factor is capped at 70 % until a clean session. */
+  isForcedDeload: boolean;
   /** True when the engine is repeating a frozen weight instead of computing. */
   isHeld: boolean;
   /** What the engine *would* have prescribed if the weight were not held. */

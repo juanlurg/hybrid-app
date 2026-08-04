@@ -328,9 +328,18 @@ export async function adjustLiftRm(
   );
 
   const supabase = await createClient();
+  // Like the re-test path: a hand-set RM overrides the engine's opinion,
+  // so the penalty/hold machinery resets with it — otherwise "los pesos
+  // futuros se recalculan" from a state the athlete just corrected.
   const { error } = await supabase
     .from("lifts")
-    .update({ e1rm_kg: next })
+    .update({
+      e1rm_kg: next,
+      penalty: 0,
+      fail_count: 0,
+      hold: false,
+      hold_at_kg: null,
+    })
     .eq("id", liftId);
   if (error) return { ok: false, error: error.message };
 
@@ -341,7 +350,7 @@ export async function adjustLiftRm(
     week: athlete.placement.absoluteWeek,
     kind: "manual_rm",
     title: `${lift.name} · RM ajustada a mano`,
-    detail: `${formatWeight(Number(lift.e1rm_kg))} kg → ${formatWeight(next)} kg. Los pesos futuros se recalculan; los ya registrados no cambian.`,
+    detail: `${formatWeight(Number(lift.e1rm_kg))} kg → ${formatWeight(next)} kg. La ola se recalcula con la RM nueva; el contador de fallos vuelve a cero y el peso deja de estar en espera. Los pesos ya registrados no cambian.`,
   });
 
   revalidatePath("/", "layout");

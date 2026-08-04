@@ -13,6 +13,8 @@ export interface LocalSetEntry {
   rir: number | null;
   /** True when the value counts seconds (isometrics), not reps. */
   timed: boolean;
+  /** Pain-day swap: mirrors the queue op so the local fold agrees with /api/sync. */
+  substituted?: boolean;
   loggedAt: string;
 }
 
@@ -67,6 +69,7 @@ export function recordLocalSet(
     weightKg: number | null;
     rir: number | null;
     timed: boolean;
+    substituted?: boolean;
     loggedAt: string;
   },
 ): LocalSessionState {
@@ -80,6 +83,7 @@ export function recordLocalSet(
         weightKg: input.weightKg,
         rir: input.rir,
         timed: input.timed,
+        substituted: input.substituted ?? false,
         loggedAt: input.loggedAt,
       },
     },

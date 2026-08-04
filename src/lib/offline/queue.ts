@@ -37,6 +37,8 @@ export type QueueOp =
       seconds: number | null;
       rir: number | null;
       weightKg: number | null;
+      /** Pain-day swap: the set is history, but the engine holds still. */
+      substituted?: boolean;
       loggedAt: string;
     }
   | {
@@ -141,6 +143,7 @@ export interface SessionEnvelope {
     seconds: number | null;
     rir: number | null;
     weightKg: number | null;
+    substituted?: boolean;
     loggedAt: string;
   }>;
   undoneFailures: Array<{ position: number; setIndex: number }>;
@@ -259,6 +262,7 @@ export function buildEnvelopes(
           seconds: op.seconds,
           rir: op.rir,
           weightKg: op.weightKg,
+          substituted: op.substituted ?? false,
           loggedAt: op.loggedAt,
         });
         env.opKeys.push(k);

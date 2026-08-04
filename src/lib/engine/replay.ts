@@ -14,6 +14,7 @@ import {
   isRangeFailure,
   registerFailure,
   registerCleanSession,
+  repFloor,
   workingWeight,
 } from ".";
 import type { EngineConfig, LiftState, RegressionOutcome } from "./types";
@@ -25,6 +26,8 @@ export interface ReplaySetLog {
   reps: number | null;
   seconds: number | null;
   weightKg: number | null;
+  /** The athlete swapped the exercise (pain day) — the log proves nothing. */
+  substituted?: boolean;
 }
 
 export interface ReplayPrimary {
@@ -105,13 +108,30 @@ export function replayEngine(input: ReplayInput): ReplayResult {
     .filter((l) => l.programExerciseId === primary.programExerciseId)
     .sort((a, b) => a.setIndex - b.setIndex);
 
+  // Pain-day protocol: a substituted set on the basic proves nothing in
+  // either direction, so the whole session neither fails nor cleans the
+  // lift — the engine holds still until a real session.
+  if (primaryLogs.some((l) => l.substituted)) {
+    return {
+      lift: input.lift,
+      events: [],
+      clean: false,
+      released: false,
+      cleanDedupKey,
+      banner: null,
+    };
+  }
+
+  // One rep under the range is sanctioned on the 85 % week.
+  const floor = repFloor(primary.repMin, week, config);
+
   let lift = input.lift;
   const events: ReplayEvent[] = [];
   let banner: ReplayResult["banner"] = null;
 
   for (const log of primaryLogs) {
     const achieved = log.reps ?? log.seconds ?? 0;
-    if (!isRangeFailure(achieved, primary.repMin)) continue;
+    if (!isRangeFailure(achieved, floor)) continue;
 
     const undone = undoneSet.has(`${log.position}:${log.setIndex}`);
     const previous = lift;
@@ -143,9 +163,7 @@ export function replayEngine(input: ReplayInput): ReplayResult {
   const liveMisses = events.filter((e) => !e.undone).length;
   const clean =
     primaryLogs.length >= primary.sets &&
-    primaryLogs.every((l) =>
-      !isRangeFailure(l.reps ?? l.seconds ?? 0, primary.repMin),
-    );
+    primaryLogs.every((l) => !isRangeFailure(l.reps ?? l.seconds ?? 0, floor));
 
   let released = false;
   if (clean && liveMisses === 0) {
@@ -202,6 +220,26 @@ export function parsePreviousLiftState(
  * This is what makes the server fold idempotent: a re-flush starts
  * from the same place the first flush did.
  */
+/**
+ * True when a manual RM edit or re-test postdates the earliest persisted
+ * fail event of this session. The fold rewinds to that event's `previous`
+ * snapshot as ABSOLUTE lift state, and manual_rm/rm_retest events carry
+ * no session_id, so the fold cannot see them: persisting its result on a
+ * late re-flush would wipe the newer edit. /api/sync skips the lifts
+ * write when this returns true — sets, statuses and the session's own
+ * events still land.
+ */
+export function shouldYieldToManualEdit(
+  failEventTimes: string[],
+  manualEditTimes: string[],
+): boolean {
+  if (failEventTimes.length === 0 || manualEditTimes.length === 0) {
+    return false;
+  }
+  const earliest = [...failEventTimes].sort()[0];
+  return manualEditTimes.some((t) => t > earliest);
+}
+
 export function preSessionLiftState(
   current: LiftState,
   sessionEvents: Array<{

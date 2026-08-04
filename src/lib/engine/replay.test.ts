@@ -6,6 +6,7 @@ import {
   parsePreviousLiftState,
   preSessionLiftState,
   replayEngine,
+  shouldYieldToManualEdit,
   type ReplayInput,
 } from "./replay";
 
@@ -144,6 +145,62 @@ describe("replayEngine", () => {
   it("no primary or no lift → nothing to do", () => {
     expect(replayEngine(input({ primary: null })).lift).toBeNull();
     expect(replayEngine(input({ lift: null })).events).toHaveLength(0);
+  });
+
+  it("one rep under the range on the 85 % week is not a miss", () => {
+    // Week 3 = wave[2] = 0.85: the floor drops to repMin − 1.
+    const r = replayEngine(
+      input({ week: 3, logs: [log(0, 4), log(1, 5), log(2, 5), log(3, 5)] }),
+    );
+    expect(r.events).toHaveLength(0);
+    expect(r.clean).toBe(true);
+    // Two under still burns the strike.
+    const miss = replayEngine(input({ week: 3, logs: [log(0, 3)] }));
+    expect(miss.events).toHaveLength(1);
+    // On the 75 % week the same 4 reps is a plain miss.
+    expect(replayEngine(input({ week: 1, logs: [log(0, 4)] })).events).toHaveLength(1);
+  });
+
+  it("a substituted primary set holds the engine still — no fail, no clean", () => {
+    const held: LiftState = { ...squat, hold: true, holdAtKg: 90, failCount: 1 };
+    const r = replayEngine(
+      input({
+        lift: held,
+        logs: [
+          { ...log(0, 3), substituted: true },
+          log(1, 5),
+          log(2, 5),
+          log(3, 5),
+        ],
+      }),
+    );
+    // The under-range set creates no event, and the full session does
+    // not release the hold either: pain-day logs prove nothing.
+    expect(r.events).toHaveLength(0);
+    expect(r.clean).toBe(false);
+    expect(r.released).toBe(false);
+    expect(r.banner).toBeNull();
+    expect(r.lift).toEqual(held);
+  });
+});
+
+describe("shouldYieldToManualEdit", () => {
+  it("yields only when an edit postdates the earliest fail event", () => {
+    expect(shouldYieldToManualEdit(["2026-08-01T10:00:00Z"], ["2026-08-02T09:00:00Z"])).toBe(true);
+    expect(shouldYieldToManualEdit(["2026-08-01T10:00:00Z"], ["2026-08-01T09:00:00Z"])).toBe(false);
+    // The EARLIEST fail event is the rewind target, so an edit between
+    // two fail events still yields.
+    expect(
+      shouldYieldToManualEdit(
+        ["2026-08-01T10:00:00Z", "2026-08-03T10:00:00Z"],
+        ["2026-08-02T09:00:00Z"],
+      ),
+    ).toBe(true);
+  });
+
+  it("never yields without fail events or without edits", () => {
+    expect(shouldYieldToManualEdit([], ["2026-08-02T09:00:00Z"])).toBe(false);
+    expect(shouldYieldToManualEdit(["2026-08-01T10:00:00Z"], [])).toBe(false);
   });
 });
 

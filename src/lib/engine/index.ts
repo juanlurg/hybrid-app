@@ -72,10 +72,16 @@ export function waveFactor(week: number, config: EngineConfig): number {
   return wave[weekInCycle(week, config.cycleWeeks) % wave.length];
 }
 
-/** The last week of every cycle is the deload. Fixed-% blocks never deload. */
+/**
+ * The last week of every cycle is the deload. By default fixed-% blocks
+ * never deload and wave blocks always do; `deloadOverride` (the phase's
+ * `auto_deload`) forces either behaviour.
+ */
 export function isDeloadWeek(week: number, config: EngineConfig): boolean {
-  if (config.progressionMode === "fixed_pct") return false;
-  return weekInCycle(week, config.cycleWeeks) === config.cycleWeeks - 1;
+  if (weekInCycle(week, config.cycleWeeks) !== config.cycleWeeks - 1) {
+    return false;
+  }
+  return config.deloadOverride ?? config.progressionMode !== "fixed_pct";
 }
 
 /** kg added to the e1RM because earlier cycles closed cleanly. */
@@ -106,7 +112,13 @@ export function workingWeight(
   week: number,
   config: EngineConfig = DEFAULT_ENGINE_CONFIG,
 ): WeightBreakdown {
-  const factor = waveFactor(week, config);
+  // Third strike: the forced deload registerFailure promises. The factor
+  // caps at 70 % (and resolveExercise caps the sets at 2) until a clean
+  // session resets failCount via registerCleanSession.
+  const forcedDeload = lift.failCount >= 3;
+  const factor = forcedDeload
+    ? Math.min(waveFactor(week, config), 0.7)
+    : waveFactor(week, config);
   const bump = cycleBump(lift.kind, week, config);
   const penalised = lift.e1rmKg * (1 - lift.penalty);
   const uncapped = roundToStep((penalised + bump) * factor, config.roundingKg);
@@ -127,6 +139,7 @@ export function workingWeight(
         : cycleOf(week, config.cycleWeeks),
     waveFactor: factor,
     isDeload: isDeloadWeek(week, config),
+    isForcedDeload: forcedDeload,
     isHeld: held,
     uncappedKg: uncapped,
     roundingKg: config.roundingKg,
@@ -190,6 +203,19 @@ export function isRangeFailure(reps: number, repMin: number): boolean {
 }
 
 /**
+ * The minimum that actually counts as a failure this week. The plan
+ * sanctions dropping one rep below the range on the 85 % week; only a
+ * set under THIS floor burns a strike.
+ */
+export function repFloor(
+  repMin: number,
+  week: number,
+  config: EngineConfig,
+): number {
+  return waveFactor(week, config) >= 0.849 ? Math.max(1, repMin - 1) : repMin;
+}
+
+/**
  * Apply one range failure on the basic lift of the day.
  *
  * Strike 1 (standard rule): freeze the weight — the athlete repeats it.
@@ -247,17 +273,6 @@ export function registerFailure(
       `RM estimada a ${formatWeight(roundToStep(lift.e1rmKg * (1 - penalty), config.roundingKg))} kg. ` +
       `La ola se recalcula: ${formatWeight(recomputed)} kg` +
       (forcedDeload ? " + descarga forzada (2 series @ 70 %)." : "."),
-  };
-}
-
-/** Undo the last failure — the banner's "deshacer". */
-export function revertFailure(lift: LiftState): LiftState {
-  return {
-    ...lift,
-    failCount: Math.max(0, lift.failCount - 1),
-    penalty: 0,
-    hold: false,
-    holdAtKg: null,
   };
 }
 

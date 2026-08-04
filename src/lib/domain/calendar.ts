@@ -71,8 +71,18 @@ export function startOfWeek(iso: IsoDate): IsoDate {
   return addDays(iso, -dayIndexOf(iso));
 }
 
+/**
+ * "Today" in the athlete's timezone, not the server's — a Vercel region
+ * on UTC flipped the day at 2 am Madrid time. Single-athlete app, so the
+ * zone is a constant on purpose; a profile column would be a config knob
+ * nobody asked for. en-CA formats as YYYY-MM-DD.
+ */
+const MADRID_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Madrid",
+});
+
 export function todayIso(): IsoDate {
-  return toIsoDate(new Date());
+  return MADRID_DAY.format(new Date());
 }
 
 /** "MIÉ 14 OCT" */

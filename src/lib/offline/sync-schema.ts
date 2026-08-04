@@ -45,6 +45,8 @@ export const setSchema = z.object({
   seconds: z.number().int().min(0).max(600).nullable(),
   rir: z.number().min(0).max(10).nullable(),
   weightKg: z.number().min(0).max(1000).nullable(),
+  /** Absent on envelopes queued before pain-day swaps existed. */
+  substituted: z.boolean().optional(),
   loggedAt: z.string(),
 });
 

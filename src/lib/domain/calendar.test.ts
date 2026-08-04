@@ -11,6 +11,7 @@ import {
   placeAbsoluteWeek,
   placeDate,
   startOfWeek,
+  todayIso,
   totalWeeks,
   weeksUntil,
   type PhaseSpan,
@@ -55,6 +56,15 @@ describe("date maths", () => {
   it("formats the way the screens do", () => {
     expect(formatDayLong("2026-10-14")).toBe("MIÉ 14 OCT");
     expect(formatSeasonRange("2026-07-27", "2027-04-25")).toBe("jul 26 → abr 27");
+  });
+
+  it("today is Madrid's day, whatever the server clock says", () => {
+    expect(todayIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(todayIso()).toBe(
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(
+        new Date(),
+      ),
+    );
   });
 });
 

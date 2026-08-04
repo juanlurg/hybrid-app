@@ -40,6 +40,7 @@ function phase(over: Partial<PhaseRow> = {}): PhaseRow {
     cycle_weeks: null,
     progression_mode: "wave",
     pct_of_rm: null,
+    auto_deload: null,
     ...over,
   } as PhaseRow;
 }
@@ -104,6 +105,50 @@ describe("phaseEngineConfig · fixed_pct mode", () => {
     const held: LiftState = { ...squat, hold: true, holdAtKg: 90 };
     expect(workingWeight(held, 3, cfg).workingKg).toBe(90);
     expect(workingWeight(held, 3, cfg).isHeld).toBe(true);
+  });
+});
+
+describe("phaseEngineConfig · auto_deload override", () => {
+  it("maps program_phases.auto_deload onto deloadOverride", () => {
+    expect(
+      phaseEngineConfig(DEFAULT_ENGINE_CONFIG, phase()).deloadOverride,
+    ).toBeNull();
+    expect(
+      phaseEngineConfig(DEFAULT_ENGINE_CONFIG, phase({ auto_deload: true }))
+        .deloadOverride,
+    ).toBe(true);
+    expect(
+      phaseEngineConfig(DEFAULT_ENGINE_CONFIG, phase({ auto_deload: false }))
+        .deloadOverride,
+    ).toBe(false);
+  });
+
+  it("F4: fixed 80 % with auto_deload=true — sets halve every 4th week, the % stays", () => {
+    const f4 = phase({
+      key: "F4",
+      progression_mode: "fixed_pct",
+      pct_of_rm: 0.8,
+      auto_deload: true,
+    });
+    const cfg = phaseEngineConfig(DEFAULT_ENGINE_CONFIG, f4);
+    expect(isDeloadWeek(4, cfg)).toBe(true);
+    expect(isDeloadWeek(8, cfg)).toBe(true);
+    expect(isDeloadWeek(5, cfg)).toBe(false);
+    expect(setsForWeek(3, 4, cfg)).toBe(2);
+    // waveFactor stays pctOfRm on the deload week: 120 × 0.80 → 95.
+    expect(waveFactor(4, cfg)).toBe(0.8);
+    expect(workingWeight(squat, 4, cfg).workingKg).toBe(95);
+  });
+
+  it("a wave phase with auto_deload=false never deloads", () => {
+    const cfg = phaseEngineConfig(
+      DEFAULT_ENGINE_CONFIG,
+      phase({ auto_deload: false }),
+    );
+    expect(isDeloadWeek(4, cfg)).toBe(false);
+    expect(setsForWeek(4, 4, cfg)).toBe(4);
+    // Week 4 still prescribes the wave's own 70 % step.
+    expect(waveFactor(4, cfg)).toBe(0.7);
   });
 });
 
