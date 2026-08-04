@@ -5,10 +5,21 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { PlateChips } from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
-import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
-import { formatWeight, type EngineConfig, type LiftState } from "@/lib/engine";
+import {
+  RestBar,
+  RestOverdue,
+  useRestTimer,
+  useWakeLock,
+} from "@/components/session/rest-timer";
+import {
+  formatWeight,
+  warmupSets,
+  type EngineConfig,
+  type LiftState,
+} from "@/lib/engine";
 import { replayEngine, type ReplayPrimary } from "@/lib/engine/replay";
 import type { ResolvedExercise } from "@/lib/domain/plan";
+import { storageHealthy } from "@/lib/offline/db";
 import {
   createLocalSession,
   recordLocalSet,
@@ -45,8 +56,40 @@ export interface ReplayContext {
 /** `value` is reps or seconds, whichever the exercise's effort counts. */
 type LogMap = Record<string, { value: number; missed: boolean }>;
 
+/** A catalogue row that substitutes a planned exercise ("me molesta"). */
+export interface SubstituteOption {
+  slug: string;
+  name: string;
+  cue: string | null;
+  equipment: string | null;
+}
+
+/** Substitute options per program exercise id. */
+export type SubstitutesMap = Record<string, SubstituteOption[]>;
+
+/** The chosen swap. The weight is athlete input, never an engine number. */
+interface LocalSubstitution {
+  slug: string;
+  name: string;
+  weightKg: number | null;
+}
+
+/**
+ * Runner-owned extra that rides along inside the persisted local
+ * session: which swap is active per exercise (the per-set flag lives on
+ * each `LocalSetEntry.substituted`). An optional field the offline
+ * reducers spread through untouched, so old records stay valid.
+ */
+type RunnerLocalState = LocalSessionState & {
+  /** By exercise position — same keying as `logs`. */
+  substitutions?: Record<string, LocalSubstitution>;
+};
+
 const keyOf = (exerciseId: string, setIndex: number) =>
   `${exerciseId}:${setIndex}`;
+
+/** Pre-lift glute activation — local ticks only, never logged. */
+const ACTIVATION_ITEMS = ["clamshells", "monster walk", "puente de glúteo"];
 
 export function SessionRunner({
   sessionId,
@@ -62,6 +105,7 @@ export function SessionRunner({
   keepAwake,
   showPlates,
   targetRir,
+  substitutes = {},
 }: {
   sessionId: string;
   sessionKey: SessionKey;
@@ -77,6 +121,8 @@ export function SessionRunner({
   keepAwake: boolean;
   showPlates: boolean;
   targetRir: string;
+  /** Absent offline — the swap chosen online still restores by name. */
+  substitutes?: SubstitutesMap;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -88,6 +134,18 @@ export function SessionRunner({
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [finishNotes, setFinishNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /* "me molesta": chosen swap per program exercise id, plus which set
+     ops were logged under one — those never move the engine. */
+  const [subs, setSubs] = useState<Record<string, LocalSubstitution>>({});
+  const [substitutedSets, setSubstitutedSets] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [subPickerOpen, setSubPickerOpen] = useState(false);
+  /* Pre-session block: collapsed by default, ticks are local only. */
+  const [warmupOpen, setWarmupOpen] = useState(false);
+  const [activationDone, setActivationDone] = useState<boolean[]>(() =>
+    ACTIVATION_ITEMS.map(() => false),
+  );
 
   const [logs, setLogs] = useState<LogMap>(() => {
     const map: LogMap = {};
@@ -103,13 +161,13 @@ export function SessionRunner({
   });
 
   /** The persisted mirror of this session — survives a killed tab. */
-  const localRef = useRef<LocalSessionState | null>(null);
+  const localRef = useRef<RunnerLocalState | null>(null);
   async function withLocal(
-    mutate: (s: LocalSessionState) => LocalSessionState,
+    mutate: (s: RunnerLocalState) => RunnerLocalState,
   ): Promise<void> {
-    let s =
+    let s: RunnerLocalState =
       localRef.current ??
-      (await getLocalSession(sessionId)) ??
+      ((await getLocalSession(sessionId)) as RunnerLocalState | undefined) ??
       createLocalSession(sessionId, sessionKey, new Date().toISOString());
     s = mutate(s);
     localRef.current = s;
@@ -131,6 +189,9 @@ export function SessionRunner({
     for (let i = 0; i < primaryExercise.sets; i++) {
       const entry = logs[keyOf(primaryExercise.id, i)];
       if (!entry) continue;
+      // Sets logged under a substitution never move the engine — the
+      // server skips them too (queue op `substituted`).
+      if (substitutedSets.has(`${primaryExercise.position}:${i}`)) continue;
       replayLogs.push({
         programExerciseId: primaryExercise.id,
         position: primaryExercise.position,
@@ -149,7 +210,7 @@ export function SessionRunner({
       week: replayCtx.week,
       config: replayCtx.config,
     });
-  }, [exercises, logs, undone, replayCtx, sessionId]);
+  }, [exercises, logs, undone, substitutedSets, replayCtx, sessionId]);
 
   const lastLiveFailure =
     replay?.events.filter((e) => !e.undone).at(-1)?.sourceSet ?? null;
@@ -173,7 +234,7 @@ export function SessionRunner({
   const [pendingRir, setPendingRir] = useState<number | null>(null);
   const exercise = exercises[Math.min(exIndex, exercises.length - 1)];
 
-  const { rest, flash, start, stop, extend, resume } = useRestTimer({
+  const { rest, flash, overdue, start, stop, extend, resume } = useRestTimer({
     sound,
     vibration,
     // Persist the deadline: a reload mid-rest keeps counting.
@@ -186,7 +247,9 @@ export function SessionRunner({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const local = await getLocalSession(sessionId);
+      const local = (await getLocalSession(sessionId)) as
+        | RunnerLocalState
+        | undefined;
       if (!local || cancelled) return;
       localRef.current = local;
       setLogs((prev) => {
@@ -211,7 +274,28 @@ export function SessionRunner({
           ];
         });
       }
-      if (local.rest && local.rest.deadlineEpochMs > Date.now()) {
+      // A reload keeps the chosen swaps — names travel in the entry, so
+      // this works offline where the catalogue is out of reach.
+      if (local.substitutions) {
+        const restored: Record<string, LocalSubstitution> = {};
+        for (const [pos, entry] of Object.entries(local.substitutions)) {
+          const ex = exercises.find((e) => e.position === Number(pos));
+          if (ex) restored[ex.id] = entry;
+        }
+        if (Object.keys(restored).length) {
+          setSubs((prev) => ({ ...restored, ...prev }));
+        }
+      }
+      // Which sets were logged under a swap lives on each entry.
+      const flagged = Object.entries(local.logs)
+        .filter(([, entry]) => entry.substituted)
+        .map(([k]) => k);
+      if (flagged.length) {
+        setSubstitutedSets((prev) => new Set([...prev, ...flagged]));
+      }
+      // An expired deadline still reaches resume(): it shows the brief
+      // "descanso terminado hace n s" notice instead of vanishing.
+      if (local.rest) {
         resume(local.rest);
       }
     })();
@@ -238,15 +322,97 @@ export function SessionRunner({
     [exercise, exercises],
   );
 
+  const primary = useMemo(
+    () => exercises.find((e) => e.isPrimary) ?? null,
+    [exercises],
+  );
+  /* The approach ramp comes from the engine — never computed here. */
+  const warmup = useMemo(
+    () =>
+      primary?.weightKg != null
+        ? warmupSets(primary.weightKg, replayCtx.config)
+        : [],
+    [primary, replayCtx.config],
+  );
+
+  const sub = subs[exercise.id] ?? null;
+  const subOptions = substitutes[exercise.id] ?? [];
+  const primarySub = primary ? (subs[primary.id] ?? null) : null;
+  const sessionComplete = totalSets > 0 && totalDone >= totalSets;
+
+  function chooseSub(option: SubstituteOption) {
+    const entry: LocalSubstitution = {
+      slug: option.slug,
+      name: option.name,
+      weightKg: exercise.weightKg,
+    };
+    setSubs((prev) => ({ ...prev, [exercise.id]: entry }));
+    setSubPickerOpen(false);
+    startTransition(async () => {
+      await withLocal((s) => ({
+        ...s,
+        substitutions: {
+          ...(s.substitutions ?? {}),
+          [String(exercise.position)]: entry,
+        },
+      }));
+    });
+  }
+
+  function clearSub() {
+    setSubs((prev) => {
+      const next = { ...prev };
+      delete next[exercise.id];
+      return next;
+    });
+    setSubPickerOpen(false);
+    startTransition(async () => {
+      await withLocal((s) => {
+        const next = { ...(s.substitutions ?? {}) };
+        delete next[String(exercise.position)];
+        return { ...s, substitutions: next };
+      });
+    });
+  }
+
+  /** Athlete input for the swap's load — not an engine number. */
+  function bumpSubWeight(deltaKg: number) {
+    const current = subs[exercise.id];
+    if (!current) return;
+    const entry: LocalSubstitution = {
+      ...current,
+      weightKg: Math.max(
+        0,
+        Math.round(((current.weightKg ?? 0) + deltaKg) * 100) / 100,
+      ),
+    };
+    setSubs((prev) => ({ ...prev, [exercise.id]: entry }));
+    startTransition(async () => {
+      await withLocal((s) => ({
+        ...s,
+        substitutions: {
+          ...(s.substitutions ?? {}),
+          [String(exercise.position)]: entry,
+        },
+      }));
+    });
+  }
+
   function finish() {
     startTransition(async () => {
       const finishedAt = new Date().toISOString();
+      // Substitutions document themselves in the session note.
+      const subNotes = exercises
+        .filter((e) => subs[e.id])
+        .map((e) => `${e.name} sustituida por ${subs[e.id].name} (molestia)`);
+      const notes =
+        [finishNotes.trim(), ...subNotes].filter(Boolean).join("\n") || null;
       await withLocal((s) => finishLocalSession(s, finishedAt, totalSets));
       await enqueueOp({
         kind: "session_finish",
         localSessionId: sessionId,
         finishedAt,
-        notes: finishNotes.trim() || null,
+        notes,
       });
       const res = await flush();
       const landed = res?.results?.some(
@@ -261,20 +427,33 @@ export function SessionRunner({
         router.replace(`/sesion/${canonical}/resumen`);
         return;
       }
-      // No network: the session is safe on this device and in the queue.
+      // No network: only claim device persistence when IndexedDB still
+      // holds the ops — after a storage failure they live in tab memory.
       setError(
-        "Sin conexión. La sesión está guardada en este móvil y se subirá sola al volver la red.",
+        storageHealthy()
+          ? "Sin conexión. La sesión está guardada en este móvil y se subirá sola al volver la red."
+          : "Sin conexión. Este navegador no puede guardar en el dispositivo: no cierres esta pestaña hasta que vuelva la conexión.",
       );
     });
   }
 
   function advance(fromIndex: number) {
+    if (failureKey) setDismissedFailure(failureKey);
     if (fromIndex + 1 >= exercises.length) {
-      finish();
+      // The last set no longer slams the door: no auto-finish, no
+      // navigation. The runner falls into the "sesión completa" state
+      // below — pills stay editable, a note can be written — and only
+      // the explicit bar commits finish(). If something earlier is
+      // still unfinished, jump there instead.
+      const idx = exercises.findIndex(
+        (ex) =>
+          !groupMembers.some((m) => m.id === ex.id) &&
+          countDone(logs, ex.id, ex.sets) < ex.sets,
+      );
+      if (idx !== -1) setExIndex(idx);
       return;
     }
     setExIndex(fromIndex + 1);
-    if (failureKey) setDismissedFailure(failureKey);
   }
 
   function record(value: number, atIndex: number | null = null) {
@@ -290,15 +469,27 @@ export function SessionRunner({
       return;
     }
 
-    const missed = value < exercise.repMin;
+    // The failure floor, not repMin: on the 85 % wave week the engine
+    // tolerates one rep less before it reacts.
+    const missed = value < exercise.repFloor;
     const k = keyOf(exercise.id, setIndex);
     const rir = pendingRir;
     const timed = exercise.effort === "seconds";
     const loggedAt = new Date().toISOString();
+    const substituted = sub != null;
+    const weightKg = substituted ? sub.weightKg : exercise.weightKg;
+    const flagKey = `${exercise.position}:${setIndex}`;
 
     // Local-first: the number lands instantly and survives a killed tab;
     // the queue takes it to the server whenever there is network.
     setLogs((prev) => ({ ...prev, [k]: { value, missed } }));
+    setSubstitutedSets((prev) => {
+      if (substituted === prev.has(flagKey)) return prev;
+      const next = new Set(prev);
+      if (substituted) next.add(flagKey);
+      else next.delete(flagKey);
+      return next;
+    });
     setRepsOpen(false);
     setEditingIndex(null);
     setPendingRir(null);
@@ -341,9 +532,10 @@ export function SessionRunner({
           setIndex,
           value,
           missed,
-          weightKg: exercise.weightKg,
+          weightKg,
           rir,
           timed,
+          substituted,
           loggedAt,
         }),
       );
@@ -352,14 +544,16 @@ export function SessionRunner({
         localSessionId: sessionId,
         programExerciseId: exercise.id,
         liftKey: exercise.liftKey,
-        exerciseName: exercise.name,
+        exerciseName: substituted ? sub.name : exercise.name,
         position: exercise.position,
         setIndex,
         reps: timed ? null : value,
         seconds: timed ? value : null,
         rir,
-        weightKg: exercise.weightKg,
+        weightKg,
         loggedAt,
+        // A substituted set is history, never engine input.
+        substituted,
       });
       if (groupDone) advance(lastGroupIndex);
     });
@@ -433,13 +627,19 @@ export function SessionRunner({
         <h1 className="mt-1.5 text-[21px] leading-[1.05] font-bold">
           {exercise.name}
         </h1>
+        {sub ? (
+          <div className="mt-2 inline-flex items-center bg-ink px-2 py-1.5 text-[10px] leading-none font-extrabold tracking-[0.1em] text-warn uppercase">
+            sustituida → {sub.name}
+          </div>
+        ) : null}
         <div className="mt-2.5 flex items-start gap-2.5">
           <div className="num text-[86px] leading-[0.76] font-black tracking-[-0.055em] sm:text-[104px]">
-            {exercise.loadMode === "rpe" || exercise.weightKg == null
+            {exercise.loadMode === "rpe" ||
+            (sub ? sub.weightKg : exercise.weightKg) == null
               ? "—"
               : exercise.loadMode === "weighted_bodyweight"
-                ? `+${formatWeight(exercise.weightKg)}`
-                : formatWeight(exercise.weightKg)}
+                ? `+${formatWeight((sub ? sub.weightKg : exercise.weightKg)!)}`
+                : formatWeight((sub ? sub.weightKg : exercise.weightKg)!)}
           </div>
           <div className="pt-2">
             <div className="text-[19px] leading-none font-extrabold uppercase">
@@ -457,7 +657,8 @@ export function SessionRunner({
             </div>
           </div>
         </div>
-        {showPlates && exercise.plates && !exercise.plates.barOnly ? (
+        {/* Plates describe the planned bar — meaningless once swapped. */}
+        {showPlates && !sub && exercise.plates && !exercise.plates.barOnly ? (
           <div className="mt-2.5 flex items-center gap-1.5">
             <span className="text-[10px] leading-none font-semibold tracking-[0.1em] opacity-70 uppercase">
               Por lado
@@ -466,6 +667,44 @@ export function SessionRunner({
               plates={exercise.plates.perSide}
               remainder={exercise.plates.remainderKg}
             />
+          </div>
+        ) : null}
+        {subOptions.length > 0 || sub ? (
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSubPickerOpen((v) => !v);
+                setRepsOpen(false);
+                setEditingIndex(null);
+              }}
+              className="flex h-10 items-center border-2 border-ink px-3 text-[11px] leading-none font-extrabold tracking-[0.06em] uppercase"
+            >
+              me molesta
+            </button>
+            {sub && sub.weightKg != null ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="Menos peso"
+                  onClick={() => bumpSubWeight(-replayCtx.config.roundingKg)}
+                  className="num flex h-10 w-10 items-center justify-center border-2 border-ink text-[17px] leading-none font-extrabold"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  aria-label="Más peso"
+                  onClick={() => bumpSubWeight(replayCtx.config.roundingKg)}
+                  className="num flex h-10 w-10 items-center justify-center border-2 border-ink text-[17px] leading-none font-extrabold"
+                >
+                  +
+                </button>
+                <span className="text-[10px] leading-none font-semibold tracking-[0.1em] uppercase opacity-70">
+                  kg del sustituto
+                </span>
+              </>
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -525,6 +764,112 @@ export function SessionRunner({
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-4 pt-3.5 pb-4">
+        {/* Pre-session block: activación + the engine's approach ramp.
+            Nothing here logs — it exists so the first work set is not
+            the first thing the knee feels. */}
+        {exIndex === 0 && primary?.weightKg != null ? (
+          warmupOpen ? (
+            <div className="mb-3.5 border-2 border-hairline px-3 pt-1 pb-3">
+              <button
+                type="button"
+                onClick={() => setWarmupOpen(false)}
+                className="flex h-10 w-full items-center justify-between text-left"
+              >
+                <span className="text-[12px] leading-none font-bold">
+                  calentamiento
+                </span>
+                <span className="text-[10px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+                  cerrar
+                </span>
+              </button>
+              <div className="mt-1 text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+                activación
+              </div>
+              <div className="mt-2 flex flex-col gap-px bg-line">
+                {ACTIVATION_ITEMS.map((item, i) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() =>
+                      setActivationDone((prev) =>
+                        prev.map((v, j) => (j === i ? !v : v)),
+                      )
+                    }
+                    className="flex h-11 items-center gap-2.5 bg-paper px-1 text-left"
+                  >
+                    <span
+                      className={cn(
+                        "w-3.5 text-[11px] leading-none font-extrabold",
+                        activationDone[i] ? "text-ok" : "text-quiet",
+                      )}
+                    >
+                      {activationDone[i] ? "✓" : "·"}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[13px] leading-[1.2] font-semibold",
+                        activationDone[i] && "text-mid",
+                      )}
+                    >
+                      {item}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-[1.45] text-faint">
+                contra la amnesia glútea: 5′ y al rack.
+              </p>
+              {warmup.length > 0 ? (
+                <>
+                  <div className="mt-3 text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+                    aproximación
+                  </div>
+                  <div className="mt-2 flex flex-col gap-px bg-line">
+                    {warmup.map((w, i) => (
+                      <div
+                        key={i}
+                        className="flex items-baseline gap-2.5 bg-paper px-1 py-2.5"
+                      >
+                        <span className="num min-w-[62px] text-[12.5px] leading-none font-extrabold">
+                          {formatWeight(w.weightKg)} kg
+                        </span>
+                        <span className="num text-[11px] leading-none text-mid">
+                          × {w.reps}
+                        </span>
+                        <span className="num ml-auto text-[11px] leading-none text-mid">
+                          {Math.round(w.pct * 100)} %
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-[1.45] text-faint">
+                    aproximación al básico del día — no se registra.
+                  </p>
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setWarmupOpen(true)}
+              className="mb-3.5 flex w-full items-center justify-between border-2 border-dashed border-hairline px-3 py-3 text-left"
+            >
+              <span className="text-[12px] leading-none font-bold">
+                calentamiento
+              </span>
+              <span className="text-[10px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+                activación + aproximación
+              </span>
+            </button>
+          )
+        ) : null}
+
+        {primarySub ? (
+          <p className="mb-3 border-l-[6px] border-warn py-1 pl-3 text-[12px] leading-[1.5]">
+            hoy la sesión no mueve el motor: molestia registrada.
+          </p>
+        ) : null}
+
         {exercise.notes ? (
           <p className="text-[11.5px] leading-[1.45] text-mid">
             {exercise.notes}
@@ -539,27 +884,73 @@ export function SessionRunner({
 
         {banner ? (
           <div className="mt-3 bg-ink px-3.5 py-3.5 text-paper">
-            <div className="flex items-baseline gap-2">
-              <span
-                className={cn(
-                  "text-[10px] leading-none font-extrabold tracking-[0.12em] uppercase",
-                  banner.tone === "warn" ? "text-warn" : "text-fail",
-                )}
+            <span
+              className={cn(
+                "text-[10px] leading-none font-extrabold tracking-[0.12em] uppercase",
+                banner.tone === "warn" ? "text-warn" : "text-fail",
+              )}
+            >
+              {banner.title}
+            </span>
+            <p className="mt-2 text-[12px] leading-[1.5] opacity-80">
+              {banner.detail}
+            </p>
+            {lastLiveFailure ? (
+              /* Undoing an engine action is a first-class move — a real
+                 block target (the RestBar standard), not a 10px link. */
+              <button
+                type="button"
+                onClick={undoFailure}
+                className="mt-3 flex h-11 w-full items-center justify-center bg-ink-2 text-[13px] leading-none font-bold tracking-[0.06em] uppercase"
               >
-                {banner.title}
-              </span>
-              {lastLiveFailure ? (
+                deshacer
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {subPickerOpen ? (
+          <div className="mt-3.5">
+            <div className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+              molestia en {exercise.name.toLowerCase()} — elige sustituto
+            </div>
+            <div className="mt-2.5 flex flex-col gap-px bg-line">
+              {subOptions.map((o) => (
+                <button
+                  key={o.slug}
+                  type="button"
+                  onClick={() => chooseSub(o)}
+                  className="flex min-h-11 flex-col justify-center gap-1 bg-paper px-1 py-2.5 text-left"
+                >
+                  <span
+                    className={cn(
+                      "text-[13px] leading-[1.2] font-semibold",
+                      sub?.slug === o.slug && "text-ok",
+                    )}
+                  >
+                    {sub?.slug === o.slug ? "✓ " : ""}
+                    {o.name}
+                  </span>
+                  {o.cue ? (
+                    <span className="text-[11px] leading-[1.35] text-mid">
+                      {o.cue}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+              {sub ? (
                 <button
                   type="button"
-                  onClick={undoFailure}
-                  className="ml-auto text-[10.5px] leading-none font-medium underline opacity-60"
+                  onClick={clearSub}
+                  className="flex min-h-11 items-center bg-paper px-1 py-2.5 text-left text-[13px] leading-[1.2] font-semibold text-mid"
                 >
-                  deshacer
+                  seguir con {exercise.name.toLowerCase()}
                 </button>
               ) : null}
             </div>
-            <p className="mt-2 text-[12px] leading-[1.5] opacity-80">
-              {banner.detail}
+            <p className="mt-2.5 text-[11px] leading-[1.45] text-faint">
+              las series se siguen registrando, con los kilos editables;
+              el motor no se mueve con una sustitución.
             </p>
           </div>
         ) : null}
@@ -606,7 +997,8 @@ export function SessionRunner({
                   onClick={() => record(n, editingIndex)}
                   className={cn(
                     "num flex h-11 w-11 items-center justify-center border-2 text-[17px] leading-none font-extrabold",
-                    n < exercise.repMin
+                    // repFloor, not repMin: the 85 % week forgives a rep.
+                    n < exercise.repFloor
                       ? "border-fail text-fail"
                       : "border-ink text-ink",
                   )}
@@ -616,7 +1008,7 @@ export function SessionRunner({
               ))}
             </div>
             <p className="mt-2.5 text-[11px] leading-[1.45] text-faint">
-              Por debajo de {exercise.repMin}{" "}
+              Por debajo de {exercise.repFloor}{" "}
               {exercise.isPrimary
                 ? "el motor reacciona: primero congela el peso, luego recorta la RM."
                 : "no pasa nada: los accesorios no tocan el motor."}
@@ -674,6 +1066,31 @@ export function SessionRunner({
           })}
         </div>
 
+        {/* All sets in: the session is complete but nothing closes on
+            its own — a mis-tapped last set stays correctable from its
+            pill, and the note travels in the same finish op partials
+            use. Only the bar below commits. */}
+        {sessionComplete ? (
+          <div className="mt-4 border-2 border-ok px-3 py-3">
+            <div className="text-[10px] leading-none font-extrabold tracking-[0.12em] text-ok uppercase">
+              sesión completa
+            </div>
+            <p className="mt-2 text-[11.5px] leading-[1.45] text-mid">
+              corrige cualquier serie desde su pastilla; nada se cierra
+              hasta «terminar sesión».
+            </p>
+            <textarea
+              value={finishNotes}
+              onChange={(e) => setFinishNotes(e.target.value)}
+              rows={2}
+              maxLength={2000}
+              placeholder="Nota de la sesión — «rodilla bien», «última serie justa»… (opcional)"
+              aria-label="Nota de la sesión"
+              className="mt-2.5 w-full border-2 border-hairline bg-paper px-2.5 py-2 text-[12px] leading-[1.4] outline-none"
+            />
+          </div>
+        ) : null}
+
         {/* Explicit exit: the gym closes, the shoulder hurts — a session
             can close as partial without inventing sets. */}
         {totalDone < totalSets ? (
@@ -728,48 +1145,64 @@ export function SessionRunner({
       </div>
 
       <div className="flex flex-none">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            if (exercise.effort === "amrap") {
-              setEditingIndex(null);
-              setRepsOpen(true);
-              return;
-            }
-            record(exercise.repMax);
-          }}
-          className="flex h-[66px] flex-1 items-center justify-center gap-2.5 bg-strength text-[17px] leading-none font-extrabold tracking-[0.06em] text-ink uppercase active:opacity-85 disabled:opacity-60"
-        >
-          {exercise.effort === "amrap" ? (
-            "Registrar AMRAP"
-          ) : (
-            <>
-              Hecho{" "}
-              <span className="num opacity-60">
-                {exercise.repMax}
-                {exercise.effort === "seconds" ? "″" : ""}
-              </span>
-            </>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            // Always a FRESH set from here — a pill left in edit mode
-            // must not make this overwrite an old value.
-            setEditingIndex(null);
-            setRepsOpen((v) => !v);
-          }}
-          className="flex h-[66px] w-[92px] flex-col items-center justify-center gap-1 bg-ink text-[11px] leading-none font-semibold text-paper"
-        >
-          <span>OTRAS</span>
-          <span className="opacity-60">REPS</span>
-        </button>
+        {sessionComplete ? (
+          /* The explicit close — the only way a complete session ends. */
+          <button
+            type="button"
+            disabled={pending}
+            onClick={finish}
+            className="flex h-[66px] flex-1 items-center justify-center bg-ink text-[17px] leading-none font-extrabold tracking-[0.06em] text-paper uppercase active:opacity-85 disabled:opacity-60"
+          >
+            Terminar sesión
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                if (exercise.effort === "amrap") {
+                  setEditingIndex(null);
+                  setRepsOpen(true);
+                  return;
+                }
+                record(exercise.repMax);
+              }}
+              className="flex h-[66px] flex-1 items-center justify-center gap-2.5 bg-strength text-[17px] leading-none font-extrabold tracking-[0.06em] text-ink uppercase active:opacity-85 disabled:opacity-60"
+            >
+              {exercise.effort === "amrap" ? (
+                "Registrar AMRAP"
+              ) : (
+                <>
+                  Hecho{" "}
+                  <span className="num opacity-60">
+                    {exercise.repMax}
+                    {exercise.effort === "seconds" ? "″" : ""}
+                  </span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                // Always a FRESH set from here — a pill left in edit mode
+                // must not make this overwrite an old value.
+                setEditingIndex(null);
+                setRepsOpen((v) => !v);
+              }}
+              className="flex h-[66px] w-[92px] flex-col items-center justify-center gap-1 bg-ink text-[11px] leading-none font-semibold text-paper"
+            >
+              <span>OTRAS</span>
+              <span className="opacity-60">REPS</span>
+            </button>
+          </>
+        )}
       </div>
 
       {rest ? (
         <RestBar rest={rest} onSkip={stop} onExtend={() => extend(30)} />
+      ) : overdue != null ? (
+        <RestOverdue seconds={overdue} />
       ) : null}
 
       {flash ? (

@@ -15,7 +15,10 @@ import { setsForWeek, type LiftState } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { placeDate } from "@/lib/domain/calendar";
 import { phaseSpans } from "@/lib/domain/plan";
-import { SessionRunner } from "@/components/session/session-runner";
+import {
+  SessionRunner,
+  type SubstitutesMap,
+} from "@/components/session/session-runner";
 
 export default async function SessionPage({
   params,
@@ -62,6 +65,25 @@ export default async function SessionPage({
 
   if (day.exercises.length === 0) redirect("/");
 
+  /* ── "me molesta": catalogue substitutes per planned exercise ─
+     program_exercises.exercise_id → exercises.id, then every
+     catalogue row whose substitution_for points at it. Kicked off
+     here so it overlaps the engine-events query below. */
+  const rowsById = new Map(athlete.ctx.exercises.map((e) => [e.id, e] as const));
+  const catalogIds = [
+    ...new Set(
+      day.exercises
+        .map((ex) => rowsById.get(ex.id)?.exercise_id)
+        .filter((v): v is string => v != null),
+    ),
+  ];
+  const subRowsPromise = catalogIds.length
+    ? supabase
+        .from("exercises")
+        .select("slug, name, cues, equipment, substitution_for")
+        .in("substitution_for", catalogIds)
+    : null;
+
   /* ── what the client engine needs to run the fold locally ──── */
   const phaseConfig = phaseEngineConfig(athlete.config, phase);
   const primaryExercise = day.primary;
@@ -100,6 +122,22 @@ export default async function SessionPage({
       const m = e.dedup_key.match(/:fail:(\d+):(\d+)$/);
       if (m) initialUndone.push({ position: +m[1], setIndex: +m[2] });
     }
+  }
+
+  const subRows = subRowsPromise ? ((await subRowsPromise).data ?? []) : [];
+  const substitutes: SubstitutesMap = {};
+  for (const ex of day.exercises) {
+    const catalogId = rowsById.get(ex.id)?.exercise_id;
+    if (!catalogId) continue;
+    const options = subRows
+      .filter((r) => r.substitution_for === catalogId)
+      .map((r) => ({
+        slug: r.slug,
+        name: r.name,
+        cue: r.cues,
+        equipment: r.equipment,
+      }));
+    if (options.length) substitutes[ex.id] = options;
   }
 
   return (
@@ -144,6 +182,7 @@ export default async function SessionPage({
       keepAwake={athlete.ctx.profile.keep_screen_awake}
       showPlates={athlete.ctx.profile.show_plate_breakdown}
       targetRir={athlete.ctx.profile.target_rir}
+      substitutes={substitutes}
     />
   );
 }

@@ -12,7 +12,7 @@ import {
 import { summarise, type ExerciseSummary } from "@/lib/domain/summary";
 import { formatTonnage, setsForWeek, tonnage } from "@/lib/engine";
 import type { LocalSessionState } from "@/lib/offline/local-session";
-import { openOfflineStore } from "@/lib/offline/db";
+import { openOfflineStore, storageHealthy } from "@/lib/offline/db";
 import { SNAPSHOT_KEY, validateSnapshot, type AthleteSnapshot } from "@/lib/offline/snapshot";
 import { getLocalSession, pendingOps } from "@/lib/offline/syncer";
 import { cn } from "@/lib/cn";
@@ -154,6 +154,9 @@ function LocalSummary({
   useEffect(() => {
     void pendingOps().then(setPending);
   }, []);
+  // "Guardada en este móvil" is only true while IndexedDB works; once
+  // degraded the ops live in tab memory and the copy must say so.
+  const healthy = storageHealthy();
 
   const rowsFor = (ex: ResolvedExercise) =>
     Object.entries(local.logs)
@@ -184,12 +187,14 @@ function LocalSummary({
           conexión
         </div>
         <h1 className="mt-2 text-[26px] leading-[1.02] font-black tracking-[-0.03em]">
-          Guardada en este móvil
+          {healthy ? "Guardada en este móvil" : "Guardada solo en esta pestaña"}
         </h1>
         <p className="mt-2.5 text-[11.5px] leading-[1.45] opacity-70">
-          {pending
-            ? `${pending} apunte(s) pendientes de subir. Se sincronizan solos al volver la red.`
-            : "Todo sincronizado."}
+          {!healthy
+            ? "este navegador no puede guardar en el dispositivo: no cierres esta pestaña hasta que vuelva la conexión."
+            : pending
+              ? `${pending} apunte(s) pendientes de subir. Se sincronizan solos al volver la red.`
+              : "Todo sincronizado."}
         </p>
       </header>
 
