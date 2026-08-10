@@ -1,26 +1,32 @@
 import type { SessionGroup, SessionStatus } from "@/lib/domain/plan";
 
-/** Colour of the coloured panel / spine for each kind of session. */
+/*
+ * Inline styles have to follow the theme too, so every value here is the
+ * CSS custom property rather than the colour it currently resolves to.
+ */
+
+/** Colour of the spine / lit surface for each kind of session. */
 export const ACCENT: Record<SessionGroup, string> = {
-  strength: "oklch(0.62 0.19 32)",
-  run: "oklch(0.62 0.19 250)",
-  mobility: "#c9c6bc",
-  rest: "#e0ded7",
+  strength: "var(--lime-line)",
+  run: "var(--run)",
+  mobility: "var(--hairline)",
+  // `soft` is a fill for things sitting ON a card; against the page it
+  // disappears in the light theme, which is where rest days live.
+  rest: "var(--quiet)",
 };
 
+/** `ink` is the foreground colour — never paint a background with it. */
 export const TONE = {
-  ink: "#111110",
-  ink3: "#7d7c76",
-  paper: "#ecebe6",
-  mid: "#6e6d67",
-  line: "#d7d5cd",
-  soft: "#e0ded7",
-  hairline: "#b6b3aa",
-  ok: "oklch(0.55 0.14 145)",
-  okBright: "oklch(0.72 0.19 130)",
-  warn: "oklch(0.72 0.16 75)",
-  fail: "oklch(0.55 0.21 25)",
-  tint: "#f2e6cf",
+  ink: "var(--ink)",
+  mid: "var(--mid)",
+  line: "var(--line)",
+  soft: "var(--soft)",
+  quiet: "var(--quiet)",
+  hairline: "var(--hairline)",
+  ok: "var(--lime)",
+  okBright: "var(--lime-line)",
+  warn: "var(--warn)",
+  fail: "var(--fail)",
 } as const;
 
 export function accentFor(group: SessionGroup): string {
@@ -46,8 +52,8 @@ export function statusTone(status: SessionStatus | null | undefined): string {
   if (status === "done") return "text-ok";
   if (status === "partial") return "text-warn";
   if (status === "skipped") return "text-fail";
-  if (status === "in_progress") return "text-strength";
-  return "text-mid";
+  if (status === "in_progress") return "text-lime";
+  return "text-faint";
 }
 
 /** Colour of a cell in the 12-week consistency grid. */
@@ -56,11 +62,11 @@ export function cellColour(
   status: SessionStatus | null,
   isFuture: boolean,
 ): { background: string; border: string } {
-  if (group === "rest") return { background: TONE.soft, border: TONE.soft };
+  if (group === "rest") return { background: TONE.quiet, border: TONE.quiet };
   if (isFuture && !status)
     return { background: "transparent", border: TONE.hairline };
   if (!status || status === "planned" || status === "skipped")
-    return { background: TONE.ink, border: "transparent" };
+    return { background: TONE.soft, border: TONE.hairline };
   if (status === "partial")
     return { background: TONE.warn, border: "transparent" };
   return { background: ACCENT[group], border: "transparent" };

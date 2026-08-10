@@ -1,39 +1,60 @@
 import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
-import { resolveWeek, type ResolvedDay } from "@/lib/domain/plan";
+import { resolveDay, type ResolvedExercise } from "@/lib/domain/plan";
 import { createClient } from "@/lib/supabase/server";
 import { formatWeight } from "@/lib/engine";
-import { DAY_INITIALS } from "@/lib/domain/calendar";
-import { Callout, PlateChips } from "@/components/ui/kit";
+import { cn } from "@/lib/cn";
+import {
+  Callout,
+  Card,
+  HeroNumber,
+  Row,
+  RowStack,
+  ScreenHeader,
+  SectionLabel,
+  Tag,
+} from "@/components/ui/kit";
 import { StartSessionButton } from "@/components/session/start-session-button";
 import { SyncStatus } from "@/components/sync-status";
-import { accentFor, GROUP_LABEL, TONE } from "@/components/day-accents";
+import { accentFor, GROUP_LABEL } from "@/components/day-accents";
+
+/** The accessory column: short enough to line up, never a computed load. */
+function shortLoad(e: ResolvedExercise): { label: string; muted: boolean } {
+  if (e.loadMode === "bodyweight") return { label: "corp.", muted: true };
+  if (e.loadMode === "rpe") return { label: "progr.", muted: true };
+  if (e.weightKg == null) return { label: "—", muted: true };
+  if (e.loadMode === "weighted_bodyweight") {
+    return e.weightKg > 0
+      ? { label: `+${formatWeight(e.weightKg)}`, muted: false }
+      : { label: "corp.", muted: true };
+  }
+  return { label: formatWeight(e.weightKg), muted: false };
+}
 
 export default async function HoyPage() {
   const athlete = await requireAthlete();
   const { ctx, config, placement } = athlete;
   const phase = ctx.phases.find((p) => p.id === placement.phase.id)!;
 
-  const week = resolveWeek({
-    ctx,
-    config,
-    phase,
-    week: placement.week,
-    absoluteWeek: placement.absoluteWeek,
-  });
-  const day = week[placement.dayIndex];
+  const day = resolveDay(
+    {
+      ctx,
+      config,
+      phase,
+      week: placement.week,
+      absoluteWeek: placement.absoluteWeek,
+    },
+    placement.dayIndex,
+  );
 
   const supabase = await createClient();
   const [{ data: sessions }, { data: heldLifts }] = await Promise.all([
     supabase
       .from("sessions")
-      .select("id, slot_id, status, scheduled_on")
+      .select("id, slot_id, status")
       .eq("user_id", athlete.userId)
-      .in(
-        "scheduled_on",
-        week.map((d) => d.date),
-      ),
+      .eq("scheduled_on", day.date),
     supabase
       .from("lifts")
       .select("id, key, name, hold, hold_at_kg, fail_count, penalty")
@@ -41,165 +62,191 @@ export default async function HoyPage() {
       .or("hold.eq.true,fail_count.gt.0"),
   ]);
 
-  const sessionFor = (d: ResolvedDay) =>
-    (sessions ?? []).find(
-      (s) => s.scheduled_on === d.date && s.slot_id === d.slot?.id,
-    );
-  const todaySession = sessionFor(day);
+  const todaySession = (sessions ?? []).find((s) => s.slot_id === day.slot?.id);
   const accent = accentFor(day.group);
   const held = (heldLifts ?? []).filter((l) => l.hold && l.hold_at_kg);
 
+  const primary = day.group === "strength" ? day.primary : null;
+  const accessories = day.exercises.filter((e) => !e.isPrimary);
+  const accessorySets = accessories.reduce((n, e) => n + e.sets, 0);
+  const primaryIndex = day.exercises.findIndex((e) => e.isPrimary) + 1;
+
+  const plates =
+    primary && ctx.profile.show_plate_breakdown ? primary.plates : null;
+  const perSide =
+    plates && !plates.barOnly && plates.perSide.length > 0
+      ? plates.perSide.map((p) => formatWeight(p)).join("+")
+      : null;
+
+  const heading =
+    day.group === "mobility"
+      ? {
+          title: "Movilidad y correctivos",
+          subtitle: "20′ · diaria · innegociable",
+        }
+      : day.group === "rest"
+        ? { title: "Hoy no toca", subtitle: day.subtitle }
+        : { title: day.title, subtitle: day.subtitle };
+
+  const quiet = day.group === "mobility" || day.group === "rest";
+  const dayNote =
+    day.group === "mobility"
+      ? "20′ de activación glútea, psoas y tobillo. Innegociables, pero no cuentan como entrenamiento."
+      : day.group === "rest"
+        ? "Descansar es parte del plan."
+        : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-none items-center justify-between bg-ink px-4 py-3 text-paper">
-        <span className="text-[11px] leading-none font-extrabold tracking-[0.1em]">
-          {phase.key} · SEM {placement.week}/{phase.weeks}
-        </span>
-        <span className="text-[11px] leading-none font-medium opacity-60">
-          {day.dateLabel}
-        </span>
-      </div>
+      <ScreenHeader
+        eyebrow={day.dateLabel}
+        right={
+          <span className="font-display text-[12px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
+            {phase.key} · sem {placement.week}/{phase.weeks}
+          </span>
+        }
+        title={heading.title}
+        subtitle={heading.subtitle}
+      />
 
-      {/* Week strip: today is wide, the rest are stubs coloured by type. */}
-      <div className="flex flex-none gap-0.5 bg-ink py-0.5">
-        {week.map((d, i) => {
-          const isToday = i === placement.dayIndex;
-          const done = sessionFor(d)?.status === "done";
-          return (
-            <Link
-              key={d.date}
-              href={`/semana#dia-${i}`}
-              className="flex h-7 items-center justify-center text-[10px] leading-none font-extrabold tracking-[0.06em]"
-              style={{
-                flex: isToday ? 2.4 : 1,
-                background: isToday ? accentFor(d.group) : "transparent",
-                color: isToday ? TONE.ink : done ? TONE.paper : TONE.ink3,
-              }}
-            >
-              {isToday ? d.dayLabel : DAY_INITIALS[i]}
-              {!isToday && done ? "·" : ""}
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto pt-4 pb-6">
         <SyncStatus />
-        {day.group === "strength" && day.primary ? (
-          <>
-            <section
-              className="px-4 pt-5 pb-4 text-ink"
-              style={{ background: accent }}
-            >
-              <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase">
-                {day.label} — {day.subtitle}
-              </div>
-              <div className="mt-2 flex items-start gap-2.5">
-                <div className="num text-[86px] leading-[0.76] font-black tracking-[-0.055em] sm:text-[106px]">
-                  {day.primary.weightKg == null
-                    ? "—"
-                    : formatWeight(day.primary.weightKg)}
-                </div>
-                <div className="pt-2">
-                  <div className="text-[20px] leading-none font-extrabold">
-                    KG
-                  </div>
-                  <div className="mt-2 text-[13px] leading-[1.25] font-semibold opacity-75">
-                    {day.primary.schemeLabel}
-                    <br />
-                    RIR {ctx.profile.target_rir} ·{" "}
-                    {day.primary.restLabel}
-                  </div>
-                </div>
+
+        {primary ? (
+          <div className="px-5">
+            <Card>
+              <div className="flex items-baseline gap-2">
+                <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
+                  Básico del día
+                </span>
+                <span className="num ml-auto text-[11px] leading-none text-faint">
+                  {primaryIndex}/{day.exercises.length}
+                </span>
               </div>
 
-              <div className="mt-3 flex items-baseline gap-2 border-t-2 border-ink pt-2.5">
-                <div className="text-[17px] leading-[1.1] font-bold">
-                  {day.primary.name}
-                </div>
-                {ctx.profile.show_plate_breakdown && day.primary.plates ? (
-                  <div className="ml-auto">
-                    <PlateChips
-                      plates={day.primary.plates.perSide}
-                      remainder={day.primary.plates.remainderKg}
-                    />
-                  </div>
+              <div className="mt-2 text-[17.5px] leading-[1.25] font-semibold">
+                {primary.name}
+              </div>
+
+              <HeroNumber
+                value={
+                  primary.weightKg == null
+                    ? "—"
+                    : formatWeight(primary.weightKg)
+                }
+                unit="kg"
+              />
+
+              <div className="mt-3.5 flex flex-wrap gap-2">
+                <Tag>{primary.schemeLabel}</Tag>
+                <Tag>RIR {ctx.profile.target_rir}</Tag>
+                <Tag>{primary.restLabel}</Tag>
+                {perSide ? <Tag>por lado {perSide}</Tag> : null}
+                {plates?.remainderKg ? (
+                  <Tag className="text-fail">
+                    +{formatWeight(plates.remainderKg)} sin disco
+                  </Tag>
                 ) : null}
               </div>
-              {day.primary.breakdown ? (
-                <div className="mt-2 text-[10.5px] leading-none font-medium tracking-[0.08em] uppercase opacity-70">
-                  RM {formatWeight(day.primary.breakdown.e1rmKg)} · ola{" "}
-                  {Math.round(day.primary.breakdown.waveFactor * 100)} %
-                  {day.primary.breakdown.isHeld ? " · en espera" : ""}
-                  {day.primary.plates && !day.primary.plates.barOnly
-                    ? " · por lado"
-                    : ""}
-                </div>
-              ) : null}
-            </section>
 
-            <div className="mt-px flex flex-col gap-px bg-line">
-              {day.exercises
-                .filter((e) => !e.isPrimary)
-                .map((e) => (
-                  <div
-                    key={e.id}
-                    className="flex items-center gap-2.5 bg-paper px-4 py-2.5"
-                  >
-                    <span className="flex-1 text-[13px] leading-[1.2] font-semibold">
-                      {e.name}
+              {primary.breakdown ? (
+                <details className="group mt-4 border-t border-edge pt-3">
+                  <summary className="flex list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                    <span className="text-[13px] leading-[1.4] font-medium text-mid">
+                      Motor · RM {formatWeight(primary.breakdown.e1rmKg)} × ola{" "}
+                      {Math.round(primary.breakdown.waveFactor * 100)} %
+                      {primary.breakdown.isHeld ? " · en espera" : ""}
                     </span>
-                    <span className="text-[11px] leading-none font-medium text-mid">
-                      {e.schemeLabel}
+                    <span
+                      aria-hidden
+                      className="font-display flex-none text-[13px] leading-none text-faint transition-transform group-open:rotate-45"
+                    >
+                      ＋
                     </span>
-                    <span className="num min-w-[66px] text-right text-[13px] leading-none font-extrabold">
-                      {e.weightLabel}
-                    </span>
+                  </summary>
+                  <div className="mt-2.5 text-[12.5px] leading-[1.5] text-mid">
+                    ciclo {primary.breakdown.cycle} ·{" "}
+                    {primary.breakdown.cycleBumpKg > 0
+                      ? `+${formatWeight(primary.breakdown.cycleBumpKg)} kg acumulados`
+                      : "sin acumulado"}
+                    {primary.breakdown.penalty > 0
+                      ? ` · penalización ${Math.round(primary.breakdown.penalty * 100)} %`
+                      : ""}
+                    {primary.breakdown.isDeload ? " · paso de descarga" : ""}
                   </div>
-                ))}
-            </div>
-          </>
-        ) : day.group === "run" ? (
-          <section className="bg-run px-4 pt-5 pb-4 text-paper">
-            <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] opacity-80 uppercase">
-              {day.label} · {day.estimatedMinutes}′ APROX
-            </div>
-            <h1 className="mt-2.5 text-[31px] leading-[1.02] font-black tracking-[-0.03em]">
-              {day.prescription || day.title}
-            </h1>
-            <p className="mt-3 text-[12px] leading-[1.5] opacity-75">
-              {day.subtitle}
-            </p>
-          </section>
-        ) : day.group === "mobility" ? (
-          <section className="bg-quiet px-4 pt-5 pb-4">
-            <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase">
-              DESCANSO
-            </div>
-            <h1 className="mt-2.5 text-[31px] leading-[1.02] font-black tracking-[-0.03em]">
-              Movilidad y correctivos
-            </h1>
-            <p className="mt-3 text-[12px] leading-[1.5] text-ink/70">
-              20′ de activación glútea, psoas y tobillo. Innegociables, pero no
-              cuentan como entrenamiento.
-            </p>
-          </section>
+                </details>
+              ) : null}
+            </Card>
+          </div>
         ) : (
-          <section className="bg-soft px-4 pt-5 pb-4">
-            <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase">
-              DESCANSO
-            </div>
-            <h1 className="mt-2.5 text-[31px] leading-[1.02] font-black tracking-[-0.03em]">
-              Hoy no toca
-            </h1>
-            <p className="mt-3 text-[12px] leading-[1.5] text-mid">
-              {day.subtitle || "Descansar es parte del plan."}
-            </p>
-          </section>
+          <div className="px-5">
+            <Card className="flex gap-4">
+              <span
+                aria-hidden
+                className="w-[3px] flex-none rounded-full"
+                style={{ background: accent }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+                    {day.label}
+                  </span>
+                  {day.group === "run" && day.estimatedMinutes ? (
+                    <span className="num ml-auto text-[11px] leading-none text-faint">
+                      {day.estimatedMinutes}′ aprox
+                    </span>
+                  ) : null}
+                </div>
+                {quiet ? null : (
+                  <div className="mt-2 text-[17.5px] leading-[1.25] font-semibold">
+                    {day.prescription || day.title}
+                  </div>
+                )}
+                {dayNote ? (
+                  <p className="mt-2 text-[13px] leading-[1.55] text-mid">
+                    {dayNote}
+                  </p>
+                ) : null}
+              </div>
+            </Card>
+          </div>
         )}
 
+        {accessories.length > 0 ? (
+          <>
+            <SectionLabel right={`${accessorySets} series`}>
+              Después
+            </SectionLabel>
+            <RowStack className="mt-2.5">
+              {accessories.map((e) => {
+                const load = shortLoad(e);
+                return (
+                  <Row key={e.id} className="flex items-center gap-3">
+                    <span className="min-w-0 flex-1 truncate text-[14.5px] leading-[1.25] font-medium">
+                      {e.name}
+                    </span>
+                    <span className="flex-none text-[12.5px] leading-none text-mid">
+                      {e.schemeLabel}
+                    </span>
+                    <span
+                      className={cn(
+                        "num min-w-[62px] flex-none text-right leading-none",
+                        load.muted
+                          ? "text-[13px] font-medium text-mid"
+                          : "text-[14px] font-semibold",
+                      )}
+                    >
+                      {load.label}
+                    </span>
+                  </Row>
+                );
+              })}
+            </RowStack>
+          </>
+        ) : null}
+
         {day.isDeload ? (
-          <div className="mx-4 mt-3.5">
+          <div className="mt-3.5 px-5">
             <Callout eyebrow="Semana de descarga">
               Mitad de series, mismos pesos. La carrera baja un 40 %. Llegar
               fresco a la semana que viene es el objetivo de esta.
@@ -208,32 +255,27 @@ export default async function HoyPage() {
         ) : null}
 
         {held.map((lift) => (
-          <div key={lift.id} className="mx-4 mt-3.5">
+          <div key={lift.id} className="mt-3.5 px-5">
             <Callout
               eyebrow={`${lift.name} en espera · ${formatWeight(Number(lift.hold_at_kg))} kg`}
             >
               Fallaste el mínimo del rango la última vez: la ola no pasa de ese
-              peso hasta una sesión limpia. Si toca descarga, manda la
-              descarga. Otro fallo y la RM baja.
+              peso hasta una sesión limpia. Si toca descarga, manda la descarga.
+              Otro fallo y la RM baja.
             </Callout>
           </div>
         ))}
 
         <Link
           href="/movilidad"
-          className="mx-4 mt-3.5 mb-5 flex items-center gap-3 border-2 border-ink px-3.5 py-3"
+          className="mt-3.5 flex items-center gap-2.5 px-6 py-1"
         >
-          <span className="h-[30px] w-[30px] flex-none bg-run" />
-          <span className="flex-1">
-            <span className="block text-[13.5px] leading-[1.2] font-bold">
-              Movilidad y correctivos
-            </span>
-            <span className="mt-1 block text-[11px] leading-none font-medium text-mid">
-              20′ · DIARIO · INNEGOCIABLE
-            </span>
+          <span aria-hidden className="h-2 w-2 flex-none rounded-full bg-run" />
+          <span className="flex-1 text-[13px] leading-[1.4] text-mid">
+            Movilidad 20′ · diaria · innegociable
           </span>
-          <span aria-hidden className="text-[16px] leading-none font-bold">
-            →
+          <span aria-hidden className="text-[13px] leading-none text-faint">
+            ›
           </span>
         </Link>
       </div>

@@ -1,3 +1,4 @@
+import { SecondaryNav } from "@/components/app-shell";
 import {
   TONE,
   accentFor,
@@ -5,25 +6,12 @@ import {
   STATUS_LABEL,
   statusTone,
 } from "@/components/day-accents";
-import {
-  Footnote,
-  Row,
-  RowStack,
-  ScreenHeader,
-  SectionLabel,
-  StatGrid,
-} from "@/components/ui/kit";
+import { Footnote, Row, RowStack, SectionLabel } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
-import {
-  formatDayShort,
-  formatSeasonRange,
-  phaseEnd,
-  type IsoDate,
-} from "@/lib/domain/calendar";
+import { formatDayShort, type IsoDate } from "@/lib/domain/calendar";
 import {
   groupOf,
   phaseEngineConfig,
-  phaseSpans,
   resolveWeek,
   type LiftRow,
   type ResolvedDay,
@@ -31,7 +19,6 @@ import {
   type SessionStatus,
 } from "@/lib/domain/plan";
 import {
-  cycleOf,
   epley1RM,
   formatTonnage,
   formatWeight,
@@ -54,17 +41,18 @@ const EVENT_TONE: Record<string, string> = {
   cycle_bump: accentFor("strength"),
 };
 
-const LEGEND: Array<{ label: string; background: string; border: string }> = [
-  { label: "Fuerza", background: accentFor("strength"), border: "transparent" },
-  { label: "Carrera", background: accentFor("run"), border: "transparent" },
-  {
-    label: "Movilidad",
-    background: accentFor("mobility"),
-    border: "transparent",
-  },
-  { label: "Parcial", background: TONE.warn, border: "transparent" },
-  { label: "Sin registrar", background: TONE.ink, border: "transparent" },
-  { label: "Por venir", background: "transparent", border: TONE.hairline },
+/**
+ * Every fill `cellColour` can return, in its own words. No `colour` is the
+ * dashed outline the grid draws for a day still ahead.
+ */
+const LEGEND: Array<{ label: string; colour?: string }> = [
+  { label: "fuerza", colour: accentFor("strength") },
+  { label: "carrera", colour: accentFor("run") },
+  { label: "movilidad", colour: accentFor("mobility") },
+  { label: "descanso", colour: accentFor("rest") },
+  { label: "parcial", colour: TONE.warn },
+  { label: "sin registrar", colour: TONE.soft },
+  { label: "por venir" },
 ];
 
 const dayKey = (date: string, slotId: string | null) => `${date}|${slotId ?? ""}`;
@@ -461,95 +449,147 @@ export default async function HistorialPage() {
 
   /* ── header copy ─────────────────────────────────────────────── */
 
-  const spans = phaseSpans(ctx.phases);
-  const lastSpan = [...spans].sort((a, b) => a.position - b.position).at(-1);
-  const seasonEnd = program.ends_on ?? (lastSpan ? phaseEnd(lastSpan) : program.starts_on);
-  const season = formatSeasonRange(program.starts_on, seasonEnd).toUpperCase();
-  const cycle = cycleOf(placement.week, phaseConfig.cycleWeeks);
+  // `formatTonnage` hands back "9,7 t"; the tile draws the unit smaller.
+  const [tonnage, tonnageUnit] = formatTonnage(totalTonnage).split(" ");
+
+  const kpis: Array<{
+    label: string;
+    value: string | number;
+    unit?: string;
+    tone?: string;
+  }> = [
+    {
+      label: "adherencia",
+      value: adherence ?? "—",
+      unit: adherence == null ? undefined : "%",
+      // A bad week must not be painted the same green as a good one.
+      tone:
+        adherence == null
+          ? "text-faint"
+          : adherence >= 90
+            ? "text-lime"
+            : adherence < 70
+              ? "text-warn"
+              : "text-ink",
+    },
+    { label: "sesiones registradas", value: registered },
+    { label: "tonelaje acumulado", value: tonnage, unit: tonnageUnit },
+    { label: "horas de carrera", value: formatWeight(runHours), unit: "h" },
+  ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader
-        eyebrow="HISTORIAL"
-        right={
-          <span className="text-[11px] leading-none font-medium opacity-60">
-            TEMPORADA {season}
+      <header className="flex-none px-5 pt-6">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="font-display min-w-0 flex-1 text-[22px] leading-[1.1] font-bold">
+            Historial
+          </h1>
+          <span className="font-display flex-none text-[11px] leading-none text-faint uppercase">
+            {phase.key} · semana {placement.week} de {phase.weeks}
           </span>
-        }
-        title={`${phase.key} ${phase.name.toUpperCase()}`}
-        subtitle={`SEMANA ${placement.week} DE ${phase.weeks} · CICLO ${cycle}`}
-      />
+        </div>
+      </header>
+
+      <SecondaryNav />
 
       <div className="flex-1 overflow-auto">
-        <StatGrid
-          columns={2}
-          items={[
-            {
-              value: adherence == null ? "—" : adherence,
-              unit: adherence == null ? undefined : "%",
-              label: "Adherencia",
-              tone:
-                adherence == null
-                  ? "text-ghost"
-                  : adherence >= 90
-                    ? "text-ok"
-                    : adherence < 70
-                      ? "text-warn"
-                      : undefined,
-            },
-            { value: registered, label: "Sesiones registradas" },
-            { value: formatTonnage(totalTonnage), label: "Tonelaje acumulado" },
-            { value: formatWeight(runHours), unit: "h", label: "Horas de carrera" },
-          ]}
-        />
-
-        {/* ── consistency ─────────────────────────────────────── */}
-
-        <SectionLabel right="L M X J V S D">
-          CONSTANCIA · {phase.weeks} SEMANAS
-        </SectionLabel>
-
-        <div className="mt-2.5 flex flex-col gap-1 pb-1">
-          {gridWeeks.map((row) => (
-            <div key={row.week} className="flex items-center gap-1.5 px-4">
-              <span className="num w-[26px] flex-none text-[9.5px] leading-none font-extrabold tracking-[0.04em] text-mid">
-                {row.label}
-              </span>
-              <div className="flex flex-1 gap-1">
-                {row.days.map((d) => {
-                  const colour = cellColour(
-                    d.group,
-                    statusForDay(d),
-                    d.date > today,
-                  );
-                  return (
-                    <div
-                      key={d.date}
-                      title={`${d.dateLabel} · ${d.title}`}
-                      className="h-[15px] flex-1 border"
-                      style={{
-                        background: colour.background,
-                        borderColor: colour.border,
-                      }}
-                    />
-                  );
-                })}
+        <div className="grid grid-cols-2 gap-1.5 px-5 pt-3.5">
+          {kpis.map((k) => (
+            <div
+              key={k.label}
+              className="rounded-xl border border-line bg-surface px-4 py-3.5"
+            >
+              <div
+                className={cn(
+                  "num flex items-baseline gap-1 text-[26px] leading-none font-bold tracking-[-0.02em]",
+                  k.tone,
+                )}
+              >
+                <span>{k.value}</span>
+                {k.unit ? <span className="text-[14px]">{k.unit}</span> : null}
               </div>
-              <span className="num w-8 flex-none text-right text-[9.5px] leading-none font-semibold text-faint">
-                {row.pct == null ? "—" : `${row.pct}%`}
-              </span>
+              <div className="mt-1 text-[11px] leading-[1.25] tracking-[0.06em] text-faint uppercase">
+                {k.label}
+              </div>
             </div>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pt-3">
+        {/* ── consistency ─────────────────────────────────────── */}
+
+        <SectionLabel
+          className="pt-4"
+          right={<span className="text-[11px]">L M X J V S D</span>}
+        >
+          constancia · {phase.weeks} semanas
+        </SectionLabel>
+
+        <div className="mt-2.5 flex flex-col gap-[5px] pb-1">
+          {gridWeeks.map((row) => {
+            // Weeks the athlete has not reached yet read as a plan, not a score.
+            const ahead = row.week > placement.week;
+            return (
+              <div key={row.week} className="flex items-center gap-2 px-5">
+                <span
+                  className={cn(
+                    "font-display w-[26px] flex-none text-[10px] leading-none font-semibold",
+                    ahead ? "text-faint" : "text-mid",
+                  )}
+                >
+                  {row.label}
+                </span>
+                <div className="flex flex-1 gap-1">
+                  {row.days.map((d) => {
+                    const colour = cellColour(
+                      d.group,
+                      statusForDay(d),
+                      d.date > today,
+                    );
+                    return (
+                      <div
+                        key={d.date}
+                        title={`${d.dateLabel} · ${d.title}`}
+                        className={cn(
+                          "h-4 flex-1 rounded-[4px] border",
+                          // No fill is how `cellColour` says "still ahead".
+                          colour.background === "transparent" &&
+                            "border-dashed",
+                        )}
+                        style={{
+                          background: colour.background,
+                          borderColor: colour.border,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <span
+                  className={cn(
+                    "num w-[34px] flex-none text-right text-[10px] leading-none font-semibold",
+                    ahead ? "text-faint" : "text-mid",
+                  )}
+                >
+                  {row.pct == null ? "—" : `${row.pct}%`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 pt-2.5">
           {LEGEND.map((l) => (
             <span key={l.label} className="flex items-center gap-1.5">
-              <span
-                className="h-2.5 w-2.5 flex-none border"
-                style={{ background: l.background, borderColor: l.border }}
-              />
-              <span className="text-[9px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+              {l.colour ? (
+                /* The hairline outline is what makes the palest fills —
+                   "sin registrar" against the page — visible at 9px. */
+                <span
+                  className="h-[9px] w-[9px] flex-none rounded-[3px] border border-hairline"
+                  style={{ background: l.colour }}
+                />
+              ) : (
+                <span className="h-[9px] w-[9px] flex-none rounded-[3px] border border-dashed border-hairline" />
+              )}
+              <span className="text-[10px] leading-none text-faint uppercase">
                 {l.label}
               </span>
             </span>
@@ -558,43 +598,45 @@ export default async function HistorialPage() {
 
         {/* ── records ─────────────────────────────────────────── */}
 
-        <SectionLabel>RÉCORDS · MEJOR SERIE REGISTRADA</SectionLabel>
+        <SectionLabel className="pt-4">récords · mejor serie</SectionLabel>
 
         <RowStack className="mt-2.5">
           {records.length === 0 ? (
             <Row>
-              <p className="text-[11.5px] leading-[1.5] text-faint">
+              <p className="text-[12px] leading-[1.55] text-faint">
                 Este programa no tiene básicos con RM asociada, así que no hay
                 récords que seguir.
               </p>
             </Row>
           ) : (
             records.map(({ lift, best }) => (
-              <Row key={lift.id} className="flex items-end gap-3">
+              <Row key={lift.id} className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] leading-[1.2] font-bold">
+                  <div className="truncate text-[14px] leading-[1.2] font-medium">
                     {lift.name}
                   </div>
-                  <div className="mt-1 text-[10px] leading-none text-faint">
-                    {best ? formatDayShort(best.date) : "sin series registradas"}
-                  </div>
-                  <div className="num mt-2 text-[17px] leading-none font-black tracking-[-0.02em]">
-                    {best ? `${formatWeight(best.weightKg)} × ${best.reps}` : "—"}
-                  </div>
-                  <div className="num mt-1.5 text-[10px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
-                    RM EST. {formatWeight(Number(lift.e1rm_kg))} kg
+                  <div className="mt-0.5 truncate text-[11px] leading-[1.35] text-faint">
+                    {best ? `${formatDayShort(best.date)} · ` : ""}RM est.{" "}
+                    {formatWeight(Number(lift.e1rm_kg))} kg
                   </div>
                 </div>
                 {best ? (
-                  <div className="flex-none text-right">
-                    <div className="num text-[17px] leading-none font-black tracking-[-0.02em] text-ok">
-                      {formatWeight(best.epleyKg)}
-                    </div>
-                    <div className="mt-1.5 text-[9.5px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
-                      kg epley
-                    </div>
-                  </div>
-                ) : null}
+                  <>
+                    <span className="num flex-none text-[14px] leading-none font-semibold">
+                      {formatWeight(best.weightKg)} × {best.reps}
+                    </span>
+                    <span className="num min-w-[74px] flex-none text-right text-[14px] leading-none font-bold text-lime">
+                      {formatWeight(best.epleyKg)}{" "}
+                      <span className="text-[10px] font-semibold text-lime-dim uppercase">
+                        epley
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <span className="flex-none text-[11px] leading-none text-faint">
+                    sin series
+                  </span>
+                )}
               </Row>
             ))
           )}
@@ -602,21 +644,29 @@ export default async function HistorialPage() {
 
         {/* ── log ─────────────────────────────────────────────── */}
 
-        <SectionLabel right={entries.length > 0 ? `${entries.length} SESIONES` : undefined}>
-          REGISTRO
+        <SectionLabel
+          className="pt-4"
+          right={
+            entries.length > 0 ? (
+              <span className="text-[11px]">{entries.length} sesiones</span>
+            ) : undefined
+          }
+        >
+          registro
         </SectionLabel>
         <HistoryLog entries={entries} />
 
         {/* ── engine timeline ─────────────────────────────────── */}
 
-        <SectionLabel>LÍNEA DE TIEMPO DEL MOTOR</SectionLabel>
+        <SectionLabel className="pt-4">línea de tiempo del motor</SectionLabel>
 
         <RowStack className="mt-2.5">
           {(eventRows ?? []).length === 0 ? (
             <Row>
-              <p className="text-[11.5px] leading-[1.5] text-faint">
-                El motor no ha tocado nada todavía. Cada ajuste queda aquí, con
-                su semana y su detalle.
+              <p className="text-[12px] leading-[1.55] text-faint">
+                El motor no ha tocado nada todavía. Cada ajuste — congelar un
+                peso, recortar una RM, sumar un ciclo — queda aquí con su semana
+                y su detalle.
               </p>
             </Row>
           ) : (
@@ -625,29 +675,29 @@ export default async function HistorialPage() {
               return (
                 <Row key={e.id}>
                   <div
-                    className="border-l-[6px] py-0.5 pl-3"
+                    className="rounded-r-sm border-l-[4px] py-0.5 pl-3"
                     style={{ borderColor: EVENT_TONE[e.kind] ?? TONE.ink }}
                   >
                     <div className="flex items-baseline gap-2">
-                      <span className="num text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
-                        SEM {e.week ?? "—"}
+                      <span className="num text-[10px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                        sem {e.week ?? "—"}
                       </span>
                       {reverted ? (
-                        <span className="text-[9.5px] leading-none font-semibold tracking-[0.1em] text-ghost uppercase">
+                        <span className="font-display text-[10px] leading-none font-semibold tracking-[0.1em] text-ghost uppercase">
                           deshecho
                         </span>
                       ) : null}
                     </div>
                     <div
                       className={cn(
-                        "mt-1.5 text-[12.5px] leading-[1.2] font-bold",
+                        "mt-1.5 text-[13px] leading-[1.25] font-semibold",
                         reverted && "text-ghost line-through",
                       )}
                     >
                       {e.title}
                     </div>
                     {e.detail ? (
-                      <div className="mt-1.5 text-[11.5px] leading-[1.5] text-mid">
+                      <div className="mt-1.5 text-[12px] leading-[1.5] text-mid">
                         {e.detail}
                       </div>
                     ) : null}

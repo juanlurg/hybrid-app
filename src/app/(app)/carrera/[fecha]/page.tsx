@@ -2,17 +2,16 @@ import { redirect } from "next/navigation";
 
 import { accentFor, TONE } from "@/components/day-accents";
 import {
-  Footnote,
+  Card,
   Framed,
+  Row,
   RowStack,
   SectionLabel,
-  StatGrid,
   TopBar,
 } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
 import { formatDayLong, placeDate, type IsoDate } from "@/lib/domain/calendar";
 import { phaseSpans, resolveDay } from "@/lib/domain/plan";
-import { formatWeight } from "@/lib/engine";
 import {
   hrZones,
   parseStructure,
@@ -113,34 +112,6 @@ export default async function CarreraPage({
         ).data
       : null;
 
-  const logged: Array<{ value: string; unit: string; label: string }> = [];
-  if (runLog) {
-    if (runLog.duration_seconds != null)
-      logged.push({
-        value: String(Math.round(runLog.duration_seconds / 60)),
-        unit: "min",
-        label: "Duración",
-      });
-    if (runLog.distance_km != null)
-      logged.push({
-        value: formatWeight(Number(runLog.distance_km)),
-        unit: "km",
-        label: "Distancia",
-      });
-    if (runLog.avg_hr != null)
-      logged.push({
-        value: String(runLog.avg_hr),
-        unit: "ppm",
-        label: "FC media",
-      });
-    if (runLog.decoupling_pct != null)
-      logged.push({
-        value: formatWeight(Number(runLog.decoupling_pct)),
-        unit: "%",
-        label: "Desacople",
-      });
-  }
-
   /* ── zones ────────────────────────────────────────────────── */
 
   const lthr = ctx.profile.lthr;
@@ -180,66 +151,75 @@ export default async function CarreraPage({
   const zonesFloorPct = Math.round((zoneBy("Z1")?.toPct ?? 0) * 100);
   const zonesTopPct = Math.round((zoneBy("Z5")?.fromPct ?? 1) * 100);
 
+  const testHint = nextTest ? (
+    <>
+      test {nextTest.key} sem <span className="num">{nextTest.week}</span>
+    </>
+  ) : (
+    "test: 30′ a tope"
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar title="CARRERA" href="/semana" right={formatDayLong(day.date)} />
 
+      {/* The action bar sticks to the bottom of this scrollport, so the
+          form has to live inside it. */}
       <div className="flex-1 overflow-auto">
-        <section className="bg-run px-4 pt-5 pb-4 text-paper">
-          <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase opacity-80">
-            {day.label} · {phase.key} SEM{" "}
-            <span className="num">{placement.week}</span>
-          </div>
-          <h1 className="mt-2.5 text-[31px] leading-[1.02] font-black tracking-[-0.03em]">
-            {day.prescription || day.title}
-          </h1>
-          <div className="mt-3.5 flex items-baseline gap-3 border-t-2 border-paper/30 pt-2.5">
-            <span className="flex-1 text-[12.5px] leading-[1.2] font-bold">
-              {day.title}
-            </span>
-            {day.estimatedMinutes > 0 ? (
-              <span className="num flex-none text-[11px] leading-none font-extrabold tracking-[0.08em] uppercase opacity-80">
-                {day.estimatedMinutes}′ aprox
-              </span>
-            ) : null}
-          </div>
-          {day.subtitle ? (
-            <p className="mt-2.5 text-[11.5px] leading-[1.45] opacity-70">
-              {day.subtitle}
-            </p>
-          ) : null}
-        </section>
-
-        {logged.length > 0 ? (
-          <>
-            <SectionLabel>Lo que registraste</SectionLabel>
-            <div className="mt-2.5 border-y-2 border-ink">
-              <StatGrid items={logged} columns={2} />
+        <div className="px-5 pt-2">
+          <Card>
+            <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
+              {day.label} · {phase.key} SEM{" "}
+              <span className="num">{placement.week}</span>
             </div>
-          </>
-        ) : null}
+            <h1 className="mt-2 text-[19px] leading-[1.3] font-semibold">
+              {day.prescription || day.title}
+            </h1>
+            {day.estimatedMinutes > 0 ? (
+              <div className="mt-2 flex items-baseline gap-2.5">
+                <span className="num text-[80px] leading-[0.95] font-bold tracking-[-0.02em] text-run">
+                  {day.estimatedMinutes}
+                </span>
+                <span className="font-display text-[18px] leading-none font-semibold text-mid uppercase">
+                  min aprox
+                </span>
+              </div>
+            ) : null}
+            <p className="mt-3.5 border-t border-edge pt-3 text-[12.5px] leading-[1.55] text-mid">
+              {day.subtitle ? `${day.subtitle}. ` : ""}El detalle queda en el
+              reloj: aquí solo se marca si se ha hecho.
+            </p>
+          </Card>
+        </div>
 
+        {/* Even a lone block carries the zone, the duration and the target
+            pulse — none of which the headline shows. */}
         {day.runBlocks.length > 0 ? (
           <>
             <SectionLabel
-              right={<span className="num">{day.runBlocks.length} bloques</span>}
+              right={
+                <span className="num">
+                  {day.runBlocks.length}{" "}
+                  {day.runBlocks.length === 1 ? "bloque" : "bloques"}
+                </span>
+              }
             >
               La sesión
             </SectionLabel>
             <RowStack className="mt-2.5">
               {day.runBlocks.map((block, i) => (
-                <div key={`${block.title}-${i}`} className="bg-paper px-4 py-3">
+                <Row key={`${block.title}-${i}`}>
                   <div className="flex w-full items-start gap-2.5">
                     <div
-                      className="h-9 w-1.5 flex-none"
+                      className="h-9 w-[3px] flex-none rounded-full"
                       style={{ background: TONE_COLOUR[block.tone] }}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-2">
-                        <span className="min-w-0 flex-1 text-[13.5px] leading-[1.2] font-bold">
+                        <span className="min-w-0 flex-1 text-[13.5px] leading-[1.2] font-semibold">
                           {block.title}
                         </span>
-                        <span className="flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+                        <span className="font-display flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
                           {block.zone}
                         </span>
                       </div>
@@ -253,128 +233,119 @@ export default async function CarreraPage({
                       ) : null}
                     </div>
                   </div>
-                </div>
+                </Row>
               ))}
             </RowStack>
           </>
-        ) : (
-          <>
-            <SectionLabel>La sesión</SectionLabel>
-            <div className="px-4 pt-2.5">
-              <Framed>
-                <p className="text-[11.5px] leading-[1.5] text-mid">
-                  Esta semana el plan no escribe nada para{" "}
-                  {day.label.toLowerCase()}. Sal a rodar en Z2 el tiempo que
-                  tenías previsto y márcalo hecho: el volumen cuenta igual.
-                </p>
-              </Framed>
-            </div>
-          </>
-        )}
+        ) : day.runBlocks.length === 0 ? (
+          <div className="px-5 pt-4">
+            <Framed>
+              <p className="text-[12px] leading-[1.5] text-mid">
+                Esta semana el plan no escribe nada para{" "}
+                {day.label.toLowerCase()}. Sal a rodar en Z2 el tiempo que tenías
+                previsto y márcalo hecho: el volumen cuenta igual.
+              </p>
+            </Framed>
+          </div>
+        ) : null}
 
-        <div className="px-4 pt-4">
-          <Framed>
-            <div className="flex items-baseline gap-3">
-              <span className="flex-1 text-[10px] leading-none font-extrabold tracking-[0.12em] uppercase">
-                {lthr == null ? (
-                  "Zonas · sin LTHR"
-                ) : (
-                  <>
-                    Zonas · LTHR <span className="num">{lthr}</span>
-                  </>
-                )}
-              </span>
-              {nextTest ? (
-                <span className="num flex-none text-[10px] leading-none font-medium text-ghost">
-                  TEST {nextTest.key} SEM {nextTest.week}
+        <div className="px-5 pt-4">
+          {lthr == null ? (
+            <Card className="px-4 py-4">
+              <div className="flex items-baseline gap-3">
+                <span className="font-display flex-1 text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+                  Zonas · sin LTHR
                 </span>
-              ) : null}
-            </div>
-
-            {lthr == null ? (
-              <p className="mt-2.5 text-[11.5px] leading-[1.5] text-mid">
+                <span className="flex-none text-[11px] leading-none text-faint uppercase">
+                  {testHint}
+                </span>
+              </div>
+              <p className="mt-2.5 text-[12px] leading-[1.55] text-mid">
                 Todavía no tienes LTHR, así que no hay zonas reales que
                 enseñarte.{" "}
                 {nextTest
                   ? `El test cae en ${nextTest.key} semana ${nextTest.week}: `
                   : "El test son "}
-                30′ a tope en llano y la FC media de los últimos 20 minutos es
-                tu LTHR. Hasta entonces las pulsaciones de los bloques salen de
-                una estimación y valen como referencia, no como objetivo.
+                30′ a tope en llano y la FC media de los últimos 20 minutos es tu
+                LTHR. Hasta entonces las pulsaciones de los bloques salen de una
+                estimación y valen como referencia, no como objetivo.
               </p>
-            ) : (
-              <>
-                <div className="mt-3.5 flex flex-col gap-2.5">
-                  {zones.map((z) => (
-                    <div key={z.key} className="flex items-center gap-3">
-                      <span className="w-[22px] flex-none text-[11px] leading-none font-extrabold">
-                        {z.key}
-                      </span>
-                      <span className="h-2.5 flex-1 bg-soft">
-                        <span
-                          className="block h-full"
-                          style={{
-                            width: `${widthPct(z)}%`,
-                            background: TONE_COLOUR[ZONE_TONE[z.key]],
-                          }}
-                        />
-                      </span>
-                      <span className="num w-[74px] flex-none text-right text-[11.5px] leading-none font-extrabold">
-                        {bpmRange(z)}
-                      </span>
-                    </div>
-                  ))}
+            </Card>
+          ) : (
+            <Card className="divide-y divide-line px-4 py-1">
+              <div className="flex items-baseline gap-3 py-[11px]">
+                <span className="font-display flex-1 text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+                  Zonas · LTHR <span className="num">{lthr}</span>
+                </span>
+                {nextTest ? (
+                  <span className="flex-none text-[11px] leading-none text-faint uppercase">
+                    {testHint}
+                  </span>
+                ) : null}
+              </div>
+              {zones.map((z) => (
+                <div key={z.key} className="flex items-center gap-3 py-[11px]">
+                  <span className="font-display w-[22px] flex-none text-[11px] leading-none font-semibold">
+                    {z.key}
+                  </span>
+                  <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-soft">
+                    <span
+                      className="block h-full rounded-full"
+                      style={{
+                        width: `${widthPct(z)}%`,
+                        background: TONE_COLOUR[ZONE_TONE[z.key]],
+                      }}
+                    />
+                  </span>
+                  <span className="num w-[74px] flex-none text-right text-[12px] leading-none font-semibold">
+                    {bpmRange(z)}
+                  </span>
                 </div>
-                <p className="mt-3.5 text-[11px] leading-[1.45] text-faint">
-                  Cifras en ppm sobre el LTHR, no sobre la FC máxima. Z1 por
-                  debajo del <span className="num">{zonesFloorPct}</span> % y Z5
-                  a partir del <span className="num">{zonesTopPct}</span> %.
-                </p>
-              </>
-            )}
-          </Framed>
+              ))}
+              <p className="py-[11px] text-[11.5px] leading-[1.45] text-faint">
+                Cifras en ppm sobre el LTHR, no sobre la FC máxima. Z1 por debajo
+                del <span className="num">{zonesFloorPct}</span> % y Z5 a partir
+                del <span className="num">{zonesTopPct}</span> %.
+              </p>
+            </Card>
+          )}
         </div>
 
-        <Footnote>
-          El detalle queda en el reloj. Aquí solo se marca si se ha hecho —
-          cuenta para el volumen de la semana y para el desacople Pa:HR.
-        </Footnote>
+        <LogRunForm
+          day={{
+            phaseId: phase.id,
+            slotId: slot.id,
+            date: day.date,
+            week: placement.week,
+            dayIndex: day.dayIndex,
+            sessionType: day.sessionType,
+            title: day.title,
+            prescription: day.prescription,
+          }}
+          targetMinutes={day.estimatedMinutes}
+          done={done}
+          logged={
+            runLog
+              ? {
+                  durationMinutes:
+                    runLog.duration_seconds == null
+                      ? null
+                      : Math.round(runLog.duration_seconds / 60),
+                  distanceKm:
+                    runLog.distance_km == null
+                      ? null
+                      : Number(runLog.distance_km),
+                  avgHr: runLog.avg_hr,
+                  decouplingPct:
+                    runLog.decoupling_pct == null
+                      ? null
+                      : Number(runLog.decoupling_pct),
+                  perceivedEffort: runLog.perceived_effort,
+                }
+              : null
+          }
+        />
       </div>
-
-      <LogRunForm
-        day={{
-          phaseId: phase.id,
-          slotId: slot.id,
-          date: day.date,
-          week: placement.week,
-          dayIndex: day.dayIndex,
-          sessionType: day.sessionType,
-          title: day.title,
-          prescription: day.prescription,
-        }}
-        targetMinutes={day.estimatedMinutes}
-        done={done}
-        logged={
-          runLog
-            ? {
-                durationMinutes:
-                  runLog.duration_seconds == null
-                    ? null
-                    : Math.round(runLog.duration_seconds / 60),
-                distanceKm:
-                  runLog.distance_km == null
-                    ? null
-                    : Number(runLog.distance_km),
-                avgHr: runLog.avg_hr,
-                decouplingPct:
-                  runLog.decoupling_pct == null
-                    ? null
-                    : Number(runLog.decoupling_pct),
-                perceivedEffort: runLog.perceived_effort,
-              }
-            : null
-        }
-      />
     </div>
   );
 }

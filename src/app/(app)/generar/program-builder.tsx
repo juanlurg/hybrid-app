@@ -3,7 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { ActionBar, Footnote, ScreenHeader, SectionLabel } from "@/components/ui/kit";
+import {
+  ActionBar,
+  Footnote,
+  Row,
+  RowStack,
+  ScreenHeader,
+  SectionLabel,
+} from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
 import {
   discardGeneratedProgram,
@@ -58,11 +65,11 @@ export function ProgramBuilder({
 
         <div className="min-h-0 flex-1 overflow-auto">
           <SectionLabel>Fases</SectionLabel>
-          <div className="mt-2.5 flex flex-col gap-px bg-line">
+          <RowStack className="mt-2.5">
             {preview.phases.map((p) => (
-              <div key={p.key} className="bg-paper px-4 py-3">
+              <Row key={p.key}>
                 <div className="flex items-baseline gap-2.5">
-                  <span className="text-[13.5px] leading-[1.2] font-bold">
+                  <span className="font-display text-[13.5px] leading-[1.2] font-semibold">
                     {p.key} — {p.name}
                   </span>
                   <span className="num ml-auto text-[11px] leading-none text-mid">
@@ -72,33 +79,34 @@ export function ProgramBuilder({
                 {p.warnings.map((w, i) => (
                   <p
                     key={i}
-                    className="mt-2 border-l-4 py-0.5 pl-2.5 text-[11px] leading-[1.45] text-mid"
+                    className="mt-2 rounded-r-sm border-l-[4px] py-0.5 pl-2.5 text-[11px] leading-[1.45] text-mid"
                     style={{
                       borderColor: w.tone === "fail" ? TONE.fail : TONE.warn,
                     }}
                   >
-                    <span className="font-bold">{w.title}.</span> {w.detail}
+                    <span className="font-semibold text-ink">{w.title}.</span>{" "}
+                    {w.detail}
                   </p>
                 ))}
-              </div>
+              </Row>
             ))}
-          </div>
+          </RowStack>
 
           {preview.newLiftKeys.length > 0 ? (
             <>
               <SectionLabel>RM de los básicos nuevos</SectionLabel>
-              <p className="px-4 pt-2 text-[11.5px] leading-[1.5] text-mid">
+              <p className="px-5 pt-2 text-[11.5px] leading-[1.5] text-mid">
                 El plan sigue {preview.newLiftKeys.length === 1 ? "un básico" : "básicos"}{" "}
                 que aún no trackeas. El motor no inventa una RM: pon la tuya
                 (vale la estimada con la calculadora de Programa).
               </p>
-              <div className="mt-2.5 flex flex-col gap-px bg-line">
+              <RowStack className="mt-2.5">
                 {preview.newLiftKeys.map((k) => (
                   <label
                     key={k}
-                    className="flex items-center gap-3 bg-paper px-4 py-3"
+                    className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-3"
                   >
-                    <span className="flex-1 text-[13px] leading-[1.2] font-bold capitalize">
+                    <span className="flex-1 text-[13px] leading-[1.2] font-semibold capitalize">
                       {k}
                     </span>
                     <input
@@ -110,19 +118,19 @@ export function ProgramBuilder({
                         setRms((prev) => ({ ...prev, [k]: e.target.value }))
                       }
                       aria-label={`RM estimada de ${k}`}
-                      className="num h-10 w-24 border-2 border-ink bg-paper px-2 text-right text-[15px] font-black outline-none"
+                      className="num h-10 w-24 rounded-sm border border-edge bg-soft px-2 text-right text-[15px] font-semibold outline-none"
                     />
-                    <span className="text-[11px] leading-none font-bold text-mid">
+                    <span className="font-display text-[11px] leading-none font-semibold text-mid">
                       kg
                     </span>
                   </label>
                 ))}
-              </div>
+              </RowStack>
             </>
           ) : null}
 
           {error ? (
-            <div className="mx-4 mt-4 border-l-[6px] border-fail py-1 pl-3 text-[12px] leading-[1.5]">
+            <div className="mx-5 mt-4 rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[12px] leading-[1.5]">
               {error}
             </div>
           ) : null}
@@ -134,9 +142,10 @@ export function ProgramBuilder({
           </Footnote>
         </div>
 
-        <div className="flex flex-none">
+        <div className="flex flex-none items-stretch">
           <ActionBar
             tone="strength"
+            className="min-w-0 flex-1 pr-1.5"
             disabled={pending || blocking.length > 0 || rmsMissing.length > 0}
             onClick={() =>
               startTransition(async () => {
@@ -163,20 +172,22 @@ export function ProgramBuilder({
                   ? "Faltan RM por poner"
                   : "Activar este programa"}
           </ActionBar>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              startTransition(async () => {
-                await discardGeneratedProgram(preview.programId);
-                setPreview(null);
-                setRms({});
-              })
-            }
-            className="flex h-16 w-[110px] items-center justify-center bg-ink text-[12px] leading-none font-bold tracking-[0.06em] text-paper uppercase"
-          >
-            Descartar
-          </button>
+          <div className="flex-none pt-3.5 pr-5 pb-3">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  await discardGeneratedProgram(preview.programId);
+                  setPreview(null);
+                  setRms({});
+                })
+              }
+              className="font-display flex h-15 w-[104px] items-center justify-center rounded-xl border border-edge bg-surface text-[12px] leading-none font-bold tracking-[0.06em] text-mid uppercase disabled:opacity-40"
+            >
+              Descartar
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -192,7 +203,7 @@ export function ProgramBuilder({
       />
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="px-4 pt-5">
+        <div className="px-5 pt-5">
           <p className="text-[12.5px] leading-[1.55] text-mid">
             Describe el objetivo, la fecha, cuántos días puedes entrenar y qué
             material tienes. La IA monta las fases, la semana tipo y las
@@ -204,15 +215,15 @@ export function ProgramBuilder({
         </div>
 
         {!hasApiKey ? (
-          <div className="mx-4 mt-4 border-l-[6px] border-warn py-1 pl-3 text-[12px] leading-[1.55]">
-            Falta <code className="font-bold">GEMINI_API_KEY</code> en{" "}
-            <code className="font-bold">.env.local</code>. Sin ella no se puede
-            generar un plan; el editor manual sigue funcionando.
+          <div className="mx-5 mt-4 rounded-r-sm border-l-[4px] border-warn py-1 pl-3 text-[12px] leading-[1.55]">
+            Falta <code className="font-semibold">GEMINI_API_KEY</code> en{" "}
+            <code className="font-semibold">.env.local</code>. Sin ella no se
+            puede generar un plan; el editor manual sigue funcionando.
           </div>
         ) : null}
 
         <SectionLabel>El encargo</SectionLabel>
-        <div className="mx-4 mt-3">
+        <div className="mx-5 mt-3">
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
@@ -220,18 +231,18 @@ export function ProgramBuilder({
             disabled={!hasApiKey || pending}
             placeholder="Ej: media maratón el 25 de abril, cinco días a la semana, rack y barra en casa…"
             aria-label="Descripción del programa"
-            className="w-full border-2 border-ink bg-paper px-3 py-3 text-[13px] leading-[1.5] outline-none disabled:opacity-50"
+            className="w-full rounded-xl border border-edge bg-surface px-3.5 py-3 text-[13px] leading-[1.5] outline-none disabled:opacity-50"
           />
         </div>
 
-        <div className="mx-4 mt-3 flex flex-wrap gap-1">
+        <div className="mx-5 mt-3 flex flex-wrap gap-1.5">
           {EXAMPLES.map((e) => (
             <button
               key={e}
               type="button"
               disabled={!hasApiKey || pending}
               onClick={() => setBrief(e)}
-              className="border-2 border-ink px-2.5 py-2 text-left text-[10.5px] leading-[1.3] font-semibold disabled:opacity-40"
+              className="rounded-sm border border-edge bg-soft px-2.5 py-2 text-left text-[10.5px] leading-[1.3] font-semibold disabled:opacity-40"
             >
               {e.slice(0, 40)}…
             </button>
@@ -239,19 +250,19 @@ export function ProgramBuilder({
         </div>
 
         <SectionLabel>Primer lunes</SectionLabel>
-        <div className="mx-4 mt-3">
+        <div className="mx-5 mt-3">
           <input
             type="date"
             value={startsOn}
             onChange={(e) => setStartsOn(e.target.value)}
             disabled={pending}
             aria-label="Fecha de inicio"
-            className="h-12 w-full border-2 border-ink bg-paper px-3 text-[14px] font-medium outline-none"
+            className="num h-12 w-full rounded-xl border border-edge bg-surface px-3.5 text-[14px] font-medium outline-none"
           />
         </div>
 
         {error ? (
-          <div className="mx-4 mt-4 border-l-[6px] border-fail py-1 pl-3 text-[12px] leading-[1.5]">
+          <div className="mx-5 mt-4 rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[12px] leading-[1.5]">
             {error}
           </div>
         ) : null}

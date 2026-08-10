@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
+import { Chip } from "@/components/ui/kit";
 import { cn } from "@/lib/cn";
 
 export interface LiftOption {
@@ -11,7 +12,7 @@ export interface LiftOption {
 }
 
 /**
- * The lift selector. Flush cells, the gap is the rule.
+ * The lift selector — a wrapping row of pills.
  *
  * Navigation is a real URL change (`/progreso?lift=…`) so the server
  * recomputes the whole audit — the breakdown must never be a client guess.
@@ -27,15 +28,15 @@ export function LiftPicker({
   const [pending, startTransition] = useTransition();
 
   return (
-    // Wraps rather than scrolls: a hidden scrollbar on a flush strip gives
-    // no hint that there are more lifts past the edge.
-    <div className="flex flex-none flex-wrap gap-px bg-line py-px">
+    // Wraps rather than scrolls: a hidden scrollbar gives no hint that there
+    // are more lifts past the edge.
+    <div className="flex flex-none flex-wrap gap-1.5 px-5 pt-3.5">
       {lifts.map((lift) => {
         const isActive = lift.key === active;
         return (
-          <button
+          <Chip
             key={lift.key}
-            type="button"
+            active={isActive}
             aria-current={isActive ? "page" : undefined}
             onClick={() => {
               if (isActive) return;
@@ -44,13 +45,13 @@ export function LiftPicker({
               });
             }}
             className={cn(
-              "min-w-[74px] flex-1 px-3 py-3.5 text-center text-[10px] leading-none font-bold tracking-[0.06em] whitespace-nowrap uppercase",
-              isActive ? "bg-ink text-paper" : "bg-paper text-mid",
+              "flex min-h-11 items-center rounded-full px-3 text-[11.5px] whitespace-nowrap uppercase",
+              isActive ? "font-bold" : "bg-surface text-mid",
               pending && !isActive && "opacity-55",
             )}
           >
             {lift.name}
-          </button>
+          </Chip>
         );
       })}
     </div>

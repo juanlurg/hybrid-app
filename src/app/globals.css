@@ -1,50 +1,165 @@
 @import "tailwindcss";
 
 /* ──────────────────────────────────────────────────────────────
-   Bloques — Swiss sport poster.
-   Full-bleed colour panels, heavy type, hard 2px rules, no radii,
-   no shadows. Session type readable from a metre away.
+   Bloques — Foco.
+   One thing lit per screen, the engine folded behind a line.
+   Dark and light are peers: the palette flips, the hierarchy does
+   not. Chakra Petch carries labels and numbers, Barlow the prose.
    ────────────────────────────────────────────────────────────── */
 
-@theme {
-  --color-ink: #111110;
-  --color-paper: #ecebe6;
-  --color-mid: #6e6d67;
-  --color-faint: #8e8c85;
-  --color-line: #d7d5cd;
-  --color-quiet: #c9c6bc;
-  --color-soft: #e0ded7;
-  --color-hairline: #b6b3aa;
-  --color-ghost: #a9a7a0;
-  --color-ink-2: #2c2c29;
-  --color-ink-3: #7d7c76;
-  --color-sunk: #e4e2db;
+/*
+ * `inline` matters: without it Tailwind copies the *value* at build
+ * time and the utilities stop following the theme.
+ */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-soft: var(--soft);
+  --color-sunk: var(--sunk);
+  --color-chrome: var(--chrome);
+  --color-panel: var(--panel);
+  --color-on-panel: var(--on-panel);
 
-  /* semantic accents */
-  --color-strength: oklch(0.62 0.19 32); /* fuerza — the orange */
-  --color-run: oklch(0.62 0.19 250); /* carrera — the blue */
-  --color-ok: oklch(0.55 0.14 145);
-  --color-ok-bright: oklch(0.72 0.19 130);
-  --color-warn: oklch(0.72 0.16 75);
-  --color-fail: oklch(0.55 0.21 25);
-  --color-tint: #f2e6cf; /* "touched by AI" wash */
+  --color-edge: var(--edge);
+  --color-line: var(--line);
+  --color-hairline: var(--hairline);
 
-  --font-display: var(--font-archivo), system-ui, sans-serif;
-  --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --color-ink: var(--ink);
+  --color-mid: var(--mid);
+  --color-faint: var(--faint);
+  --color-ghost: var(--ghost);
 
-  --radius-none: 0px;
+  /* `strength` is the lit surface — the same lime in both themes.
+     `lime` is that green used as ink, which light has to darken. */
+  --color-strength: var(--strength);
+  --color-on-strength: var(--on-strength);
+  --color-lime: var(--lime);
+  --color-lime-line: var(--lime-line);
+  --color-lime-soft: var(--lime-soft);
+  --color-lime-edge: var(--lime-edge);
+  --color-lime-dim: var(--lime-dim);
+  --color-run: var(--run);
+  --color-on-run: var(--on-run);
+  --color-quiet: var(--quiet);
+
+  --color-ok: var(--lime);
+  --color-ok-bright: var(--lime-line);
+  --color-warn: var(--warn);
+  --color-fail: var(--fail);
+  --color-tint: var(--tint);
+
+  /* The panel is dark in both themes, so what sits on it is fixed. */
+  --color-warn-panel: #e8c65a;
+  --color-fail-panel: #f08a7a;
+
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  --font-display: var(--font-chakra), system-ui, sans-serif;
+  --font-sans: var(--font-barlow), system-ui, sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 22px;
 }
 
 /*
  * Everything below goes in `@layer base`. Unlayered rules outrank every
  * `@layer utilities` declaration, so an element selector like
  * `button { color: inherit }` sitting outside a layer silently beats
- * `text-paper` on every button in the app.
+ * `text-ink` on every button in the app.
  */
 @layer base {
+  /*
+   * Light is the written theme; dark is a full override. The inline
+   * script in the root layout resolves "system" and stamps
+   * `data-theme` before first paint, so there is no third state here.
+   */
   :root {
     color-scheme: light;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+    --bg: #f2f4ef;
+    --surface: #ffffff;
+    --soft: #eef2e8;
+    --sunk: #f7f9f3;
+    --chrome: #ffffff;
+    --panel: #171b16;
+    --on-panel: #eef2ec;
+
+    --edge: #dde3da;
+    --line: #e2e7df;
+    --hairline: #cfd8ca;
+
+    --ink: #171b16;
+    --mid: #5f6a60;
+    --faint: #98a299;
+    --ghost: #98a299;
+
+    --strength: #b8ee3c;
+    --on-strength: #10140d;
+    --lime: #4c7d1a;
+    --lime-line: #6cb520;
+    --lime-soft: #e9f5d6;
+    --lime-edge: #9ccc52;
+    /* Lime turned down: sub-labels riding next to a lime figure. Light
+       darkens rather than lightens — `lime` is already dark here, so the
+       quieter green has to go under it, not over it, to stay legible. */
+    --lime-dim: #55702f;
+    --run: #1f7f96;
+    --on-run: #eef2ec;
+    --quiet: #dde3d2;
+
+    --warn: #8a5d00;
+    --fail: #b4382a;
+    --tint: #f8f1e2;
+
+    --ink-2: #2b302c;
+    --ink-3: #7d867e;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+
+    --bg: #0f1210;
+    --surface: #171b18;
+    --soft: #22271f;
+    --sunk: #131711;
+    --chrome: #131714;
+    /* In the dark theme the engine's box is just a card; only light
+       has to invert to keep that voice distinct from the page. */
+    --panel: #171b18;
+    --on-panel: #eef2ec;
+
+    --edge: #262b27;
+    --line: #232824;
+    --hairline: #3a403b;
+
+    --ink: #eef2ec;
+    --mid: #9aa39b;
+    --faint: #5d665e;
+    --ghost: #5d665e;
+
+    --strength: #b8ee3c;
+    --on-strength: #10140d;
+    --lime: #b8ee3c;
+    --lime-line: #b8ee3c;
+    --lime-soft: #1c2b12;
+    --lime-edge: #4d7c1e;
+    --lime-dim: #7fa14a;
+    --run: #6fd3e8;
+    --on-run: #10140d;
+    --quiet: #2b302c;
+
+    --warn: #e8c65a;
+    --fail: #f08a7a;
+    --tint: #241f14;
+
+    --ink-2: #2b302c;
+    --ink-3: #5d665e;
   }
 
   html,
@@ -54,23 +169,16 @@
 
   body {
     margin: 0;
-    background: var(--color-paper);
-    color: var(--color-ink);
-    font-family: var(--font-display);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-barlow), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     overscroll-behavior-y: none;
   }
 
-  /* Nothing in Bloques is round. */
-  *,
-  ::before,
-  ::after {
-    border-radius: 0;
-  }
-
   input::placeholder,
   textarea::placeholder {
-    color: var(--color-faint);
+    color: var(--faint);
   }
 }
 
@@ -83,8 +191,9 @@
   height: 0;
 }
 
-/* Tabular numerals everywhere numbers matter. */
+/* Numbers are the display face, and they line up. */
 .num {
+  font-family: var(--font-chakra), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -137,8 +246,8 @@
   }
 }
 
-/* Focus rings: a hard offset block, never a glow. */
+/* Focus rings: a hard offset ring, never a glow. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid var(--color-strength);
+  outline: 2px solid var(--lime-line);
   outline-offset: 2px;
 }

@@ -1,15 +1,17 @@
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 
-import { accentFor, TONE } from "@/components/day-accents";
+import { TONE } from "@/components/day-accents";
 import {
   Callout,
+  Card,
   Footnote,
   LinkBar,
   Row,
   RowStack,
   RuleNote,
   SectionLabel,
-  StatGrid,
+  TopBar,
 } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
 import { formatDayLong } from "@/lib/domain/calendar";
@@ -47,14 +49,49 @@ const STATUS_EYEBROW: Record<SessionStatus, string> = {
   planned: "Sesión sin empezar",
 };
 
+/* Read on the page, not on a dark band: `lime-dim`/`warn`/`fail` rather
+   than the stroke and fill greens, which wash out on light. */
 const STATUS_TONE: Record<SessionStatus, string> = {
-  done: "text-ok-bright",
+  done: "text-lime-dim",
   partial: "text-warn",
   skipped: "text-fail",
-  in_progress: "text-strength",
-  planned: "text-quiet",
+  in_progress: "text-lime",
+  planned: "text-faint",
 };
 
+/* A KPI tile. Inline rather than `StatGrid`: series is the headline and
+   carries a lime figure with a dimmed `/n` suffix, which the grid has no
+   slot for. */
+function Kpi({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface px-4 py-3.5">
+      <div className="num text-[26px] leading-none font-bold tracking-[-0.02em]">
+        {children}
+      </div>
+      <div className="font-display mt-1.5 text-[11px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+/** One logged set of the básico. Same colouring as the runner's pills. */
+function SetPill({ value, missed }: { value: string | null; missed: boolean }) {
+  return (
+    <div
+      className={cn(
+        "num flex h-12 w-12 items-center justify-center rounded-lg border-[1.5px] text-[18px] leading-none font-bold",
+        value == null
+          ? "border-edge bg-surface text-faint opacity-55"
+          : missed
+            ? "border-fail bg-fail/10 text-fail"
+            : "border-lime-edge bg-lime-soft text-lime",
+      )}
+    >
+      {value ?? "—"}
+    </div>
+  );
+}
 
 export default async function ResumenPage({
   params,
@@ -97,12 +134,8 @@ export default async function ResumenPage({
   const slot = ctx.slots.find((s) => s.id === session.slot_id) ?? null;
   const title = slot?.label || session.title.toUpperCase() || "SESIÓN";
   const group = groupOf(session.session_type);
-  const accent = accentFor(group);
 
   const duration = formatMinutes(session.duration_seconds);
-  const subtitle = [formatDayLong(session.scheduled_on), duration]
-    .filter(Boolean)
-    .join(" · ");
 
   // The engine runs on the week inside the phase, with that phase's config.
   const sessionPhase = ctx.phases.find((p) => p.id === session.phase_id) ?? null;
@@ -152,6 +185,32 @@ export default async function ResumenPage({
       ),
     );
   }
+
+  /* The básico gets a pill per prescribed set; everything else folds
+     behind the "accesorios" line. */
+  const primaryEx = planned.find((p) => p.isPrimary) ?? null;
+  const primarySummary = summaries.find((s) => s.isPrimary) ?? null;
+  const accessories = summaries.filter((s) => !s.isPrimary);
+  const primaryLogs = primaryEx ? logsFor(primaryEx.id) : [];
+  const primarySets = primaryEx
+    ? Array.from(
+        { length: Math.max(primaryEx.sets, primaryLogs.length) },
+        (_, i) => {
+          const log = primaryLogs.find((l) => l.set_index === i) ?? null;
+          const value = log ? (log.reps ?? log.seconds) : null;
+          return {
+            key: log?.id ?? `pending:${i}`,
+            label:
+              value == null
+                ? null
+                : log?.reps == null
+                  ? `${value}″`
+                  : String(value),
+            missed: log?.missed_range ?? false,
+          };
+        },
+      )
+    : [];
 
   const missed = logs
     .filter((l) => l.missed_range)
@@ -204,104 +263,313 @@ export default async function ResumenPage({
     Number(session.tonnage_kg),
   ).split(" ");
 
+  /* RIR is optional per set, so the fourth tile falls back to what the
+     engine did when nobody logged one. */
+  const rirLogs = logs.filter((l) => l.rir != null);
+  const avgRir =
+    rirLogs.length > 0
+      ? formatWeight(
+          Math.round(
+            (rirLogs.reduce((acc, l) => acc + Number(l.rir), 0) /
+              rirLogs.length) *
+              10,
+          ) / 10,
+        )
+      : null;
+
+  const clean =
+    session.status === "done" && logs.length > 0 && missed.length === 0;
+  const verdict =
+    logs.length === 0
+      ? "Sin series registradas"
+      : missed.length > 0
+        ? missed.length === 1
+          ? "Una serie por debajo del rango"
+          : `${missed.length} series por debajo del rango`
+        : plannedSets > 0 && logs.length < plannedSets
+          ? "Series de menos, todas en rango"
+          : "Todo dentro del rango";
+  const engineLine =
+    standing === 0
+      ? "el motor no toca nada"
+      : standing === 1
+        ? "1 ajuste del motor"
+        : `${standing} ajustes del motor`;
+
+  const accessoryList =
+    accessories.length > 0 ? (
+      <div className="mt-1 divide-y divide-line border-t border-line">
+        {accessories.map((s) => (
+          <div key={s.key} className="flex items-center gap-3 py-[11px]">
+            <div className="min-w-0 flex-1">
+              <div
+                className={cn(
+                  "truncate text-[13.5px] leading-[1.2] font-semibold",
+                  s.doneSets === 0 && "text-ghost",
+                )}
+              >
+                {s.name}
+              </div>
+              <div
+                className={cn(
+                  "mt-1 truncate text-[11px] leading-[1.35]",
+                  s.doneSets === 0 ? "text-ghost" : "text-mid",
+                )}
+              >
+                {s.doneSets === 0 ? (
+                  "sin registrar"
+                ) : (
+                  <>
+                    <span className="num">{s.repsLabel}</span> reps
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex-none text-right">
+              <div
+                className={cn(
+                  "num text-[12.5px] leading-none font-semibold",
+                  s.doneSets === 0 && "text-ghost",
+                )}
+              >
+                {s.weightLabel}
+              </div>
+              <div
+                className={cn(
+                  "font-display mt-1 text-[9.5px] leading-none font-semibold tracking-[0.08em]",
+                  s.missedSets > 0 ? "text-fail" : "text-mid",
+                )}
+              >
+                <span className="num">
+                  {s.doneSets}
+                  {s.plannedSets == null ? "" : `/${s.plannedSets}`}
+                </span>{" "}
+                SERIES
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex-none bg-ink px-4 pt-5 pb-5 text-paper">
-        <div
-          className={cn(
-            "text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase",
-            STATUS_TONE[session.status],
-          )}
-        >
-          {STATUS_EYEBROW[session.status]}
-        </div>
-        <h1 className="mt-3 text-[40px] leading-[1.02] font-black tracking-[-0.035em] uppercase">
-          {title}
-        </h1>
-        <p className="mt-3 text-[12px] leading-none font-medium opacity-60">
-          {subtitle}
-        </p>
-      </header>
-      <div className="h-2 flex-none" style={{ background: accent }} />
+      <TopBar
+        title="Resumen"
+        href="/"
+        right={
+          <span className="uppercase">
+            {title} · {formatDayLong(session.scheduled_on)}
+          </span>
+        }
+      />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        <StatGrid
-          columns={3}
-          items={[
-            {
-              value: logs.length,
-              unit: plannedSets > 0 ? `de ${plannedSets}` : undefined,
-              label: "Series",
-            },
-            { value: tonnageValue, unit: tonnageUnit, label: "Tonelaje" },
-            {
-              value: standing,
-              label: "Ajustes",
-              tone: standing > 0 ? "text-warn" : undefined,
-            },
-          ]}
-        />
+        <div className="px-5 pt-3">
+          <div
+            className={cn(
+              "font-display text-[11px] leading-none font-semibold tracking-[0.14em] uppercase",
+              STATUS_TONE[session.status],
+            )}
+          >
+            {clean ? "Sesión limpia" : STATUS_EYEBROW[session.status]}
+          </div>
+          <h1 className="font-display mt-2 text-[27px] leading-[1.1] font-bold">
+            {verdict}
+          </h1>
+          <p className="mt-1.5 text-[13.5px] leading-[1.45] text-mid">
+            <span className="num">{logs.length}</span>
+            {plannedSets > 0 ? (
+              <>
+                {" de "}
+                <span className="num">{plannedSets}</span>
+              </>
+            ) : null}{" "}
+            series · {engineLine}
+          </p>
+
+          <div className="mt-4 grid grid-cols-2 gap-1.5">
+            <Kpi label="Series">
+              <span className="text-lime">{logs.length}</span>
+              {plannedSets > 0 ? (
+                <span className="text-[14px] text-lime-dim">
+                  /{plannedSets}
+                </span>
+              ) : null}
+            </Kpi>
+            <Kpi label="Tonelaje">
+              {tonnageValue} <span className="text-[14px]">{tonnageUnit}</span>
+            </Kpi>
+            <Kpi label="Duración">{duration ?? "—"}</Kpi>
+            {avgRir ? (
+              <Kpi label="RIR medio">{avgRir}</Kpi>
+            ) : (
+              <Kpi label="Ajustes">
+                <span className={standing > 0 ? "text-warn" : undefined}>
+                  {standing}
+                </span>
+              </Kpi>
+            )}
+          </div>
+        </div>
 
         {session.notes ? (
-          <p className="mx-4 mt-3.5 border-l-[6px] border-hairline py-1 pl-3 text-[12px] leading-[1.5] text-mid">
+          <p className="mx-5 mt-3.5 rounded-r-sm border-l-[4px] border-hairline py-1 pl-3 text-[12px] leading-[1.5] text-mid">
             {session.notes}
           </p>
         ) : null}
 
-        <SectionLabel
-          right={
-            reverted.length > 0
-              ? `${reverted.length} ${reverted.length === 1 ? "deshecho" : "deshechos"}`
-              : undefined
-          }
-        >
-          Cambios del motor
-        </SectionLabel>
-        <RowStack className="mt-2.5">
-          {engineEvents.length === 0 ? (
-            <Row>
-              <RuleNote
-                tone={logs.length === 0 ? TONE.line : TONE.ok}
-                title={
-                  logs.length === 0
-                    ? "Sin datos que procesar"
-                    : "El motor no ha tocado nada"
-                }
-              >
+        {primarySummary && primaryEx ? (
+          <div className="mt-3.5 px-5">
+            <Card className="px-4 py-4">
+              <div className="flex items-baseline gap-3">
+                <span className="min-w-0 flex-1 text-[15px] leading-[1.25] font-semibold">
+                  {primarySummary.name}
+                </span>
+                <span className="num flex-none text-[14px] leading-none font-semibold">
+                  {primarySummary.weightLabel}
+                </span>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {primarySets.map((s) => (
+                  <SetPill key={s.key} value={s.label} missed={s.missed} />
+                ))}
+              </div>
+
+              {accessoryList ? (
+                <details className="group mt-1">
+                  {/* The mock hangs this off the end of the pill row; it gets
+                      its own line here so the tap target clears 44px. */}
+                  <summary className="flex min-h-11 list-none cursor-pointer items-center justify-end gap-1.5 text-[11.5px] leading-none text-faint [&::-webkit-details-marker]:hidden">
+                    accesorios
+                    <span
+                      aria-hidden
+                      className="transition-transform group-open:rotate-90"
+                    >
+                      ›
+                    </span>
+                  </summary>
+                  {accessoryList}
+                </details>
+              ) : null}
+            </Card>
+          </div>
+        ) : accessoryList ? (
+          <div className="mt-3.5 px-5">
+            <Card className="px-4 py-4">
+              <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+                Registrado
+              </div>
+              {accessoryList}
+            </Card>
+          </div>
+        ) : group === "strength" ? (
+          <div className="mt-3.5 px-5">
+            <Card className="px-4 py-4">
+              <div className="text-[13px] leading-[1.2] font-semibold">
+                Nada registrado
+              </div>
+              <p className="mt-1.5 text-[12.5px] leading-[1.5] text-mid">
+                Esta sesión no tiene series guardadas y el bloque ya no tiene
+                ejercicios asignados.
+              </p>
+            </Card>
+          </div>
+        ) : null}
+
+        {missed.length > 0 ? (
+          <>
+            <SectionLabel right={`${missed.length} de ${logs.length}`}>
+              Series fuera de rango
+            </SectionLabel>
+            <RowStack className="mt-2.5">
+              {missed.map((m) => (
+                <Row key={m.id} className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13.5px] leading-[1.2] font-semibold">
+                      {m.name}
+                    </div>
+                    <div className="mt-1 truncate text-[11px] leading-[1.35] text-mid">
+                      serie <span className="num">{m.setNumber}</span>
+                      {m.weightLabel ? (
+                        <>
+                          {" · "}
+                          <span className="num">{m.weightLabel}</span>
+                        </>
+                      ) : null}
+                      {m.isPrimary ? " · básico del día" : " · accesorio"}
+                    </div>
+                  </div>
+                  <div className="flex-none text-right">
+                    <div className="text-[12.5px] leading-none font-semibold text-fail">
+                      <span className="num">{m.reps ?? "—"}</span> reps
+                    </div>
+                    <div className="font-display mt-1 text-[9.5px] leading-none font-semibold tracking-[0.08em] text-mid">
+                      MÍN. <span className="num">{m.repMin ?? "—"}</span>
+                    </div>
+                  </div>
+                </Row>
+              ))}
+            </RowStack>
+            <Footnote>
+              Solo el básico del día mueve el motor. Los accesorios fuera de
+              rango quedan registrados y nada más.
+            </Footnote>
+          </>
+        ) : null}
+
+        <div className="mt-3.5 px-5">
+          <Card className="px-4 py-4">
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
+                El motor
+              </span>
+              {reverted.length > 0 ? (
+                <span className="ml-auto text-[11px] leading-none text-faint">
+                  {reverted.length}{" "}
+                  {reverted.length === 1 ? "deshecho" : "deshechos"}
+                </span>
+              ) : null}
+            </div>
+
+            {engineEvents.length === 0 ? (
+              <p className="mt-2 text-[12.5px] leading-[1.55] text-mid">
                 {logs.length === 0
                   ? "Esta sesión se cerró sin ninguna serie registrada, así que ni la RM ni los pesos han cambiado."
                   : "Ninguna serie del básico del día cayó por debajo del rango, así que la ola sigue su curso."}
-              </RuleNote>
-            </Row>
-          ) : (
-            engineEvents.map((event) => (
-              <Row key={event.id}>
-                <RuleNote
-                  tone={
-                    event.reverted_at
-                      ? TONE.line
-                      : (EVENT_TONE[event.kind] ?? TONE.ink)
-                  }
-                  title={event.title}
-                >
-                  {event.detail}
-                  {event.reverted_at ? (
-                    <span className="mt-1.5 block text-[10px] leading-none font-semibold tracking-[0.1em] text-ghost uppercase">
-                      Deshecho — el motor volvió atrás
-                    </span>
-                  ) : null}
-                </RuleNote>
-              </Row>
-            ))
-          )}
-        </RowStack>
+              </p>
+            ) : (
+              <div className="mt-3 flex flex-col gap-3">
+                {engineEvents.map((event) => (
+                  <RuleNote
+                    key={event.id}
+                    tone={
+                      event.reverted_at
+                        ? TONE.line
+                        : (EVENT_TONE[event.kind] ?? TONE.ink)
+                    }
+                    title={event.title}
+                  >
+                    {event.detail}
+                    {event.reverted_at ? (
+                      <span className="mt-1.5 block text-[10px] leading-none font-semibold tracking-[0.1em] text-ghost uppercase">
+                        Deshecho — el motor volvió atrás
+                      </span>
+                    ) : null}
+                  </RuleNote>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
 
         {next?.breakdown ? (
-          <div className="mx-4 mt-3.5">
+          <div className="mx-5 mt-3.5">
             <Callout
               eyebrow="La próxima vez"
               eyebrowTone={
-                next.breakdown.isHeld ? "text-warn" : "text-ok-bright"
+                next.breakdown.isHeld ? "text-warn-panel" : "text-ok-bright"
               }
             >
               {next.breakdown.isHeld ? (
@@ -337,7 +605,7 @@ export default async function ResumenPage({
         ) : null}
 
         {!inPhase && sessionPhase ? (
-          <div className="mx-4 mt-3.5">
+          <div className="mx-5 mt-3.5">
             <Callout eyebrow="La próxima vez" eyebrowTone="text-ok-bright">
               {nextPhase ? (
                 <>
@@ -353,129 +621,17 @@ export default async function ResumenPage({
           </div>
         ) : null}
 
-        {missed.length > 0 ? (
-          <>
-            <SectionLabel right={`${missed.length} de ${logs.length}`}>
-              Series fuera de rango
-            </SectionLabel>
-            <RowStack className="mt-2.5">
-              {missed.map((m) => (
-                <Row key={m.id} className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] leading-[1.2] font-bold">
-                      {m.name}
-                    </div>
-                    <div className="mt-1 truncate text-[11px] leading-[1.35] text-mid">
-                      serie <span className="num">{m.setNumber}</span>
-                      {m.weightLabel ? (
-                        <>
-                          {" · "}
-                          <span className="num">{m.weightLabel}</span>
-                        </>
-                      ) : null}
-                      {m.isPrimary ? " · básico del día" : " · accesorio"}
-                    </div>
-                  </div>
-                  <div className="flex-none text-right">
-                    <div className="text-[12.5px] leading-none font-extrabold text-fail">
-                      <span className="num">{m.reps ?? "—"}</span> reps
-                    </div>
-                    <div className="mt-1 text-[9.5px] leading-none font-medium text-mid">
-                      MÍN. <span className="num">{m.repMin ?? "—"}</span>
-                    </div>
-                  </div>
-                </Row>
-              ))}
-            </RowStack>
-            <Footnote>
-              Solo el básico del día mueve el motor. Los accesorios fuera de
-              rango quedan registrados y nada más.
-            </Footnote>
-          </>
-        ) : null}
-
-        {group === "strength" || summaries.length > 0 ? (
-          <>
-            <SectionLabel>Series registradas</SectionLabel>
-            <RowStack className="mt-2.5">
-              {summaries.length === 0 ? (
-                <Row>
-                  <div className="text-[13px] leading-[1.2] font-bold">
-                    Nada registrado
-                  </div>
-                  <p className="mt-1.5 text-[11.5px] leading-[1.5] text-mid">
-                    Esta sesión no tiene series guardadas y el bloque ya no
-                    tiene ejercicios asignados.
-                  </p>
-                </Row>
-              ) : (
-                summaries.map((s) => (
-                  <Row key={s.key} className="flex items-center gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2">
-                        <span
-                          className={cn(
-                            "truncate text-[13.5px] leading-[1.2] font-bold",
-                            s.doneSets === 0 && "text-ghost",
-                          )}
-                        >
-                          {s.name}
-                        </span>
-                        {s.isPrimary ? (
-                          <span className="flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
-                            Básico
-                          </span>
-                        ) : null}
-                      </div>
-                      <div
-                        className={cn(
-                          "mt-1 truncate text-[11px] leading-[1.35]",
-                          s.doneSets === 0 ? "text-hairline" : "text-mid",
-                        )}
-                      >
-                        {s.doneSets === 0 ? (
-                          "sin registrar"
-                        ) : (
-                          <>
-                            <span className="num">{s.repsLabel}</span> reps
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex-none text-right">
-                      <div
-                        className={cn(
-                          "num text-[12.5px] leading-none font-extrabold",
-                          s.doneSets === 0 && "text-ghost",
-                        )}
-                      >
-                        {s.weightLabel}
-                      </div>
-                      <div
-                        className={cn(
-                          "mt-1 text-[9.5px] leading-none font-medium",
-                          s.missedSets > 0 ? "text-fail" : "text-mid",
-                        )}
-                      >
-                        <span className="num">
-                          {s.doneSets}
-                          {s.plannedSets == null ? "" : `/${s.plannedSets}`}
-                        </span>{" "}
-                        SERIES
-                      </div>
-                    </div>
-                  </Row>
-                ))
-              )}
-            </RowStack>
-          </>
-        ) : null}
-
         <div className="min-h-5 flex-1" />
       </div>
 
-      <LinkBar href="/" tone="ink">
-        Cerrar
+      {/* Nothing here competes with the numbers: the kit's bar has no
+          outline tone, so the neutral skin is overridden on the anchor. */}
+      <LinkBar
+        href="/"
+        tone="ink"
+        className="[&>a]:border-[1.5px] [&>a]:border-edge [&>a]:bg-surface [&>a]:text-ink"
+      >
+        Volver a hoy
       </LinkBar>
     </div>
   );

@@ -43,18 +43,18 @@ export function AppShell({
 
   return (
     <div className="flex min-h-dvh flex-col md:flex-row">
-      <nav className="hidden w-56 flex-none flex-col bg-ink text-paper md:flex">
-        <div className="px-5 pt-6 pb-5">
-          <div className="text-[11px] leading-none font-extrabold tracking-[0.18em]">
+      <nav className="hidden w-[232px] flex-none flex-col border-r border-line bg-chrome md:flex">
+        <div className="px-[22px] pt-[26px] pb-[22px]">
+          <div className="font-display text-[14px] leading-none font-bold tracking-[0.18em]">
             BLOQUES
           </div>
           {seasonLabel ? (
-            <div className="mt-2 text-[10px] leading-none font-medium opacity-50">
+            <div className="mt-1.5 text-[11px] leading-none text-faint">
               {seasonLabel}
             </div>
           ) : null}
         </div>
-        <div className="flex flex-col gap-px">
+        <div className="flex flex-col gap-0.5 px-3">
           {all.map((item) => {
             const active = isActive(pathname, item.href);
             return (
@@ -63,10 +63,10 @@ export function AppShell({
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "px-5 py-3.5 text-[12px] leading-none font-bold tracking-[0.08em] uppercase",
+                  "font-display border-l-[3px] px-3 py-[11px] text-[12px] leading-none tracking-[0.1em] uppercase",
                   active
-                    ? "bg-strength text-ink"
-                    : "bg-ink text-ink-3 hover:text-paper",
+                    ? "rounded-md border-lime-line bg-lime-soft font-bold text-lime"
+                    : "border-transparent font-semibold text-faint hover:text-ink",
                 )}
               >
                 {item.label}
@@ -74,7 +74,7 @@ export function AppShell({
             );
           })}
         </div>
-        <div className="mt-auto px-5 py-5 text-[10px] leading-[1.5] opacity-40">
+        <div className="mt-auto px-[22px] py-[22px] text-[11px] leading-[1.5] text-faint">
           El motor calcula el peso. Tú solo levantas.
         </div>
       </nav>
@@ -83,56 +83,64 @@ export function AppShell({
         <main
           className={cn(
             "flex min-h-0 flex-1 flex-col md:pb-0",
-            inRunner ? "pb-[var(--safe-bottom)]" : "pb-[calc(52px+var(--safe-bottom))]",
+            inRunner
+              ? "pb-[var(--safe-bottom)]"
+              : "pb-[calc(58px+var(--safe-bottom))]",
           )}
         >
-          <div className="mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col md:max-w-none">
+          <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col md:max-w-none">
             {children}
           </div>
         </main>
 
+        {/* The padding lives on the anchors, not the nav: these are the tab
+            targets the athlete hits mid-workout. */}
         {inRunner ? null : (
-        <nav className="fixed inset-x-0 bottom-0 z-30 flex gap-px bg-ink pb-[var(--safe-bottom)] md:hidden">
-          {PRIMARY.map((item) => {
-            const active = isActive(pathname, item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex h-13 flex-1 items-center justify-center text-[11px] leading-none tracking-[0.08em] uppercase",
-                  active
-                    ? "bg-strength font-extrabold text-ink"
-                    : "bg-ink font-semibold text-ink-3",
-                )}
-                style={{ height: 52 }}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+          <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-chrome px-2 pb-[calc(8px+var(--safe-bottom))] md:hidden">
+            {PRIMARY.map((item) => {
+              const active = isActive(pathname, item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "font-display flex h-11 flex-1 items-center justify-center text-[11px] leading-none tracking-[0.08em] uppercase",
+                    active ? "font-bold text-lime" : "font-semibold text-faint",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
         )}
       </div>
     </div>
   );
 }
 
-/** Secondary nav shown inside Programa on phones. */
+/**
+ * Secondary nav shown inside Programa, Historial, Editar and Ajustes on
+ * phones. Three pills, not a segmented well — on Programa none is active.
+ */
 export function SecondaryNav() {
   const pathname = usePathname();
   return (
-    <div className="flex gap-px bg-line py-px md:hidden">
+    <div className="mx-5 mt-3.5 flex gap-1.5 md:hidden">
       {SECONDARY.map((item) => {
         const active = isActive(pathname, item.href);
         return (
           <Link
             key={item.href}
             href={item.href}
+            aria-current={active ? "page" : undefined}
             className={cn(
-              "flex-1 px-1 py-3 text-center text-[11px] leading-none font-bold tracking-[0.08em] uppercase",
-              active ? "bg-ink text-paper" : "bg-paper text-mid",
+              // 44px rather than the mock's 31px: still a tap target.
+              "font-display flex h-11 flex-1 items-center justify-center rounded-md px-1 text-[10.5px] leading-none tracking-[0.08em] uppercase",
+              active
+                ? "bg-strength font-bold text-on-strength"
+                : "border border-edge bg-surface font-semibold text-mid",
             )}
           >
             {item.label}

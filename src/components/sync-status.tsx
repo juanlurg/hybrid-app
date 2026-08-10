@@ -79,12 +79,12 @@ export function SyncStatus() {
           : null;
 
   return (
-    <div className="flex flex-col gap-2 px-4 py-2.5">
+    <div className="flex flex-col gap-2 px-5 pb-3">
       {rejected ? (
-        <div className="flex items-start gap-2.5 border-l-[6px] border-fail py-1 pl-3">
-          <p className="flex-1 text-[11.5px] leading-[1.45]">
+        <div className="flex items-start gap-2.5 rounded-r-sm border-l-[4px] border-fail py-0.5 pl-3">
+          <p className="flex-1 text-[12.5px] leading-[1.5]">
             El servidor rechazó{" "}
-            <span className="num font-bold">{rejected.opCount}</span>{" "}
+            <span className="num font-semibold">{rejected.opCount}</span>{" "}
             {rejected.opCount === 1 ? "apunte" : "apuntes"}:{" "}
             {rejected.reasons[0]}. Esos datos no se van a subir.
           </p>
@@ -93,7 +93,7 @@ export function SyncStatus() {
             onClick={() => {
               void clearSyncFailure().then(() => void refresh());
             }}
-            className="flex-none text-[10.5px] leading-none font-medium text-mid underline"
+            className="flex-none text-[11.5px] leading-none font-medium text-mid underline"
           >
             entendido
           </button>
@@ -104,16 +104,16 @@ export function SyncStatus() {
         <p
           className={
             stuck
-              ? "border-l-[6px] border-warn py-1 pl-3 text-[11.5px] leading-[1.45]"
-              : "text-[10.5px] leading-[1.4] text-faint"
+              ? "rounded-r-sm border-l-[4px] border-warn py-0.5 pl-3 text-[12.5px] leading-[1.5]"
+              : "text-[12px] leading-[1.45] text-faint"
           }
         >
-          <span className="num font-bold">{pending}</span>{" "}
+          <span className="num font-semibold">{pending}</span>{" "}
           {pending === 1 ? "apunte pendiente" : "apuntes pendientes"} de subir
           {stuck ? (
             <>
               {" "}
-              desde hace <span className="num font-bold">{days}</span>{" "}
+              desde hace <span className="num font-semibold">{days}</span>{" "}
               {days === 1 ? "día" : "días"} con red —{" "}
               {blockedCopy ?? "algo lo está bloqueando."}
             </>

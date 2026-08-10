@@ -3,7 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
-import { PlateChips } from "@/components/ui/kit";
+import {
+  Callout,
+  Card,
+  HeroNumber,
+  SessionRow,
+  TopBar,
+} from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
 import { formatWeight, type EngineConfig, type LiftState } from "@/lib/engine";
@@ -396,177 +402,205 @@ export function SessionRunner({
     return out;
   }, [exercise.repMax, exercise.effort]);
 
+  const setNumber = Math.min(doneForExercise + 1, exercise.sets);
+  const eyebrow = exercise.isPrimary
+    ? `Básico del día · serie ${setNumber}/${exercise.sets}`
+    : exercise.supersetGroup != null
+      ? `Superserie · serie ${setNumber}/${exercise.sets}`
+      : `Ejercicio ${exIndex + 1} · serie ${setNumber}/${exercise.sets}`;
+  const plates =
+    showPlates && exercise.plates && !exercise.plates.barOnly
+      ? exercise.plates
+      : null;
+  const nextExercise =
+    exercises[Math.min(exIndex, exercises.length - 1) + 1] ?? null;
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex flex-none items-center gap-3 bg-ink px-4 py-3 text-paper">
-        <button
-          type="button"
-          aria-label="Volver"
-          onClick={() => router.push("/")}
-          className="text-[17px] leading-none font-medium"
-        >
-          ←
-        </button>
-        <span className="flex-1 text-[11px] leading-none font-extrabold tracking-[0.1em] uppercase">
-          {label}
-        </span>
-        <span className="num text-[11px] leading-none font-medium opacity-60">
-          {exIndex + 1} / {exercises.length} · {totalDone}/{totalSets} series
-        </span>
-      </div>
+      <TopBar
+        title={label}
+        onBack={() => router.push("/")}
+        right={
+          <span className="num uppercase">
+            {totalDone}/{totalSets} series
+          </span>
+        }
+      />
 
-      <div className="h-1 flex-none bg-ink-2">
-        <div
-          className="h-full bg-strength transition-[width] duration-200"
-          style={{ width: `${Math.round((totalDone / Math.max(1, totalSets)) * 100)}%` }}
-        />
-      </div>
-
-      <section className="flex-none bg-strength px-4 pt-4 pb-3.5 text-ink">
-        <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase">
-          {exercise.isPrimary
-            ? `Básico del día · serie ${Math.min(doneForExercise + 1, exercise.sets)}`
-            : exercise.supersetGroup != null
-              ? `Superserie · serie ${Math.min(doneForExercise + 1, exercise.sets)}`
-              : `Ejercicio ${exIndex + 1} · serie ${Math.min(doneForExercise + 1, exercise.sets)}`}
+      <div className="mt-1 flex-none px-5">
+        <div className="h-[5px] rounded-full bg-line">
+          <div
+            className="h-full rounded-full bg-lime-line transition-[width] duration-200"
+            style={{
+              width: `${Math.round((totalDone / Math.max(1, totalSets)) * 100)}%`,
+            }}
+          />
         </div>
-        <h1 className="mt-1.5 text-[21px] leading-[1.05] font-bold">
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto px-5 pt-6 pb-4">
+        <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+          {eyebrow}
+        </div>
+        <h1 className="mt-1.5 text-[20px] leading-[1.2] font-semibold">
           {exercise.name}
         </h1>
-        <div className="mt-2.5 flex items-start gap-2.5">
-          <div className="num text-[86px] leading-[0.76] font-black tracking-[-0.055em] sm:text-[104px]">
-            {exercise.loadMode === "rpe" || exercise.weightKg == null
+
+        <HeroNumber
+          value={
+            exercise.loadMode === "rpe" || exercise.weightKg == null
               ? "—"
               : exercise.loadMode === "weighted_bodyweight"
                 ? `+${formatWeight(exercise.weightKg)}`
-                : formatWeight(exercise.weightKg)}
-          </div>
-          <div className="pt-2">
-            <div className="text-[19px] leading-none font-extrabold uppercase">
-              {exercise.loadMode === "rpe"
-                ? "sensación"
-                : exercise.loadMode === "bodyweight"
-                  ? "corporal"
-                  : "kg"}
-            </div>
-            <div className="mt-2 text-[12px] leading-[1.3] font-semibold opacity-75">
-              {exercise.schemeLabel}
+                : formatWeight(exercise.weightKg)
+          }
+          unit={
+            exercise.loadMode === "rpe"
+              ? "sensación"
+              : exercise.loadMode === "bodyweight"
+                ? "corporal"
+                : "kg"
+          }
+          lines={
+            <>
+              objetivo {exercise.repsLabel}
+              {exercise.effort === "seconds" ? "″" : ""}
               {exercise.isPrimary ? ` · RIR ${targetRir}` : ""}
               <br />
-              DESC. {exercise.restLabel}
-            </div>
-          </div>
+              {plates ? (
+                <>
+                  por lado {plates.perSide.map(formatWeight).join(" + ")}
+                  {plates.remainderKg ? (
+                    <span className="text-fail">
+                      {" "}
+                      +{formatWeight(plates.remainderKg)} sin disco
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                `desc. ${exercise.restLabel}`
+              )}
+            </>
+          }
+        />
+
+        {/* One pill per prescribed set. A logged pill re-opens the picker
+            for THAT set — a wrong value is never permanent. */}
+        <div className="mt-5 flex flex-wrap gap-2.5">
+          {Array.from({ length: exercise.sets }, (_, i) => {
+            const entry = logs[keyOf(exercise.id, i)];
+            const bad = entry?.missed ?? false;
+            const editing = editingIndex === i;
+            const current = !entry && i === doneForExercise;
+            return (
+              <button
+                key={i}
+                type="button"
+                disabled={!entry}
+                aria-label={
+                  entry ? `Corregir la serie ${i + 1}` : `Serie ${i + 1}`
+                }
+                onClick={() => {
+                  setEditingIndex(i);
+                  setRepsOpen(true);
+                }}
+                className={cn(
+                  "flex h-[60px] w-[60px] flex-col items-center justify-center gap-0.5 rounded-xl border-[1.5px]",
+                  entry
+                    ? bad
+                      ? "border-fail bg-fail/10"
+                      : "border-lime-edge bg-lime-soft"
+                    : current
+                      ? "border-2 border-lime-line bg-surface"
+                      : "border-edge bg-surface opacity-55",
+                  editing && (bad ? "border-2" : "border-2 border-lime-line"),
+                )}
+              >
+                <span
+                  className={cn(
+                    "num text-[22px] leading-none font-bold",
+                    entry
+                      ? bad
+                        ? "text-fail"
+                        : "text-lime"
+                      : current
+                        ? "text-ink"
+                        : "text-faint",
+                  )}
+                >
+                  {entry ? entry.value : i + 1}
+                </span>
+                <span
+                  className={cn(
+                    "font-display text-[9px] leading-none font-semibold tracking-[0.1em] uppercase",
+                    entry
+                      ? bad
+                        ? "text-fail"
+                        : "text-lime"
+                      : current
+                        ? "text-mid"
+                        : "text-faint",
+                  )}
+                >
+                  {entry ? "hecha" : current ? "ahora" : "queda"}
+                </span>
+              </button>
+            );
+          })}
         </div>
-        {showPlates && exercise.plates && !exercise.plates.barOnly ? (
-          <div className="mt-2.5 flex items-center gap-1.5">
-            <span className="text-[10px] leading-none font-semibold tracking-[0.1em] opacity-70 uppercase">
-              Por lado
-            </span>
-            <PlateChips
-              plates={exercise.plates.perSide}
-              remainder={exercise.plates.remainderKg}
-            />
+
+        {rest ? (
+          <div className="mt-5">
+            <RestBar rest={rest} onSkip={stop} onExtend={() => extend(30)} />
           </div>
         ) : null}
-      </section>
 
-      {/* One pill per prescribed set. A logged pill re-opens the picker
-          for THAT set — a wrong value is never permanent. */}
-      <div className="flex flex-none gap-0.5 bg-line py-0.5">
-        {Array.from({ length: exercise.sets }, (_, i) => {
-          const entry = logs[keyOf(exercise.id, i)];
-          const bad = entry?.missed ?? false;
-          const editing = editingIndex === i;
-          return (
-            <button
-              key={i}
-              type="button"
-              disabled={!entry}
-              aria-label={
-                entry ? `Corregir la serie ${i + 1}` : `Serie ${i + 1}`
-              }
-              onClick={() => {
-                setEditingIndex(i);
-                setRepsOpen(true);
-              }}
-              className={cn(
-                "flex h-[62px] flex-1 flex-col items-center justify-center gap-1 border-2 box-border",
-                entry
-                  ? bad
-                    ? "border-fail bg-fail/10"
-                    : "border-ok bg-ok/10"
-                  : "border-quiet bg-paper",
-                editing && "border-ink",
-              )}
-            >
-              <span
-                className={cn(
-                  "num text-[24px] leading-none font-black",
-                  entry ? (bad ? "text-fail" : "text-ok") : "text-hairline",
-                )}
-              >
-                {entry ? entry.value : i + 1}
-              </span>
-              <span
-                className={cn(
-                  "text-[8.5px] leading-none font-semibold tracking-[0.12em] uppercase",
-                  entry ? (bad ? "text-fail" : "text-ok") : "text-ghost",
-                )}
-              >
-                {entry
-                  ? exercise.effort === "seconds"
-                    ? "seg"
-                    : "reps"
-                  : "serie"}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-auto px-4 pt-3.5 pb-4">
-        {exercise.notes ? (
-          <p className="text-[11.5px] leading-[1.45] text-mid">
-            {exercise.notes}
-          </p>
+        {nextExercise ? (
+          <div className="mt-4.5 flex items-center gap-2.5 px-1">
+            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
+              Siguiente
+            </span>
+            <span className="flex-1 truncate text-[14px] leading-[1.2] font-medium">
+              {nextExercise.name}
+            </span>
+            <span className="num flex-none text-[13.5px] leading-none font-semibold text-mid">
+              {nextExercise.schemeLabel} · {nextExercise.weightLabel}
+            </span>
+          </div>
         ) : null}
 
         {error ? (
-          <div className="mt-3 border-l-[6px] border-fail py-1 pl-3 text-[12px] leading-[1.5]">
+          <Card className="mt-4 border-fail px-4 py-3.5 text-[12.5px] leading-[1.5]">
             {error}
-          </div>
+          </Card>
         ) : null}
 
         {banner ? (
-          <div className="mt-3 bg-ink px-3.5 py-3.5 text-paper">
-            <div className="flex items-baseline gap-2">
-              <span
-                className={cn(
-                  "text-[10px] leading-none font-extrabold tracking-[0.12em] uppercase",
-                  banner.tone === "warn" ? "text-warn" : "text-fail",
-                )}
-              >
-                {banner.title}
-              </span>
-              {lastLiveFailure ? (
+          <Callout
+            className="mt-4"
+            eyebrow={banner.title}
+            eyebrowTone={
+              banner.tone === "warn" ? "text-warn-panel" : "text-fail-panel"
+            }
+            action={
+              lastLiveFailure ? (
                 <button
                   type="button"
                   onClick={undoFailure}
-                  className="ml-auto text-[10.5px] leading-none font-medium underline opacity-60"
+                  className="text-[11.5px] leading-none font-medium underline opacity-70"
                 >
                   deshacer
                 </button>
-              ) : null}
-            </div>
-            <p className="mt-2 text-[12px] leading-[1.5] opacity-80">
-              {banner.detail}
-            </p>
-          </div>
+              ) : null
+            }
+          >
+            {banner.detail}
+          </Callout>
         ) : null}
 
         {repsOpen ? (
-          <div className="mt-3.5">
-            <div className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+          <Card className="mt-4 px-4 py-4">
+            <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
               {editingIndex != null
                 ? `Corregir serie ${editingIndex + 1}`
                 : exercise.effort === "seconds"
@@ -575,8 +609,8 @@ export function SessionRunner({
                     ? "Reps completadas · AMRAP"
                     : "Reps completadas"}
             </div>
-            <div className="mt-2.5 flex items-center gap-2">
-              <span className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+            <div className="mt-3 flex items-center gap-2">
+              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
                 RIR
               </span>
               {[0, 1, 2, 3, 4].map((n) => (
@@ -585,91 +619,77 @@ export function SessionRunner({
                   type="button"
                   onClick={() => setPendingRir((v) => (v === n ? null : n))}
                   className={cn(
-                    "num flex h-8 w-8 items-center justify-center border-2 text-[13px] leading-none font-extrabold",
+                    "num flex h-11 w-11 items-center justify-center rounded-md border text-[15px] leading-none font-bold",
                     pendingRir === n
-                      ? "border-ink bg-ink text-paper"
-                      : "border-hairline text-mid",
+                      ? "border-transparent bg-strength text-on-strength"
+                      : "border-edge bg-soft text-mid",
                   )}
                 >
                   {n}
                 </button>
               ))}
-              <span className="text-[10px] leading-none text-faint">
+              <span className="text-[11px] leading-none text-faint">
                 opcional
               </span>
             </div>
-            <div className="mt-2.5 flex flex-wrap gap-0.5">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {repOptions.map((n) => (
                 <button
                   key={n}
                   type="button"
                   onClick={() => record(n, editingIndex)}
                   className={cn(
-                    "num flex h-11 w-11 items-center justify-center border-2 text-[17px] leading-none font-extrabold",
+                    "num flex h-11 w-11 items-center justify-center rounded-md border text-[17px] leading-none font-bold",
                     n < exercise.repMin
-                      ? "border-fail text-fail"
-                      : "border-ink text-ink",
+                      ? "border-fail bg-surface text-fail"
+                      : "border-edge bg-soft text-ink",
                   )}
                 >
                   {n}
                 </button>
               ))}
             </div>
-            <p className="mt-2.5 text-[11px] leading-[1.45] text-faint">
+            <p className="mt-3 text-[12px] leading-[1.5] text-faint">
               Por debajo de {exercise.repMin}{" "}
               {exercise.isPrimary
                 ? "el motor reacciona: primero congela el peso, luego recorta la RM."
                 : "no pasa nada: los accesorios no tocan el motor."}
             </p>
-          </div>
+          </Card>
         ) : null}
 
-        <div className="mt-5 text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+        {exercise.notes ? (
+          <p className="mt-4 text-[12.5px] leading-[1.5] text-mid">
+            {exercise.notes}
+          </p>
+        ) : null}
+
+        <div className="font-display mt-6 text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
           Después
         </div>
-        <div className="mt-2.5 flex flex-col gap-px bg-line">
+        <div className="mt-2.5 flex flex-col gap-1.5">
           {exercises.map((e, i) => {
             const done = countDone(logs, e.id, e.sets);
             const complete = done >= e.sets;
             return (
-              <button
+              <SessionRow
                 key={e.id}
-                type="button"
+                accent={
+                  complete || i === exIndex ? TONE.okBright : TONE.hairline
+                }
+                title={e.name}
+                status={complete ? "✓ HECHA" : i === exIndex ? "AHORA" : undefined}
+                statusTone={complete ? "text-ok" : "text-lime"}
+                primary={e.weightLabel}
+                secondary={`${done}/${e.sets}`}
+                muted={complete}
                 onClick={() => {
                   setExIndex(i);
                   if (failureKey) setDismissedFailure(failureKey);
                   setRepsOpen(false);
                   setEditingIndex(null);
                 }}
-                className="flex items-center gap-2.5 bg-paper py-2.5 text-left"
-              >
-                <span
-                  className={cn(
-                    "w-3.5 text-[11px] leading-none font-extrabold",
-                    complete
-                      ? "text-ok"
-                      : i === exIndex
-                        ? "text-ink"
-                        : "text-quiet",
-                  )}
-                >
-                  {complete ? "✓" : i === exIndex ? "▸" : "·"}
-                </span>
-                <span
-                  className={cn(
-                    "flex-1 text-[13px] leading-[1.2] font-semibold",
-                    complete && "text-mid",
-                  )}
-                >
-                  {e.name}
-                </span>
-                <span className="num text-[11px] leading-none font-medium text-mid">
-                  {done}/{e.sets}
-                </span>
-                <span className="num min-w-[62px] text-right text-[12.5px] leading-none font-extrabold">
-                  {e.weightLabel}
-                </span>
-              </button>
+              />
             );
           })}
         </div>
@@ -678,9 +698,9 @@ export function SessionRunner({
             can close as partial without inventing sets. */}
         {totalDone < totalSets ? (
           confirmFinish ? (
-            <div className="mt-4 border-2 border-fail px-3 py-3">
+            <Card className="mt-4 border-fail px-4 py-4">
               <div className="flex items-center gap-2.5">
-                <span className="flex-1 text-[12px] leading-[1.35] font-bold">
+                <span className="flex-1 text-[12.5px] leading-[1.4] font-semibold">
                   ¿Terminar con {totalSets - totalDone}{" "}
                   {totalSets - totalDone === 1 ? "serie" : "series"} sin hacer?
                 </span>
@@ -688,14 +708,14 @@ export function SessionRunner({
                   type="button"
                   disabled={pending}
                   onClick={finish}
-                  className="flex h-9 items-center bg-ink px-3 text-[11px] leading-none font-extrabold tracking-[0.06em] text-paper uppercase"
+                  className="font-display flex h-11 items-center rounded-md bg-strength px-3.5 text-[11.5px] leading-none font-bold tracking-[0.06em] text-on-strength uppercase disabled:opacity-40"
                 >
                   Sí, terminar
                 </button>
                 <button
                   type="button"
                   onClick={() => setConfirmFinish(false)}
-                  className="text-[11px] leading-none font-medium text-mid underline"
+                  className="text-[12px] leading-none font-medium text-mid underline"
                 >
                   seguir
                 </button>
@@ -707,19 +727,19 @@ export function SessionRunner({
                 maxLength={2000}
                 placeholder="Por qué cierras antes — «aquíleo molesto», «sin tiempo»… (opcional)"
                 aria-label="Nota de la sesión"
-                className="mt-2.5 w-full border-2 border-hairline bg-paper px-2.5 py-2 text-[12px] leading-[1.4] outline-none"
+                className="mt-3 w-full rounded-md border border-edge bg-soft px-3 py-2.5 text-[12.5px] leading-[1.45] outline-none"
               />
-            </div>
+            </Card>
           ) : (
             <button
               type="button"
               onClick={() => setConfirmFinish(true)}
-              className="mt-4 flex w-full items-center justify-between border-2 border-dashed border-hairline px-3 py-3 text-left"
+              className="mt-4 flex w-full items-center justify-between rounded-xl border border-dashed border-hairline px-4 py-3.5 text-left"
             >
-              <span className="text-[12px] leading-none font-bold">
+              <span className="font-display text-[12px] leading-none font-semibold tracking-[0.06em] uppercase">
                 Terminar sesión
               </span>
-              <span className="num text-[11px] leading-none text-mid">
+              <span className="num text-[12px] leading-none text-mid">
                 {totalDone}/{totalSets} series
               </span>
             </button>
@@ -727,7 +747,8 @@ export function SessionRunner({
         ) : null}
       </div>
 
-      <div className="flex flex-none">
+      {/* AppShell already pays `--safe-bottom` on the runner branch. */}
+      <div className="flex flex-none gap-2.5 px-5 pt-3.5 pb-[30px]">
         <button
           type="button"
           disabled={pending}
@@ -739,14 +760,14 @@ export function SessionRunner({
             }
             record(exercise.repMax);
           }}
-          className="flex h-[66px] flex-1 items-center justify-center gap-2.5 bg-strength text-[17px] leading-none font-extrabold tracking-[0.06em] text-ink uppercase active:opacity-85 disabled:opacity-60"
+          className="font-display flex h-[68px] flex-1 items-center justify-center gap-2.5 rounded-2xl bg-strength text-[18px] leading-none font-bold tracking-[0.04em] text-on-strength uppercase active:opacity-85 disabled:opacity-40"
         >
           {exercise.effort === "amrap" ? (
             "Registrar AMRAP"
           ) : (
             <>
-              Hecho{" "}
-              <span className="num opacity-60">
+              Hecho ·
+              <span className="num">
                 {exercise.repMax}
                 {exercise.effort === "seconds" ? "″" : ""}
               </span>
@@ -761,16 +782,11 @@ export function SessionRunner({
             setEditingIndex(null);
             setRepsOpen((v) => !v);
           }}
-          className="flex h-[66px] w-[92px] flex-col items-center justify-center gap-1 bg-ink text-[11px] leading-none font-semibold text-paper"
+          className="font-display flex h-[68px] w-[104px] items-center justify-center rounded-2xl border-[1.5px] border-edge bg-surface text-[13px] leading-none font-semibold tracking-[0.06em] text-mid uppercase"
         >
-          <span>OTRAS</span>
-          <span className="opacity-60">REPS</span>
+          Otras
         </button>
       </div>
-
-      {rest ? (
-        <RestBar rest={rest} onSkip={stop} onExtend={() => extend(30)} />
-      ) : null}
 
       {flash ? (
         <div

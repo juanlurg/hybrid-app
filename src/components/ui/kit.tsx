@@ -1,9 +1,10 @@
 /**
- * The Bloques kit.
+ * The Bloques kit — Foco.
  *
- * Hard rules, full-bleed colour, heavy type. Every screen is built from
- * these so the "readable from a metre away" property survives contact
- * with real data.
+ * One thing is lit per screen and everything else recedes into cards on
+ * the page colour. Chakra Petch carries labels, numbers and actions;
+ * Barlow carries prose. Every screen is built from these so the "one
+ * lit thing" property survives contact with real data.
  */
 
 import Link from "next/link";
@@ -23,12 +24,12 @@ export function SectionLabel({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-baseline gap-3 px-4 pt-5", className)}>
-      <span className="flex-1 text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+    <div className={cn("flex items-baseline gap-3 px-5 pt-5", className)}>
+      <span className="font-display flex-1 text-[12px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
         {children}
       </span>
       {right ? (
-        <span className="text-[10px] leading-none font-medium text-ghost">
+        <span className="text-[12.5px] leading-none font-normal text-faint">
           {right}
         </span>
       ) : null}
@@ -36,7 +37,7 @@ export function SectionLabel({
   );
 }
 
-/** The black band at the top of every screen. */
+/** The top of every screen: eyebrow, title, one line of context. */
 export function ScreenHeader({
   eyebrow,
   title,
@@ -53,22 +54,21 @@ export function ScreenHeader({
   className?: string;
 }) {
   return (
-    <header className={cn("flex-none bg-ink px-4 pt-4 pb-4 text-paper", className)}>
-      <div className="flex items-baseline gap-3">
-        <span className="flex-1 text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase">
+    <header className={cn("flex-none px-5 pt-6 pb-1", className)}>
+      <div className="flex items-center gap-3">
+        {/* Ellipsis, not a second line: `right` is often a control. */}
+        <span className="font-display min-w-0 flex-1 truncate text-[12px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
           {eyebrow}
         </span>
         {right}
       </div>
       {title ? (
-        <h1 className="mt-3 text-[26px] leading-[1.02] font-black tracking-[-0.03em]">
+        <h1 className="font-display mt-2.5 text-[26px] leading-[1.1] font-bold">
           {title}
         </h1>
       ) : null}
       {subtitle ? (
-        <p className="mt-2 text-[11.5px] leading-none font-medium opacity-55">
-          {subtitle}
-        </p>
+        <p className="mt-1 text-[13px] leading-[1.45] text-mid">{subtitle}</p>
       ) : null}
       {children}
     </header>
@@ -88,12 +88,12 @@ export function TopBar({
   onBack?: () => void;
 }) {
   const arrow = (
-    <span aria-hidden className="text-[17px] leading-none font-medium">
+    <span aria-hidden className="text-[17px] leading-none text-mid">
       ←
     </span>
   );
   return (
-    <div className="flex flex-none items-center gap-3 bg-ink px-4 py-3 text-paper">
+    <div className="flex flex-none items-center gap-3 px-5 pt-6 pb-2">
       {href ? (
         <Link href={href} aria-label="Volver" className="cursor-pointer">
           {arrow}
@@ -103,11 +103,11 @@ export function TopBar({
           {arrow}
         </button>
       )}
-      <span className="flex-1 text-[11px] leading-none font-extrabold tracking-[0.1em] uppercase">
+      <span className="font-display flex-1 text-[13px] leading-none font-bold tracking-[0.1em] uppercase">
         {title}
       </span>
       {right ? (
-        <span className="text-[11px] leading-none font-medium opacity-60">
+        <span className="font-display text-[12px] leading-none text-faint">
           {right}
         </span>
       ) : null}
@@ -115,9 +115,50 @@ export function TopBar({
   );
 }
 
+/* ── surfaces ────────────────────────────────────────────────── */
+
+/** The card. Everything that is not the page sits in one of these. */
+export function Card({
+  children,
+  className,
+  ...rest
+}: ComponentProps<"div">) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-edge bg-surface px-5 py-5",
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Outlined box used for secondary panels. */
+export function Framed({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border border-edge bg-surface px-4 py-3.5",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* ── numbers ─────────────────────────────────────────────────── */
 
-/** The 100px headline number with its unit stack. */
+/** The lit number. There is one of these per screen, and only one. */
 export function HeroNumber({
   value,
   unit,
@@ -130,27 +171,25 @@ export function HeroNumber({
   size?: "lg" | "md";
 }) {
   return (
-    <div className="mt-2 flex items-start gap-2.5">
-      <div
+    <div className="mt-2 flex items-baseline gap-2.5">
+      <span
         className={cn(
-          "num font-black tracking-[-0.055em]",
+          "num font-bold tracking-[-0.02em] text-lime",
           size === "lg"
-            ? "text-[86px] leading-[0.76] sm:text-[106px]"
-            : "text-[62px] leading-[0.8]",
+            ? "text-[88px] leading-[0.95] sm:text-[108px]"
+            : "text-[62px] leading-[0.95]",
         )}
       >
         {value}
-      </div>
-      <div className="pt-2">
-        <div className="text-[20px] leading-none font-extrabold uppercase">
-          {unit}
-        </div>
-        {lines ? (
-          <div className="mt-2 text-[13px] leading-[1.25] font-semibold opacity-75">
-            {lines}
-          </div>
-        ) : null}
-      </div>
+      </span>
+      <span className="num text-[19px] leading-none font-semibold text-mid uppercase">
+        {unit}
+      </span>
+      {lines ? (
+        <span className="ml-auto text-right text-[12.5px] leading-[1.5] text-mid">
+          {lines}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -165,30 +204,33 @@ export function StatGrid({
   return (
     <div
       className={cn(
-        "mt-px grid gap-px bg-line",
+        "grid gap-1.5 px-5 pt-3",
         columns === 2 && "grid-cols-2",
         columns === 3 && "grid-cols-3",
         columns === 4 && "grid-cols-2 sm:grid-cols-4",
       )}
     >
       {items.map((item) => (
-        <div key={item.label} className="bg-paper px-4 py-3.5">
+        <div
+          key={item.label}
+          className="rounded-lg border border-line bg-surface px-4 py-3.5"
+        >
           <div className="flex items-baseline gap-1.5">
             <span
               className={cn(
-                "num text-[30px] leading-none font-black tracking-[-0.035em]",
+                "num text-[28px] leading-none font-bold tracking-[-0.02em]",
                 item.tone,
               )}
             >
               {item.value}
             </span>
             {item.unit ? (
-              <span className="text-[12px] leading-none font-bold text-mid">
+              <span className="text-[12px] leading-none font-medium text-mid">
                 {item.unit}
               </span>
             ) : null}
           </div>
-          <div className="mt-2 text-[9.5px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
+          <div className="font-display mt-2 text-[10px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
             {item.label}
           </div>
         </div>
@@ -199,36 +241,28 @@ export function StatGrid({
 
 /* ── rows ────────────────────────────────────────────────────── */
 
-/** A hairline-separated stack. Gap is the rule. */
+/** A stack of cards. The page shows through the gap. */
 export function RowStack({
   children,
-  bordered = true,
   className,
 }: {
   children: ReactNode;
-  bordered?: boolean;
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-px bg-line",
-        bordered && "border-y-2 border-ink",
-        className,
-      )}
-    >
-      {children}
-    </div>
+    <div className={cn("flex flex-col gap-1.5 px-5", className)}>{children}</div>
   );
 }
 
-export function Row({
-  children,
-  className,
-  ...rest
-}: ComponentProps<"div">) {
+export function Row({ children, className, ...rest }: ComponentProps<"div">) {
   return (
-    <div className={cn("bg-paper px-4 py-3", className)} {...rest}>
+    <div
+      className={cn(
+        "rounded-lg border border-line bg-surface px-3.5 py-3",
+        className,
+      )}
+      {...rest}
+    >
       {children}
     </div>
   );
@@ -261,14 +295,17 @@ export function SessionRow({
   className?: string;
 }) {
   const body = (
-    <div className="flex w-full items-center gap-2.5 text-left">
-      <div className="h-9 w-1.5 flex-none" style={{ background: accent }} />
+    <div className="flex w-full items-center gap-3 text-left">
+      <div
+        className="h-8 w-[3px] flex-none rounded-full"
+        style={{ background: accent }}
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span
             className={cn(
-              "truncate text-[13.5px] leading-[1.2] font-bold",
-              muted && "text-ghost",
+              "truncate text-[15px] leading-[1.2] font-semibold",
+              muted && "text-faint",
             )}
           >
             {title}
@@ -276,7 +313,7 @@ export function SessionRow({
           {status ? (
             <span
               className={cn(
-                "flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em]",
+                "font-display flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em]",
                 statusTone,
               )}
             >
@@ -287,8 +324,8 @@ export function SessionRow({
         {subtitle ? (
           <div
             className={cn(
-              "mt-1 truncate text-[11px] leading-[1.35] font-normal",
-              muted ? "text-hairline" : "text-mid",
+              "mt-0.5 truncate text-[12.5px] leading-[1.35]",
+              muted ? "text-faint" : "text-mid",
             )}
           >
             {subtitle}
@@ -300,8 +337,8 @@ export function SessionRow({
           {primary ? (
             <div
               className={cn(
-                "num text-[12.5px] leading-none font-extrabold",
-                muted && "text-ghost",
+                "num text-[14px] leading-none font-semibold",
+                muted && "text-faint",
               )}
             >
               {primary}
@@ -310,8 +347,8 @@ export function SessionRow({
           {secondary ? (
             <div
               className={cn(
-                "mt-1 text-[9.5px] leading-none font-medium",
-                muted ? "text-hairline" : "text-mid",
+                "mt-1 text-[11px] leading-none",
+                muted ? "text-faint" : "text-mid",
               )}
             >
               {secondary}
@@ -322,7 +359,10 @@ export function SessionRow({
     </div>
   );
 
-  const classes = cn("block bg-paper px-4 py-3", className);
+  const classes = cn(
+    "block rounded-xl border border-line bg-surface px-3.5 py-3",
+    className,
+  );
   if (href) {
     return (
       <Link href={href} className={classes}>
@@ -352,8 +392,10 @@ export function Chip({
     <button
       type="button"
       className={cn(
-        "border-2 border-ink px-2.5 py-2 text-[10px] leading-none font-bold tracking-[0.06em] uppercase",
-        active ? "bg-ink text-paper" : "bg-transparent text-ink",
+        "font-display rounded-sm border px-2.5 py-2 text-[12px] leading-none font-semibold",
+        active
+          ? "border-transparent bg-strength text-on-strength"
+          : "border-edge bg-soft text-ink",
         className,
       )}
       {...rest}
@@ -363,7 +405,27 @@ export function Chip({
   );
 }
 
-/** Flush segmented control — the tab strip pattern. */
+/** Read-only chip — the prescription facts under the lit number. */
+export function Tag({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "font-display rounded-sm border border-edge bg-soft px-2.5 py-[7px] text-[12px] leading-none font-semibold",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Segmented control — the tab strip pattern. */
 export function Segmented<T extends string>({
   value,
   options,
@@ -376,15 +438,22 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn("flex gap-px bg-line py-px", className)}>
+    <div
+      className={cn(
+        "flex gap-1 rounded-md border border-edge bg-soft p-1",
+        className,
+      )}
+    >
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "flex-1 px-1 py-3 text-[11px] leading-none font-bold tracking-[0.08em] uppercase",
-            value === o.value ? "bg-ink text-paper" : "bg-paper text-mid",
+            "font-display flex-1 rounded-sm px-1 py-2.5 text-[11px] leading-none font-semibold tracking-[0.08em] uppercase",
+            value === o.value
+              ? "bg-strength text-on-strength"
+              : "bg-transparent text-mid",
           )}
         >
           {o.label}
@@ -407,19 +476,21 @@ export function Stepper({
   label?: string;
   compact?: boolean;
 }) {
+  const button =
+    "flex h-8 w-8 items-center justify-center rounded-sm border border-edge bg-surface text-[15px] leading-none text-mid";
   return (
-    <div className="flex flex-none items-center gap-px">
+    <div className="flex flex-none items-center gap-1">
       <button
         type="button"
         aria-label={label ? `Bajar ${label}` : "Bajar"}
         onClick={onDecrement}
-        className="flex h-8 w-8 items-center justify-center bg-ink text-[16px] leading-none font-bold text-paper"
+        className={button}
       >
         −
       </button>
       <div
         className={cn(
-          "num flex h-8 items-center justify-center bg-soft px-1.5 text-[13px] leading-none font-extrabold",
+          "num flex h-8 items-center justify-center rounded-sm border border-edge bg-surface px-2.5 text-[12px] leading-none font-semibold",
           compact ? "min-w-8" : "min-w-[58px]",
         )}
       >
@@ -429,7 +500,7 @@ export function Stepper({
         type="button"
         aria-label={label ? `Subir ${label}` : "Subir"}
         onClick={onIncrement}
-        className="flex h-8 w-8 items-center justify-center bg-ink text-[16px] leading-none font-bold text-paper"
+        className={button}
       >
         +
       </button>
@@ -454,48 +525,53 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "flex h-[26px] w-12 flex-none items-center border-2 border-ink p-0.5",
-        checked ? "bg-strength" : "bg-transparent",
+        "flex h-[26px] w-12 flex-none items-center rounded-full border p-0.5 transition-colors",
+        checked ? "border-transparent bg-strength" : "border-edge bg-soft",
       )}
     >
       <span
         className={cn(
-          "h-[18px] w-[18px] transition-[margin] duration-100",
-          checked ? "ml-[22px] bg-ink" : "ml-0 bg-hairline",
+          "h-[18px] w-[18px] rounded-full transition-[margin] duration-100",
+          checked ? "ml-[22px] bg-on-strength" : "ml-0 bg-hairline",
         )}
       />
     </button>
   );
 }
 
-/** The full-width action bar at the bottom of a screen. */
+/* ── actions ─────────────────────────────────────────────────── */
+
+const BAR =
+  "font-display flex h-15 w-full items-center justify-center gap-3 rounded-xl text-[16px] leading-none font-bold tracking-[0.06em] uppercase active:opacity-85 disabled:opacity-40";
+
+function barTone(tone: "ink" | "strength" | "run") {
+  return tone === "strength"
+    ? "bg-strength text-on-strength"
+    : tone === "run"
+      ? "bg-run text-on-run"
+      : "bg-panel text-on-panel";
+}
+
+/** The action at the bottom of a screen. Inset, not full-bleed. */
 export function ActionBar({
   children,
-  tone = "ink",
+  tone = "strength",
   className,
   ...rest
 }: ComponentProps<"button"> & { tone?: "ink" | "strength" | "run" }) {
   return (
-    <button
-      type="button"
-      className={cn(
-        "flex h-16 w-full flex-none items-center justify-center gap-3 text-[16px] leading-none font-extrabold tracking-[0.1em] uppercase active:opacity-85 disabled:opacity-40",
-        tone === "ink" && "bg-ink text-paper",
-        tone === "strength" && "bg-strength text-ink",
-        tone === "run" && "bg-run text-paper",
-        className,
-      )}
-      {...rest}
-    >
-      {children}
-    </button>
+    <div className={cn("flex-none px-5 pt-3.5 pb-3", className)}>
+      <button type="button" className={cn(BAR, barTone(tone))} {...rest}>
+        {children}
+      </button>
+    </div>
   );
 }
 
 export function LinkBar({
   href,
   children,
-  tone = "ink",
+  tone = "strength",
   className,
 }: {
   href: string;
@@ -504,27 +580,20 @@ export function LinkBar({
   className?: string;
 }) {
   return (
-    <Link
-      href={href}
-      className={cn(
-        "flex h-16 w-full flex-none items-center justify-center gap-3 text-[16px] leading-none font-extrabold tracking-[0.1em] uppercase active:opacity-85",
-        tone === "ink" && "bg-ink text-paper",
-        tone === "strength" && "bg-strength text-ink",
-        tone === "run" && "bg-run text-paper",
-        className,
-      )}
-    >
-      {children}
-    </Link>
+    <div className={cn("flex-none px-5 pt-3.5 pb-3", className)}>
+      <Link href={href} className={cn(BAR, barTone(tone))}>
+        {children}
+      </Link>
+    </div>
   );
 }
 
 /* ── notes ───────────────────────────────────────────────────── */
 
-/** Black box with a coloured eyebrow — the engine talking. */
+/** The engine talking. In light it inverts; in dark it is a card. */
 export function Callout({
   eyebrow,
-  eyebrowTone = "text-warn",
+  eyebrowTone = "text-warn-panel",
   children,
   action,
   className,
@@ -536,11 +605,16 @@ export function Callout({
   className?: string;
 }) {
   return (
-    <div className={cn("bg-ink px-3.5 py-3.5 text-paper", className)}>
+    <div
+      className={cn(
+        "rounded-2xl border border-edge bg-panel px-4 py-3.5 text-on-panel",
+        className,
+      )}
+    >
       <div className="flex items-baseline gap-2">
         <span
           className={cn(
-            "text-[10px] leading-none font-extrabold tracking-[0.12em] uppercase",
+            "font-display text-[11px] leading-none font-semibold tracking-[0.14em] uppercase",
             eyebrowTone,
           )}
         >
@@ -548,7 +622,7 @@ export function Callout({
         </span>
         {action ? <span className="ml-auto">{action}</span> : null}
       </div>
-      <div className="mt-2 text-[11.5px] leading-[1.5] font-normal opacity-75">
+      <div className="mt-2 text-[12.5px] leading-[1.5] opacity-75">
         {children}
       </div>
     </div>
@@ -566,12 +640,15 @@ export function RuleNote({
   children?: ReactNode;
 }) {
   return (
-    <div className="border-l-[6px] py-0.5 pl-3" style={{ borderColor: tone }}>
-      <div className="text-[11px] leading-[1.2] font-extrabold tracking-[0.05em] uppercase">
+    <div
+      className="rounded-r-sm border-l-[4px] py-0.5 pl-3"
+      style={{ borderColor: tone }}
+    >
+      <div className="font-display text-[11.5px] leading-[1.2] font-bold tracking-[0.05em] uppercase">
         {title}
       </div>
       {children ? (
-        <div className="mt-1.5 text-[11.5px] leading-[1.5] text-mid">
+        <div className="mt-1.5 text-[12.5px] leading-[1.5] text-mid">
           {children}
         </div>
       ) : null}
@@ -581,55 +658,13 @@ export function RuleNote({
 
 export function Footnote({ children }: { children: ReactNode }) {
   return (
-    <p className="px-4 py-4 text-[11px] leading-[1.5] text-faint">{children}</p>
-  );
-}
-
-/** Outlined box used for secondary panels. */
-export function Framed({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("border-2 border-ink px-3.5 py-3.5", className)}>
+    <p className="px-5 py-4 text-[12.5px] leading-[1.5] text-faint">
       {children}
-    </div>
+    </p>
   );
 }
 
-/* ── plates ──────────────────────────────────────────────────── */
-
-export function PlateChips({
-  plates,
-  remainder,
-  tone = "ink",
-}: {
-  plates: number[];
-  remainder?: number;
-  tone?: "ink" | "paper";
-}) {
-  if (plates.length === 0 && !remainder) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {plates.map((p, i) => (
-        <span
-          key={`${p}-${i}`}
-          className={cn(
-            "num border-[1.5px] px-1.5 py-1 text-[11px] leading-none font-bold",
-            tone === "ink" ? "border-ink" : "border-paper",
-          )}
-        >
-          {String(p).replace(".", ",")}
-        </span>
-      ))}
-      {remainder ? (
-        <span className="text-[10px] leading-none font-semibold text-fail">
-          +{String(remainder).replace(".", ",")} sin disco
-        </span>
-      ) : null}
-    </div>
-  );
-}
+/*
+ * The plate breakdown is no longer a component: Hoy renders it as a `Tag`
+ * and the runner folds it into the hero's right-hand lines.
+ */

@@ -11,7 +11,7 @@ export default function SignUpPage() {
 
   return (
     <div>
-      <h1 className="text-[32px] leading-[1] font-black tracking-[-0.03em]">
+      <h1 className="font-display text-[32px] leading-[1] font-bold tracking-[-0.02em]">
         Crear cuenta
       </h1>
       <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">

@@ -1,6 +1,10 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+
 import { SecondaryNav } from "@/components/app-shell";
 import { accentFor, TONE } from "@/components/day-accents";
-import { Footnote, Framed, ScreenHeader, SectionLabel } from "@/components/ui/kit";
+import { Footnote, Row, SectionLabel } from "@/components/ui/kit";
+import { cn } from "@/lib/cn";
 import { requireAthlete } from "@/lib/data/athlete";
 import {
   addDays,
@@ -67,12 +71,59 @@ const RULE_LABEL: Record<RegressionRule, string> = {
 
 /**
  * A rung is coloured by what it actually costs, not by its position: a rule
- * that only freezes the weight twice stays amber twice.
+ * that only freezes the weight twice stays amber twice. Outlined rather than
+ * filled — `warn` and `fail` swap lightness between themes, so nothing sits
+ * legibly on top of them in both.
  */
 function rungTone(cut: number, isLast: boolean) {
-  if (cut === 0) return { background: TONE.warn, color: TONE.ink };
-  if (isLast) return { background: TONE.fail, color: TONE.paper };
-  return { background: accentFor("strength"), color: TONE.ink };
+  if (cut === 0) return { borderColor: TONE.warn, color: TONE.warn };
+  if (isLast) return { borderColor: TONE.fail, color: TONE.fail };
+  return { borderColor: accentFor("strength"), color: TONE.ok };
+}
+
+/**
+ * A reference block folded behind its own summary. `details` keeps the body
+ * mounted, so the calculator holds its state across an open/close.
+ */
+function Fold({
+  title,
+  summary,
+  children,
+  className,
+}: {
+  title: string;
+  summary: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <details
+      className={cn(
+        "group mx-5 rounded-xl border border-edge bg-surface",
+        className,
+      )}
+    >
+      <summary className="flex list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          <span className="font-display block text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
+            {title}
+          </span>
+          <span className="mt-[3px] block text-[12px] leading-[1.35] text-faint">
+            {summary}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className="font-display flex-none text-[14px] leading-none text-faint transition-transform group-open:rotate-45"
+        >
+          ＋
+        </span>
+      </summary>
+      <div className="rounded-b-xl border-t border-line bg-sunk px-4 pt-3.5 pb-4">
+        {children}
+      </div>
+    </details>
+  );
 }
 
 export default async function ProgramaPage() {
@@ -89,6 +140,13 @@ export default async function ProgramaPage() {
   const phaseConfig = phaseEngineConfig(config, phase);
   const cycle = cycleOf(placement.week, phaseConfig.cycleWeeks);
   const ladder = regressionLadder(config.regressionRule);
+  // The folded summary is the ladder itself, so it cannot drift from it.
+  const ladderSummary = ladder
+    .map((cut, i) => {
+      const rung = cut === 0 ? "congela" : `−${Math.round(cut * 100)} %`;
+      return `${i + 1} ${rung}${i === ladder.length - 1 ? " + descarga" : ""}`;
+    })
+    .join(" · ");
 
   // When the last RM re-test was, if there has ever been one.
   const supabase = await createClient();
@@ -130,38 +188,43 @@ export default async function ProgramaPage() {
   }));
 
   const params: Array<{ label: string; value: string }> = [
-    { label: "RIR objetivo", value: profile.target_rir },
+    { label: "RIR", value: profile.target_rir },
     { label: "Redondeo", value: `${formatWeight(config.roundingKg)} kg` },
+    { label: "Barra", value: `${formatWeight(config.barKg)} kg` },
     { label: "Incr. pierna", value: `+${formatWeight(config.incLowerKg)} kg` },
     { label: "Incr. torso", value: `+${formatWeight(config.incUpperKg)} kg` },
-    { label: "Barra", value: `${formatWeight(config.barKg)} kg` },
     { label: "LTHR", value: profile.lthr ? `${profile.lthr} ppm` : "sin test" },
   ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader
-        eyebrow="PROGRAMA"
-        title={program.name}
-        subtitle={program.goal}
-        right={
-          <span className="num text-[10px] leading-none font-medium opacity-55">
+      <header className="flex-none px-5 pt-6">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="font-display min-w-0 flex-1 text-[21px] leading-[1.15] font-bold">
+            {program.name}
+          </h1>
+          <span className="font-display flex-none text-[11px] leading-none whitespace-nowrap text-faint">
             {season}
           </span>
-        }
-      />
+        </div>
+        {program.goal ? (
+          <p className="mt-1.5 text-[12.5px] leading-[1.45] text-mid">
+            {program.goal}
+          </p>
+        ) : null}
+      </header>
 
       <SecondaryNav />
 
       <div className="flex-1 overflow-auto pb-6">
-        <div className="flex items-baseline gap-3 border-y-2 border-ink bg-paper px-4 py-3">
-          <span className="min-w-0 flex-1 truncate text-[13.5px] leading-[1.2] font-bold">
+        <Row className="mx-5 mt-3.5 flex items-baseline gap-3 py-2.5">
+          <span className="min-w-0 flex-1 truncate text-[13.5px] leading-[1.2] font-semibold">
             {phase.name}
           </span>
-          <span className="num flex-none text-[10px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+          <span className="font-display flex-none text-[11px] leading-none whitespace-nowrap text-faint uppercase">
             Semana {placement.week} de {phase.weeks} · Ciclo {cycle}
           </span>
-        </div>
+        </Row>
 
         <SectionLabel
           right={
@@ -182,33 +245,35 @@ export default async function ProgramaPage() {
           </Footnote>
         )}
 
-        <Footnote>
+        <p className="mt-2.5 px-5 text-[11.5px] leading-[1.5] text-faint">
           Ajustar una RM a mano recalcula los pesos futuros de ese básico; las
           series ya registradas no cambian. Queda anotado en el historial del
           motor.
-        </Footnote>
+        </p>
 
         {calcLifts.length > 0 ? (
-          <>
-            <SectionLabel right="NO GUARDA NADA">
-              Calculadora de RM
-            </SectionLabel>
+          <Fold
+            className="mt-3.5"
+            title="Calculadora de RM"
+            summary="Peso × reps → RM · no guarda nada"
+          >
             <RmCalculator lifts={calcLifts} stepKg={config.roundingKg} />
-          </>
+          </Fold>
         ) : null}
 
-        <Framed className="mx-4 mt-5">
-          <div className="text-[10px] leading-none font-extrabold tracking-[0.12em] uppercase">
-            Regla de regresión · {RULE_LABEL[config.regressionRule]}
-          </div>
-          <ol className="mt-3.5 flex flex-col gap-2.5">
+        <Fold
+          className="mt-2"
+          title={`Regla de regresión · ${RULE_LABEL[config.regressionRule]}`}
+          summary={ladderSummary}
+        >
+          <ol className="flex flex-col gap-2.5">
             {ladder.map((cut, i) => {
               const isLast = i === ladder.length - 1;
               return (
                 <li key={i} className="flex items-start gap-2.5">
                   <span
                     aria-hidden
-                    className="num flex h-5 w-5 flex-none items-center justify-center text-[11px] leading-none font-black"
+                    className="num flex h-5 w-5 flex-none items-center justify-center rounded-full border text-[11px] leading-none font-bold"
                     style={rungTone(cut, isLast)}
                   >
                     {i + 1}
@@ -228,27 +293,30 @@ export default async function ProgramaPage() {
             Fallo = serie por debajo del mínimo del rango, o RIR 0. Una sesión
             limpia reinicia el contador.
           </p>
-        </Framed>
+        </Fold>
 
-        <SectionLabel right="SE CAMBIAN EN AJUSTES">
-          Parámetros del motor
-        </SectionLabel>
-
-        <div className="mt-3 flex flex-wrap gap-px bg-line">
+        <div className="mt-3.5 grid grid-cols-3 gap-1.5 px-5">
           {params.map((p) => (
             <div
               key={p.label}
-              className="min-w-[86px] flex-1 bg-ink px-3 py-2.5 text-paper"
+              className="rounded-md border border-line bg-surface px-3 py-2.5"
             >
-              <div className="text-[9.5px] leading-none font-semibold tracking-[0.1em] uppercase opacity-55">
+              <div className="text-[10px] leading-none tracking-[0.08em] text-faint uppercase">
                 {p.label}
               </div>
-              <div className="num mt-2 text-[14px] leading-none font-extrabold">
+              <div className="num mt-1 text-[14px] leading-none font-bold">
                 {p.value}
               </div>
             </div>
           ))}
         </div>
+
+        <Link
+          href="/ajustes"
+          className="flex min-h-11 items-center justify-end px-5 text-[11px] leading-none text-faint"
+        >
+          se cambian en Ajustes ›
+        </Link>
       </div>
     </div>
   );

@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 
 import { LocalSessionRunner } from "@/components/session/local-session-runner";
 import {
+  ActionBar,
+  Footnote,
+  Row,
+  RowStack,
+  ScreenHeader,
+} from "@/components/ui/kit";
+import {
   daysBetween,
   formatDayLong,
   placeDate,
@@ -168,71 +175,58 @@ export function OfflineShell() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="bg-ink px-4 pt-5 pb-4 text-paper">
-        <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase opacity-70">
-          Sin conexión
-        </div>
-        <h1 className="mt-2 text-[26px] leading-[1.02] font-black tracking-[-0.03em]">
-          {today ? today.title : "Bloques"}
-        </h1>
-        <p className="num mt-2 text-[11px] leading-none opacity-60">
-          {today ? formatDayLong(today.date) : ""}
-          {stale
-            ? ` · plan guardado el ${formatDayLong(snapshot.savedAt.slice(0, 10))}`
-            : ""}
-        </p>
-      </header>
+      <ScreenHeader
+        eyebrow="sin conexión"
+        title={today ? today.title : "Bloques"}
+        subtitle={
+          <span className="num">
+            {today ? formatDayLong(today.date) : ""}
+            {stale
+              ? ` · plan guardado el ${formatDayLong(snapshot.savedAt.slice(0, 10))}`
+              : ""}
+          </span>
+        }
+      />
 
       <div className="flex-1 overflow-auto">
         {today && today.group === "strength" && today.exercises.length > 0 ? (
-          <div className="mt-2.5 flex flex-col gap-px bg-line">
+          <RowStack className="mt-4">
             {today.exercises.map((e) => (
-              <div
-                key={e.id}
-                className="flex items-baseline gap-2.5 bg-paper px-4 py-2.5"
-              >
-                <span className="flex-1 text-[13px] leading-[1.2] font-semibold">
+              <Row key={e.id} className="flex items-baseline gap-2.5">
+                <span className="flex-1 text-[14px] leading-[1.2] font-medium">
                   {e.name}
                 </span>
-                <span className="num text-[11px] leading-none text-mid">
+                <span className="num text-[12px] leading-none text-mid">
                   {e.schemeLabel}
                 </span>
-                <span className="num min-w-[62px] text-right text-[12.5px] leading-none font-extrabold">
+                <span className="num min-w-[62px] text-right text-[14px] leading-none font-semibold">
                   {e.weightLabel}
                 </span>
-              </div>
+              </Row>
             ))}
-          </div>
+          </RowStack>
         ) : (
-          <p className="px-4 py-5 text-[12px] leading-[1.5] text-mid">
+          <p className="px-5 py-5 text-[12.5px] leading-[1.5] text-mid">
             {today
               ? "Hoy no toca fuerza. Las carreras y la movilidad se marcan desde sus pantallas al volver la red — o sal y corre: el detalle queda en el reloj."
               : "Hoy queda fuera del plan guardado."}
           </p>
         )}
 
-        <p className="px-4 py-4 text-[11px] leading-[1.5] text-faint">
+        <Footnote>
           Todo lo que registres aquí queda en este móvil y se sube solo al
           recuperar la cobertura.
-        </p>
+        </Footnote>
       </div>
 
       {activeSessionId ? (
-        <button
-          type="button"
-          onClick={() => setRunningId(activeSessionId)}
-          className="flex h-16 flex-none items-center justify-center gap-2.5 bg-strength text-[16px] leading-none font-extrabold tracking-[0.1em] text-ink uppercase"
-        >
+        <ActionBar onClick={() => setRunningId(activeSessionId)}>
           Seguir sesión <span className="font-medium">→</span>
-        </button>
+        </ActionBar>
       ) : today && today.group === "strength" && today.exercises.length > 0 ? (
-        <button
-          type="button"
-          onClick={() => void startToday()}
-          className="flex h-16 flex-none items-center justify-center gap-2.5 bg-strength text-[16px] leading-none font-extrabold tracking-[0.1em] text-ink uppercase"
-        >
+        <ActionBar onClick={() => void startToday()}>
           Empezar sin conexión <span className="font-medium">→</span>
-        </button>
+        </ActionBar>
       ) : null}
     </div>
   );
@@ -241,12 +235,8 @@ export function OfflineShell() {
 function Frame({ note }: { note: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="bg-ink px-4 pt-5 pb-4 text-paper">
-        <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase opacity-70">
-          Sin conexión
-        </div>
-      </header>
-      <p className="px-4 py-6 text-[12px] leading-[1.5] text-mid">{note}</p>
+      <ScreenHeader eyebrow="sin conexión" />
+      <p className="px-5 py-6 text-[12.5px] leading-[1.5] text-mid">{note}</p>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { TONE } from "@/components/day-accents";
+import { Card } from "@/components/ui/kit";
 
 export interface RestState {
   left: number;
@@ -170,48 +170,41 @@ export function RestBar({
   const secs = String(rest.left % 60).padStart(2, "0");
   const pct = Math.max(0, Math.round((rest.left / rest.total) * 100));
 
+  const button =
+    "font-display flex h-11 items-center rounded-md border border-edge bg-soft px-4 text-[12.5px] leading-none font-semibold";
+
   return (
-    <div className="absolute inset-x-0 bottom-0 z-20 bg-ink px-4 pt-3.5 pb-3.5 text-paper">
+    <Card className="py-[18px]">
       <div className="flex items-baseline gap-2.5">
-        <span className="text-[10px] leading-none font-extrabold tracking-[0.14em] opacity-55 uppercase">
+        <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
           Descanso
         </span>
-        <span className="truncate text-[10.5px] leading-none font-medium opacity-45">
+        <span className="ml-auto truncate text-[12px] leading-none text-faint">
           {rest.label}
         </span>
       </div>
-      <div className="mt-2 flex items-end gap-2">
-        <span
-          className="num text-[54px] leading-[0.85] font-black tracking-[-0.04em]"
-          style={{ color: TONE.okBright }}
-          aria-live="off"
-        >
+      <div className="mt-2 flex items-center gap-3">
+        <span className="num text-[56px] leading-none font-bold" aria-live="off">
           {mins}:{secs}
         </span>
         {/* Ending rest early is a between-sets staple: a real block
             target, not an 11px underline under a fatigued thumb. */}
-        <button
-          type="button"
-          onClick={onSkip}
-          className="ml-auto flex h-11 items-center bg-ink-2 px-4 text-[13px] leading-none font-bold"
-        >
-          SALTAR
-        </button>
-        <button
-          type="button"
-          onClick={onExtend}
-          className="flex h-11 items-center bg-ink-2 px-4 text-[13px] leading-none font-bold"
-        >
-          +30 S
-        </button>
+        <div className="ml-auto flex gap-2">
+          <button type="button" onClick={onSkip} className={button}>
+            SALTAR
+          </button>
+          <button type="button" onClick={onExtend} className={button}>
+            +30 S
+          </button>
+        </div>
       </div>
-      <div className="mt-3 h-[5px] bg-ink-2">
+      <div className="mt-3.5 h-[5px] rounded-full bg-soft">
         <div
-          className="h-full transition-[width] duration-300 ease-linear"
-          style={{ width: `${pct}%`, background: TONE.okBright }}
+          className="h-full rounded-full bg-lime-line transition-[width] duration-300 ease-linear"
+          style={{ width: `${pct}%` }}
         />
       </div>
-    </div>
+    </Card>
   );
 }
 

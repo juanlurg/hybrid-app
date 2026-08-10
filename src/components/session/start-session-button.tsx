@@ -36,16 +36,20 @@ export function StartSessionButton({
 
   if (day.group === "rest") {
     return (
-      <div className="flex h-16 flex-none items-center justify-center bg-soft text-[13px] leading-none font-bold tracking-[0.1em] text-mid uppercase">
-        Día libre
+      <div className="flex-none px-5 pt-3.5 pb-3">
+        <div className="font-display flex h-15 w-full items-center justify-center rounded-xl border border-edge bg-soft text-[13px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+          Día libre
+        </div>
       </div>
     );
   }
 
   if (existingStatus === "done" || existingStatus === "partial") {
     return (
-      <div className="flex h-16 flex-none items-center justify-center gap-3 bg-ink text-[15px] leading-none font-extrabold tracking-[0.1em] text-ok-bright uppercase">
-        ✓ Registrada
+      <div className="flex-none px-5 pt-3.5 pb-3">
+        <div className="font-display flex h-15 w-full items-center justify-center gap-3 rounded-xl border border-lime-edge bg-lime-soft text-[15px] leading-none font-bold tracking-[0.06em] text-lime uppercase">
+          ✓ Registrada
+        </div>
       </div>
     );
   }
@@ -98,7 +102,6 @@ export function StartSessionButton({
       }
     >
       {label}
-      <span className="font-medium">→</span>
     </ActionBar>
   );
 }
@@ -124,7 +127,7 @@ export function SkipDayButton({ day }: { day: DayTarget }) {
           });
         })
       }
-      className="text-[10px] leading-none font-semibold tracking-[0.08em] text-mid underline uppercase"
+      className="font-display text-[10.5px] leading-none font-semibold tracking-[0.08em] text-mid underline uppercase"
     >
       {pending ? "…" : "Saltar"}
     </button>

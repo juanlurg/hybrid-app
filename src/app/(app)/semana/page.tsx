@@ -151,14 +151,11 @@ export default async function SemanaPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        eyebrow={`SEMANA ${week} DE ${phase.weeks}`}
-        title={phase.name}
+        eyebrow={`${program.name} · ${phase.key}`}
+        title={`Semana ${week} de ${phase.weeks}`}
+        subtitle={note}
         right={<WeekNav absoluteWeek={absoluteWeek} seasonWeeks={seasonWeeks} />}
-      >
-        <p className="num mt-2.5 text-[12px] leading-[1.45] font-medium opacity-65">
-          {note}
-        </p>
-      </ScreenHeader>
+      />
 
       <div className="flex-1 overflow-auto">
         {planned === 0 ? (
@@ -167,7 +164,7 @@ export default async function SemanaPage({
             vacía. Se rellenan al clonar un programa o desde el editor.
           </Footnote>
         ) : (
-          <RowStack>
+          <RowStack className="pt-3">
             {days.map((day) => {
               const session = sessionFor(day);
               const status = statusFor(day, session);
@@ -181,59 +178,63 @@ export default async function SemanaPage({
                   : day.subtitle;
 
               const body = (
-                <div className="flex w-full items-center gap-2.5 text-left">
-                  <div className="w-[34px] flex-none">
+                <div className="flex w-full items-center gap-3 text-left">
+                  <div className="w-9 flex-none">
                     <div
                       className={cn(
-                        "text-[10.5px] leading-none font-extrabold tracking-[0.06em]",
-                        rest && "text-ghost",
+                        "font-display text-[11px] leading-none",
+                        isToday
+                          ? "font-bold text-lime"
+                          : rest
+                            ? "font-semibold text-faint"
+                            : "font-semibold text-mid",
                       )}
                     >
                       {DAY_LABELS[day.dayIndex]}
                     </div>
-                    <div className="num mt-1.5 text-[10px] leading-none font-medium text-faint">
+                    <div className="num mt-[3px] truncate text-[11px] leading-none text-faint">
                       {formatDayShort(day.date)}
                     </div>
                   </div>
 
-                  <div
-                    className="h-9 w-1.5 flex-none"
-                    style={{ background: accentFor(day.group) }}
-                  />
-
-                  <div className="min-w-0 flex-1">
+                  {/* Today is already marked by the lime border — a spine
+                      would light the same row twice. */}
+                  {rest || isToday ? null : (
                     <div
-                      className={cn(
-                        "truncate text-[13.5px] leading-[1.2] font-bold",
-                        rest && "text-ghost",
-                      )}
-                    >
-                      {day.title}
-                    </div>
-                    {subtitle ? (
-                      <div
-                        className={cn(
-                          "mt-1 truncate text-[11px] leading-[1.35] font-normal",
-                          rest ? "text-hairline" : "text-mid",
-                        )}
-                      >
-                        {subtitle}
-                      </div>
-                    ) : null}
-                  </div>
+                      className="h-8 w-[3px] flex-none rounded-full"
+                      style={{ background: accentFor(day.group) }}
+                    />
+                  )}
 
-                  {figure || status ? (
+                  {rest ? (
+                    <div className="min-w-0 flex-1 truncate text-[14px] leading-[1.2] font-medium text-mid">
+                      {day.title} · {day.subtitle || "libre"}
+                    </div>
+                  ) : (
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[15px] leading-[1.2] font-semibold">
+                        {day.title}
+                      </div>
+                      {subtitle ? (
+                        <div className="mt-0.5 truncate text-[12.5px] leading-[1.35] text-mid">
+                          {subtitle}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {!rest && (figure || status) ? (
                     <div className="flex-none pl-1 text-right">
                       {figure ? (
-                        <div className="num text-[12.5px] leading-none font-extrabold">
+                        <div className="num text-[14px] leading-none font-semibold">
                           {figure}
                         </div>
                       ) : null}
                       {status ? (
                         <div
                           className={cn(
-                            "mt-1.5 text-[9.5px] leading-none font-semibold tracking-[0.1em]",
-                            statusTone(status),
+                            "font-display mt-[3px] text-[9.5px] leading-none font-semibold tracking-[0.1em]",
+                            isToday ? "text-lime" : statusTone(status),
                           )}
                         >
                           {STATUS_LABEL[status]}
@@ -245,8 +246,12 @@ export default async function SemanaPage({
               );
 
               const classes = cn(
-                "flex items-center gap-3 px-4 py-3",
-                isToday ? "bg-sunk" : "bg-paper",
+                "flex items-center gap-3 rounded-xl px-3.5",
+                rest
+                  ? "border border-dashed border-hairline py-2.5 opacity-60"
+                  : isToday
+                    ? "border-[1.5px] border-lime-line bg-sunk py-3"
+                    : "border border-line bg-surface py-3",
               );
 
               // "Hoy no entreno" is a decision, not an omission: a
@@ -296,7 +301,7 @@ export default async function SemanaPage({
           TEMPORADA · {formatSeasonRange(seasonStart, seasonEnd).toUpperCase()}
         </SectionLabel>
 
-        <div className="mx-4 mt-2.5 flex h-[42px] gap-px border-2 border-ink bg-ink">
+        <div className="mt-2.5 flex gap-1 px-5">
           {phases.map((p) => {
             const current = p.id === phase.id;
             return (
@@ -304,27 +309,24 @@ export default async function SemanaPage({
                 key={p.id}
                 style={{ flex: p.weeks }}
                 className={cn(
-                  "flex min-w-0 flex-col items-center justify-center gap-1 px-1",
-                  current ? "bg-strength text-ink" : "bg-soft text-mid",
+                  "font-display flex h-[34px] min-w-0 items-center justify-center rounded-sm px-1 text-[11px] leading-none uppercase",
+                  current
+                    ? "bg-strength font-bold text-on-strength"
+                    : "border border-line bg-surface font-semibold text-faint",
                 )}
               >
-                <span className="truncate text-[10px] leading-none font-extrabold tracking-[0.08em] uppercase">
-                  {p.key}
-                </span>
-                <span className="num text-[9.5px] leading-none font-semibold opacity-70">
-                  {p.weeks}s
-                </span>
+                <span className="truncate">{p.key}</span>
               </div>
             );
           })}
         </div>
 
-        <div className="flex items-baseline gap-3 px-4 pt-3 pb-6">
-          <span className="min-w-0 flex-1 truncate text-[13px] leading-[1.2] font-bold">
+        <div className="flex items-baseline gap-3 px-5 pt-2.5 pb-6">
+          <span className="min-w-0 flex-1 truncate text-[13px] leading-[1.2] font-semibold">
             {phase.name}
           </span>
           {program.race_on ? (
-            <span className="num flex-none text-[11px] leading-none font-semibold text-mid">
+            <span className="flex-none text-[12px] leading-none text-mid">
               {program.race_name ?? "Objetivo"} ·{" "}
               {formatDayShort(program.race_on)}
             </span>

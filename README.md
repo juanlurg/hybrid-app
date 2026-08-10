@@ -5,14 +5,16 @@ weight engine that decides every working load and an AI that can restructure
 the programme without ever touching that engine.
 
 Built from the [Hybrid Training App](https://claude.ai/design/p/c0efe7ca-e66a-45f7-bab0-37b03188542c)
-design ("Bloques" direction) and the *Plan Maestro — Atleta Híbrido* source plan.
+design ("Bloques" direction) and the *Plan Maestro — Atleta Híbrido* source plan,
+restyled onto the [Foco](https://claude.ai/design/p/c10ad3d7-84ee-49a1-a3cc-5b565839b613)
+direction: one lit number per screen, dark and light as peers.
 
 ## Stack
 
 | Layer | Choice | Why |
 |---|---|---|
 | App | Next.js 16 (App Router), React 19, TypeScript | Server Components for the first paint, Server Actions for every mutation, one codebase for phone and desktop |
-| Styling | Tailwind v4 with a custom `@theme` | The Bloques palette lives in CSS variables; no component library to fight |
+| Styling | Tailwind v4 with a custom `@theme inline` | The palette lives in CSS variables that flip between the dark and light themes; no component library to fight |
 | Data | Supabase (Postgres + Auth + RLS), local via Docker | Row-level security means multi-athlete isolation is enforced by the database, not by app code |
 | AI | Gemini (`@google/genai`) with structured output | The model returns a typed diff; the server validates and applies it |
 | Tests | Vitest | The engine and the calendar are pure and fully covered |

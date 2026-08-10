@@ -51,7 +51,7 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
     return (
       <RowStack className="mt-2.5">
         <Row>
-          <p className="text-[11.5px] leading-[1.5] text-faint">
+          <p className="text-[12px] leading-[1.55] text-faint">
             Todavía no hay ninguna sesión registrada. En cuanto cierres la
             primera aparece aquí, con sus series y su tonelaje.
           </p>
@@ -62,7 +62,7 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
 
   return (
     <>
-      <div className="flex flex-wrap gap-1.5 px-4 pt-3 pb-3">
+      <div className="flex flex-wrap gap-1.5 px-5 pt-3 pb-3">
         {FILTERS.map((f) => (
           <Chip
             key={f.value}
@@ -78,7 +78,7 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
       <RowStack>
         {visible.length === 0 ? (
           <Row>
-            <p className="text-[11.5px] leading-[1.5] text-faint">
+            <p className="text-[12px] leading-[1.55] text-faint">
               Ninguna sesión de las registradas entra en este filtro.
             </p>
           </Row>
@@ -86,7 +86,7 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
           visible.map((entry) => {
             const open = openId === entry.id;
             return (
-              <div key={entry.id} className="flex flex-col gap-px">
+              <div key={entry.id} className="flex flex-col gap-1.5">
                 <SessionRow
                   accent={entry.accent}
                   title={entry.title}
@@ -99,13 +99,13 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
                   onClick={() => setOpenId(open ? null : entry.id)}
                 />
                 {open ? (
-                  <div className="flex flex-col gap-2 bg-sunk px-4 py-3.5">
+                  <div className="flex flex-col gap-2 rounded-xl border border-line bg-sunk px-3.5 py-3">
                     {entry.details.map((d) => (
                       <div key={d.label} className="flex items-baseline gap-3">
-                        <span className="flex-1 text-[10px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+                        <span className="flex-1 text-[11px] leading-none tracking-[0.06em] text-faint uppercase">
                           {d.label}
                         </span>
-                        <span className="num text-[12.5px] leading-none font-extrabold">
+                        <span className="num text-[13px] leading-none font-semibold">
                           {d.value}
                         </span>
                       </div>

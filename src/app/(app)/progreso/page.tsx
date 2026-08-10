@@ -13,16 +13,27 @@ import {
 } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 import { accentFor, TONE } from "@/components/day-accents";
-import { Framed, ScreenHeader, SectionLabel } from "@/components/ui/kit";
+import { Card, Framed } from "@/components/ui/kit";
 import { cn } from "@/lib/cn";
 
 import { LiftPicker } from "./lift-picker";
 
-/** Height of the season chart, in px. */
-const CHART_H = 118;
-
 /** Pa:HR only means something on the long, steady stuff. */
 const DECOUPLING_LIMIT = 5;
+
+/** No eyebrow on this screen: the title is one word and carries it. */
+function Header({ week, seasonWeeks }: { week: number; seasonWeeks: number }) {
+  return (
+    <header className="flex flex-none items-baseline gap-2.5 px-5 pt-6">
+      <h1 className="font-display flex-1 text-[22px] leading-[1.1] font-bold">
+        Progreso
+      </h1>
+      <span className="num flex-none text-[12px] leading-none text-faint">
+        SEM {week}/{seasonWeeks}
+      </span>
+    </header>
+  );
+}
 
 export default async function ProgresoPage({
   searchParams,
@@ -37,8 +48,8 @@ export default async function ProgresoPage({
   if (lifts.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <ScreenHeader eyebrow="PROGRESO" title="Sin básicos que seguir" />
-        <p className="px-4 py-6 text-[12px] leading-[1.5] text-mid">
+        <Header week={placement.absoluteWeek} seasonWeeks={seasonWeeks} />
+        <p className="px-5 pt-5 text-[12px] leading-[1.55] text-mid">
           Este programa no tiene básicos con RM asociada, así que el motor no
           calcula ningún peso. Añade tus RM en Programa y esta pantalla empieza
           a tener números.
@@ -261,77 +272,60 @@ export default async function ProgresoPage({
 
   const deltaTone =
     deltaKg > 0 ? "text-ok" : deltaKg < 0 ? "text-fail" : "text-mid";
-  const deltaLabel =
+  const deltaGlyph = deltaKg === 0 ? "=" : deltaKg > 0 ? "↑" : "↓";
+  const deltaText =
     deltaKg === 0
-      ? "="
-      : `${deltaKg > 0 ? "+" : "−"}${formatWeight(Math.abs(deltaKg))}`;
+      ? "vs ciclo 1"
+      : `${deltaKg > 0 ? "+" : "−"}${formatWeight(Math.abs(deltaKg))} kg vs ciclo 1`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader
-        eyebrow="PROGRESO"
-        right={
-          <span className="num text-[11px] leading-none font-medium opacity-60">
-            SEM {placement.absoluteWeek}/{seasonWeeks}
-          </span>
-        }
-      />
+      <Header week={placement.absoluteWeek} seasonWeeks={seasonWeeks} />
 
       <LiftPicker
         lifts={lifts.map((l) => ({ key: l.key, name: l.name }))}
         active={liftRow.key}
       />
 
-      <div className="flex-1 overflow-auto">
-        {/* ── headline ─────────────────────────────────────────── */}
-        <section className="border-b-2 border-ink px-4 pt-5 pb-4">
-          <div className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
-            {liftRow.name} · {liftRow.kind === "lower" ? "tren inferior" : "tren superior"}
+      <div className="flex-1 overflow-auto px-5 pt-4 pb-6">
+        {/* ── the lit number, over its own projection ──────────── */}
+        <Card>
+          <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+            {liftRow.name} ·{" "}
+            {liftRow.kind === "lower" ? "tren inferior" : "tren superior"}
           </div>
 
-          <div className="mt-2.5 flex items-start gap-3">
-            <div className="flex items-start gap-2.5">
-              <span className="num text-[46px] leading-[0.82] font-black tracking-[-0.045em]">
-                {formatWeight(currentKg)}
-              </span>
-              <span className="pt-1 text-[11px] leading-[1.15] font-extrabold tracking-[0.1em] uppercase">
-                KG
-                <br />
-                ESTA
-                <br />
-                SEMANA
-              </span>
-            </div>
+          <div className="mt-2 flex items-end gap-3">
+            <span className="num text-[64px] leading-[0.95] font-bold tracking-[-0.02em] text-lime">
+              {formatWeight(currentKg)}
+            </span>
+            <span className="font-display pb-1.5 text-[12px] leading-[1.3] font-semibold whitespace-nowrap text-mid">
+              KG
+              <br />
+              ESTA SEMANA
+            </span>
 
-            <div className="ml-auto text-right">
-              <div
+            <span className="ml-auto pb-1 text-right">
+              <span
                 className={cn(
-                  "num text-[21px] leading-none font-black tracking-[-0.03em]",
+                  "font-display block text-[20px] leading-none font-bold",
                   deltaTone,
                 )}
               >
-                {deltaLabel}
-                {deltaKg === 0 ? "" : " kg"}
-              </div>
-              <div className="mt-2 text-[9.5px] leading-[1.3] font-semibold tracking-[0.1em] text-mid uppercase">
-                vs ciclo 1<br />
+                {deltaGlyph}
+              </span>
+              {/* The magnitude rides in the caption: the glyph carries the
+                  direction, the line under it the size and the comparison. */}
+              <span className="mt-1 block text-[11px] leading-[1.4] text-faint">
+                {deltaText}
+                <br />
                 mismo paso de ola
-              </div>
-            </div>
+              </span>
+            </span>
           </div>
-        </section>
 
-        {/* ── season chart ─────────────────────────────────────── */}
-        <SectionLabel
-          right={<span className="num">MÁX {formatWeight(maxKg)} KG</span>}
-        >
-          Proyección de la ola
-        </SectionLabel>
-
-        <div className="px-4 pt-3 pb-4">
           <div
-            className="flex items-end gap-px"
-            style={{ height: CHART_H }}
+            className="mt-4 flex h-[88px] items-end gap-0.5 border-b border-edge"
             role="img"
             aria-label={`Peso de trabajo de ${liftRow.name} por semana, de la 1 a la ${seasonWeeks}`}
           >
@@ -339,21 +333,23 @@ export default async function ProgresoPage({
               const week = i + 1;
               const failed = failWeeks.has(week);
               const isNow = week === placement.absoluteWeek;
-              const deload = deloadFlags[i] ?? false;
-              const background = failed
-                ? TONE.fail
-                : isNow
-                  ? accentFor("strength")
-                  : deload
-                    ? TONE.mid
-                    : TONE.ink;
               return (
                 <div
                   key={week}
-                  className="min-w-0 flex-1"
+                  className={cn(
+                    "min-w-0 flex-1 rounded-t-[2px]",
+                    failed
+                      ? "bg-fail"
+                      : isNow
+                        ? "bg-lime-line"
+                        : deloadFlags[i]
+                          ? // `soft` is white-on-white against the card in
+                            // the light theme; `quiet` still reads as dimmer.
+                            "bg-quiet"
+                          : "bg-hairline",
+                  )}
                   style={{
-                    height: maxKg > 0 ? Math.max(2, (value / maxKg) * CHART_H) : 2,
-                    background,
+                    height: `${maxKg > 0 ? Math.max(4, (value / maxKg) * 100) : 4}%`,
                   }}
                   title={`Semana ${week} · ${formatWeight(value)} kg`}
                 />
@@ -361,205 +357,169 @@ export default async function ProgresoPage({
             })}
           </div>
 
-          {/* One cell per bar so the axis stays aligned, but only the tick
-              weeks carry a number — at 39 semanas cada celda mide ~7 px. */}
-          <div className="flex gap-px border-t-2 border-ink pt-1.5">
-            {series.map((_, i) => {
-              const week = i + 1;
-              if (!ticks.has(week)) {
-                return <span key={week} className="min-w-0 flex-1" />;
-              }
-              const failed = failWeeks.has(week);
-              const isNow = week === placement.absoluteWeek;
-              return (
-                <span
-                  key={week}
-                  className={cn(
-                    "num min-w-0 flex-1 text-center text-[9px] leading-none whitespace-nowrap",
-                    isNow
-                      ? "font-black text-strength"
-                      : failed
-                        ? "font-bold text-fail"
-                        : "font-semibold text-faint",
-                  )}
-                >
-                  {week}
-                </span>
-              );
-            })}
-          </div>
-
-          <p className="mt-3 text-[10.5px] leading-[1.45] text-faint">
-            Una barra por semana de temporada; la escala numera una de cada{" "}
-            {tickEvery}. En gris, las descargas; en naranja, la semana en curso.
-            {failWeeks.size > 0
-              ? " En rojo, las semanas con un fallo de rango registrado en este básico."
-              : ""}
+          <p className="mt-2 text-[11px] leading-[1.5] text-faint">
+            Proyección de la ola, {seasonWeeks} semanas · máx{" "}
+            {formatWeight(maxKg)} kg · verde = semana actual · tenue = descargas
+            {failWeeks.size > 0 ? " · rojo = fallo de rango" : ""}
           </p>
-        </div>
+        </Card>
 
         {/* ── the audit ────────────────────────────────────────── */}
-        <div className="bg-ink px-4 pt-4 pb-4 text-paper">
-          <div className="text-[10px] leading-none font-extrabold tracking-[0.12em] text-strength uppercase">
+        <Card className="mt-3.5">
+          <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
             Cómo sale el peso de hoy
           </div>
 
-          <dl className="mt-3.5 flex flex-col gap-2.5">
+          <dl className="mt-3 flex flex-col gap-[9px]">
             {terms.map((term) => (
-              <div key={term.label} className="flex items-baseline gap-3">
-                <dt className="flex-1 text-[11.5px] leading-none font-normal opacity-70">
+              <div key={term.label} className="flex items-baseline gap-2.5">
+                <dt className="flex-1 text-[13px] leading-[1.3] text-mid">
                   {term.label}
                 </dt>
-                <dd className="num flex-none text-[12.5px] leading-none font-extrabold">
+                <dd className="num flex-none text-[13.5px] leading-none font-semibold">
                   {term.value}
                 </dd>
               </div>
             ))}
           </dl>
 
-          <div className="mt-3.5 flex items-baseline gap-3 border-t-2 border-paper pt-3">
-            <span className="flex-1 text-[11px] leading-none font-extrabold tracking-[0.1em] uppercase">
+          <div className="mt-3.5 flex items-baseline gap-2.5 border-t border-edge pt-3">
+            <span className="font-display flex-1 text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
               Peso de trabajo
             </span>
-            <span className="num flex-none text-[22px] leading-none font-black tracking-[-0.03em] text-strength">
+            <span className="num flex-none text-[24px] leading-none font-bold tracking-[-0.02em] text-lime">
               {formatWeight(currentKg)}
-              <span className="text-[12px] font-extrabold"> kg</span>
+              <span className="text-[13px] font-semibold uppercase"> kg</span>
             </span>
           </div>
-        </div>
 
-        <p className="px-4 pt-3.5 text-[11.5px] leading-[1.55] text-mid">
-          {stateText}
-        </p>
+          <p className="mt-3 text-[12px] leading-[1.55] text-faint">
+            {stateText}
+          </p>
+        </Card>
 
         {/* ── Pa:HR ────────────────────────────────────────────── */}
-        <div className="px-4 pt-4 pb-6">
-          <Framed>
-            <div className="flex items-baseline gap-3">
-              <span className="text-[10px] leading-none font-extrabold tracking-[0.12em] text-run uppercase">
-                Desacople Pa:HR
-              </span>
-              <span className="ml-auto text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
-                ÚLTIMAS TIRADAS
-              </span>
-            </div>
+        <Framed className="mt-3.5">
+          <div className="flex items-baseline gap-3">
+            <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
+              Desacople Pa:HR
+            </span>
+            <span className="ml-auto text-[11px] leading-none text-faint">
+              ÚLTIMAS TIRADAS
+            </span>
+          </div>
 
-            {decouplings.length > 0 ? (
-              <>
-                <div className="mt-3.5 flex gap-px bg-line">
-                  {decouplings.map((d) => (
-                    <div
-                      key={d.id}
-                      className="min-w-0 flex-1 bg-paper py-1 pr-2 pl-2 first:pl-0 last:pr-0"
-                    >
-                      <div
-                        className={cn(
-                          "num text-[21px] leading-none font-black tracking-[-0.03em]",
-                          d.pct < DECOUPLING_LIMIT ? "text-ok" : "text-warn",
-                        )}
-                      >
-                        {formatWeight(d.pct)}
-                        <span className="text-[11px] font-extrabold"> %</span>
-                      </div>
-                      <div className="mt-2 text-[9.5px] leading-none font-semibold tracking-[0.08em] text-mid uppercase">
-                        {formatDayShort(d.date)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {decouplingSeries.length > 4 ? (
-                  <>
-                    <div className="mt-3.5 flex h-[54px] items-end gap-0.5">
-                      {decouplingSeries.map((d) => (
-                        <div
-                          key={d.id}
-                          className="min-w-0 flex-1"
-                          style={{
-                            height: `${Math.max(8, Math.min(100, Math.round((d.pct / 10) * 100)))}%`,
-                            background:
-                              d.pct < DECOUPLING_LIMIT ? TONE.ok : TONE.warn,
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <div className="mt-1 flex justify-between">
-                      <span className="num text-[8.5px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
-                        {formatDayShort(decouplingSeries[0].date)}
-                      </span>
-                      <span className="num text-[8.5px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
-                        {formatDayShort(
-                          decouplingSeries[decouplingSeries.length - 1].date,
-                        )}
-                      </span>
-                    </div>
-                  </>
-                ) : null}
-                <p className="mt-3 text-[10.5px] leading-[1.45] text-faint">
-                  Ritmo por pulsación, segunda mitad contra primera; solo dice
-                  algo en tiradas largas a ritmo constante. Por debajo del{" "}
-                  {DECOUPLING_LIMIT} % la base aeróbica aguanta el rodaje
-                  {decouplingSeries.length > 4
-                    ? " — la serie completa de la temporada, abajo."
-                    : "."}
-                </p>
-              </>
-            ) : (
-              <p className="mt-2.5 text-[11.5px] leading-[1.5] text-mid">
-                Todavía no hay ninguna tirada con desacople anotado. Se calcula
-                comparando el ritmo por pulsación de la primera y la segunda
-                mitad de una tirada de 60′ o más: por debajo del{" "}
-                {DECOUPLING_LIMIT} % la base aeróbica aguanta, por encima estás
-                corriendo por encima de tu aeróbico. Anótalo al marcar una
-                tirada larga y aparecerá aquí.
-              </p>
-            )}
-          </Framed>
-        </div>
-
-        {/* ── weekly km ────────────────────────────────────────── */}
-        {maxWeekKm > 0 ? (
-          <div className="px-4 pb-6">
-            <Framed>
-              <div className="flex items-baseline gap-3">
-                <span className="text-[10px] leading-none font-extrabold tracking-[0.12em] text-run uppercase">
-                  Kilómetros por semana
-                </span>
-                <span className="num ml-auto text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
-                  MÁX {formatWeight(maxWeekKm)} km
-                </span>
-              </div>
-              <div className="mt-3.5 flex h-[54px] items-end gap-px">
-                {Array.from({ length: seasonWeeks }, (_, i) => {
-                  const km = kmByWeek.get(i + 1) ?? 0;
-                  return (
-                    <div
-                      key={i}
-                      className="min-w-0 flex-1"
-                      style={{
-                        height: `${km > 0 ? Math.max(6, Math.round((km / maxWeekKm) * 100)) : 2}%`,
-                        background: km > 0 ? accentFor("run") : TONE.line,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-              <div className="mt-1 flex gap-px">
-                {Array.from({ length: seasonWeeks }, (_, i) => (
+          {decouplings.length > 0 ? (
+            <>
+              <div className="mt-3.5 flex gap-1.5">
+                {decouplings.map((d) => (
                   <div
-                    key={i}
-                    className="num min-w-0 flex-1 text-center text-[8px] leading-none font-semibold text-faint"
+                    key={d.id}
+                    className="min-w-0 flex-1 rounded-lg bg-soft px-2.5 py-2.5"
                   >
-                    {ticks.has(i + 1) ? i + 1 : ""}
+                    <div
+                      className={cn(
+                        "num text-[21px] leading-none font-bold tracking-[-0.02em]",
+                        d.pct < DECOUPLING_LIMIT ? "text-ok" : "text-warn",
+                      )}
+                    >
+                      {formatWeight(d.pct)}
+                      <span className="text-[11px] font-semibold"> %</span>
+                    </div>
+                    <div className="font-display mt-2 text-[10px] leading-none font-semibold tracking-[0.08em] text-mid uppercase">
+                      {formatDayShort(d.date)}
+                    </div>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[10.5px] leading-[1.45] text-faint">
-                Suma de las distancias anotadas al marcar cada carrera. Las
-                semanas sin kilómetros son huecos de verdad: lo no anotado no
-                existe.
+              {decouplingSeries.length > 4 ? (
+                <>
+                  <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
+                    {decouplingSeries.map((d) => (
+                      <div
+                        key={d.id}
+                        className="min-w-0 flex-1 rounded-t-[2px]"
+                        style={{
+                          height: `${Math.max(8, Math.min(100, Math.round((d.pct / 10) * 100)))}%`,
+                          background:
+                            d.pct < DECOUPLING_LIMIT ? TONE.ok : TONE.warn,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-1.5 flex justify-between">
+                    <span className="num text-[10px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
+                      {formatDayShort(decouplingSeries[0].date)}
+                    </span>
+                    <span className="num text-[10px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
+                      {formatDayShort(
+                        decouplingSeries[decouplingSeries.length - 1].date,
+                      )}
+                    </span>
+                  </div>
+                </>
+              ) : null}
+              <p className="mt-3 text-[11px] leading-[1.5] text-faint">
+                Ritmo por pulsación, segunda mitad contra primera; solo dice algo
+                en tiradas largas a ritmo constante. Por debajo del{" "}
+                {DECOUPLING_LIMIT} % la base aeróbica aguanta el rodaje
+                {decouplingSeries.length > 4
+                  ? " — la serie completa de la temporada, abajo."
+                  : "."}
               </p>
-            </Framed>
-          </div>
+            </>
+          ) : (
+            <p className="mt-2.5 text-[12px] leading-[1.55] text-mid">
+              Todavía no hay ninguna tirada con desacople anotado. Se calcula
+              comparando el ritmo por pulsación de la primera y la segunda mitad
+              de una tirada de 60′ o más: por debajo del {DECOUPLING_LIMIT} % la
+              base aeróbica aguanta, por encima estás corriendo por encima de tu
+              aeróbico. Anótalo al marcar una tirada larga y aparecerá aquí.
+            </p>
+          )}
+        </Framed>
+
+        {/* ── weekly km ────────────────────────────────────────── */}
+        {maxWeekKm > 0 ? (
+          <Framed className="mt-3.5">
+            <div className="flex items-baseline gap-3">
+              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
+                Kilómetros por semana
+              </span>
+              <span className="num ml-auto text-[11px] leading-none text-faint uppercase">
+                MÁX {formatWeight(maxWeekKm)} km
+              </span>
+            </div>
+            <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
+              {Array.from({ length: seasonWeeks }, (_, i) => {
+                const km = kmByWeek.get(i + 1) ?? 0;
+                return (
+                  <div
+                    key={i}
+                    className="min-w-0 flex-1 rounded-t-[2px]"
+                    style={{
+                      height: `${km > 0 ? Math.max(6, Math.round((km / maxWeekKm) * 100)) : 2}%`,
+                      background: km > 0 ? accentFor("run") : TONE.hairline,
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <div className="mt-1.5 flex gap-0.5">
+              {Array.from({ length: seasonWeeks }, (_, i) => (
+                <div
+                  key={i}
+                  className="num min-w-0 flex-1 text-center text-[9px] leading-none font-semibold text-faint"
+                >
+                  {ticks.has(i + 1) ? i + 1 : ""}
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] leading-[1.5] text-faint">
+              Suma de las distancias anotadas al marcar cada carrera. Las semanas
+              sin kilómetros son huecos de verdad: lo no anotado no existe.
+            </p>
+          </Framed>
         ) : null}
       </div>
     </div>

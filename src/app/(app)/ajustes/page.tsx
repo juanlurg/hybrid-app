@@ -1,9 +1,7 @@
 import { SecondaryNav } from "@/components/app-shell";
-import { ScreenHeader } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
 import { createClient } from "@/lib/supabase/server";
 import { daysBetween, todayIso } from "@/lib/domain/calendar";
-import { formatWeight } from "@/lib/engine";
 
 import { SettingsGroups, type SettingsProfile } from "./settings-groups";
 
@@ -24,16 +22,6 @@ export default async function AjustesPage() {
     p.last_export_at == null
       ? null
       : Math.max(0, daysBetween(p.last_export_at.slice(0, 10), todayIso()));
-
-  const localPart = email ? email.split("@")[0] : "";
-  const title = p.display_name.trim() || localPart || "Atleta";
-
-  // The subtitle only states what the athlete has actually filled in.
-  const bits: string[] = [];
-  if (p.body_weight_kg != null)
-    bits.push(`${formatWeight(Number(p.body_weight_kg))} kg`);
-  if (p.height_cm != null) bits.push(`${p.height_cm} cm`);
-  if (p.lthr != null) bits.push(`LTHR ${p.lthr} ppm`);
 
   const profile: SettingsProfile = {
     display_name: p.display_name,
@@ -62,15 +50,17 @@ export default async function AjustesPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader
-        eyebrow="AJUSTES"
-        title={title}
-        subtitle={
-          bits.length ? (
-            <span className="num">{bits.join(" · ")}</span>
-          ) : undefined
-        }
-      />
+      <header className="flex-none px-5 pt-6">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="font-display flex-1 text-[22px] leading-none font-bold">
+            Ajustes
+          </h1>
+          {/* The status is the one knob nothing else on the app surfaces. */}
+          <span className="font-display flex-none text-[11px] leading-none text-faint uppercase">
+            {p.lthr == null ? "LTHR sin test" : `LTHR ${p.lthr} ppm`}
+          </span>
+        </div>
+      </header>
       <SecondaryNav />
       <div className="flex-1 overflow-auto">
         <SettingsGroups

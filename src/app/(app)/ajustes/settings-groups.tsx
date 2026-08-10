@@ -5,11 +5,11 @@ import { useState, useTransition, type ReactNode } from "react";
 
 import { TONE } from "@/components/day-accents";
 import { SyncStatus } from "@/components/sync-status";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
+  Card,
   Chip,
   Footnote,
-  Row,
-  RowStack,
   RuleNote,
   SectionLabel,
   Stepper,
@@ -133,6 +133,10 @@ export interface SettingsProgram {
   is_active: boolean;
 }
 
+/** The small action that rides the right of a row: export, salir, borrar. */
+const ACTION =
+  "font-display flex h-11 items-center rounded-md border border-edge bg-soft px-3.5 text-[11px] leading-none font-semibold tracking-[0.08em] uppercase disabled:opacity-40";
+
 export function SettingsGroups({
   profile: initialProfile,
   lifts,
@@ -176,6 +180,17 @@ export function SettingsGroups({
       : realStep > rounding + 0.001
         ? `Con estos discos el salto real es de ${formatWeight(realStep)} kg`
         : null;
+
+  // Non-negotiable 8: the copy is the only backup, so its age is the sub.
+  const exportStale = exportAgeDays == null || exportAgeDays > 14;
+  const exportAge =
+    exportAgeDays == null
+      ? "nunca descargada"
+      : exportAgeDays === 0
+        ? "última hoy"
+        : exportAgeDays === 1
+          ? "última ayer"
+          : `última hace ${exportAgeDays} días`;
 
   /** Optimistic write: paint it now, roll back if the server says no. */
   function save(patch: Partial<SettingsProfile>, revert?: () => void) {
@@ -290,7 +305,7 @@ export function SettingsGroups({
       {/* Sticky: a failed save at the bottom of the list has to be readable
           from wherever the athlete was standing when it failed. */}
       {error ? (
-        <div className="sticky top-0 z-10 border-b-2 border-ink bg-paper px-4 py-3">
+        <div className="sticky top-0 z-10 border-b border-edge bg-surface px-5 py-3">
           <RuleNote tone={TONE.fail} title="No se ha guardado">
             {error}
           </RuleNote>
@@ -299,8 +314,8 @@ export function SettingsGroups({
 
       {/* ── atleta ─────────────────────────────────────────────── */}
       <SectionLabel right={status()}>Atleta</SectionLabel>
-      <RowStack className="mt-2.5">
-        <SettingRow name="Nombre" sub="Encabeza esta pantalla y los resúmenes">
+      <Group>
+        <SettingRow name="Nombre" sub="Cómo te llama la app">
           <input
             type="text"
             value={name}
@@ -313,7 +328,7 @@ export function SettingsGroups({
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
-            className="h-8 w-[130px] border-2 border-ink bg-transparent px-2 text-right text-[13px] leading-none font-bold"
+            className="font-display h-9 w-[130px] rounded-sm border border-edge bg-soft px-2 text-right text-[13.5px] leading-none font-semibold"
           />
         </SettingRow>
 
@@ -361,12 +376,11 @@ export function SettingsGroups({
             }
           />
         </SettingRow>
-
-      </RowStack>
+      </Group>
 
       {/* ── equipo ─────────────────────────────────────────────── */}
       <SectionLabel right={status("GIMNASIO DE CASA")}>Equipo</SectionLabel>
-      <RowStack className="mt-2.5">
+      <Group>
         <SettingRow name="Barra" sub="La barra con la que levantas en casa">
           <ChipRow
             className="num"
@@ -380,32 +394,32 @@ export function SettingsGroups({
           />
         </SettingRow>
 
-        <Row>
-          <div className="text-[13px] leading-[1.2] font-bold">
-            Discos disponibles
-          </div>
-          <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
-            Pares, no unidades. Marca solo los que puedas montar.
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {plateOptions.map((plate) => (
-              <Chip
-                key={plate}
-                active={plates.includes(plate)}
-                aria-pressed={plates.includes(plate)}
-                onClick={() => toggleOnePlate(plate)}
-                className="num min-w-11"
-              >
-                {formatWeight(plate)}
-              </Chip>
-            ))}
-          </div>
-          {plateWarning ? (
-            <div className="num mt-2.5 text-[10.5px] leading-[1.35] font-semibold text-fail">
-              {plateWarning}
-            </div>
-          ) : null}
-        </Row>
+        <SettingRow
+          name="Discos disponibles"
+          sub="Pares, no unidades. Marca solo los que puedas montar."
+          below={
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {plateOptions.map((plate) => (
+                  <Chip
+                    key={plate}
+                    active={plates.includes(plate)}
+                    aria-pressed={plates.includes(plate)}
+                    onClick={() => toggleOnePlate(plate)}
+                    className="num min-w-11"
+                  >
+                    {formatWeight(plate)}
+                  </Chip>
+                ))}
+              </div>
+              {plateWarning ? (
+                <div className="num mt-2.5 text-[11px] leading-[1.35] font-semibold text-fail">
+                  {plateWarning}
+                </div>
+              ) : null}
+            </>
+          }
+        />
 
         <SettingRow
           name="Salto de mancuernas"
@@ -471,53 +485,51 @@ export function SettingsGroups({
           />
         </SettingRow>
 
-        <Row>
-          <div className="text-[13px] leading-[1.2] font-bold">Kettlebells</div>
-          <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
-            Las cargas de kettlebell se ajustan a una de estas, no a un salto.
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {bellOptions.map((kg) => (
-              <Chip
-                key={kg}
-                active={bells.includes(kg)}
-                aria-pressed={bells.includes(kg)}
-                onClick={() => toggleKettlebell(kg)}
-                className="num min-w-11"
-              >
-                {formatWeight(kg)}
-              </Chip>
-            ))}
-          </div>
-        </Row>
+        <SettingRow
+          name="Kettlebells"
+          sub="Las cargas de kettlebell se ajustan a una de estas, no a un salto."
+          below={
+            <div className="flex flex-wrap gap-1.5">
+              {bellOptions.map((kg) => (
+                <Chip
+                  key={kg}
+                  active={bells.includes(kg)}
+                  aria-pressed={bells.includes(kg)}
+                  onClick={() => toggleKettlebell(kg)}
+                  className="num min-w-11"
+                >
+                  {formatWeight(kg)}
+                </Chip>
+              ))}
+            </div>
+          }
+        />
 
-        <Row>
-          <div className="text-[13px] leading-[1.2] font-bold">
-            Material disponible
-          </div>
-          <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
-            El editor y la IA solo proponen ejercicios que puedas montar.
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {EQUIPMENT_OPTIONS.map((opt) => (
-              <Chip
-                key={opt.value}
-                active={equipment.includes(opt.value)}
-                aria-pressed={equipment.includes(opt.value)}
-                onClick={() => toggleEquipment(opt.value)}
-              >
-                {opt.label}
-              </Chip>
-            ))}
-          </div>
-        </Row>
-      </RowStack>
+        <SettingRow
+          name="Material disponible"
+          sub="El editor y la IA solo proponen ejercicios que puedas montar."
+          below={
+            <div className="flex flex-wrap gap-1.5">
+              {EQUIPMENT_OPTIONS.map((opt) => (
+                <Chip
+                  key={opt.value}
+                  active={equipment.includes(opt.value)}
+                  aria-pressed={equipment.includes(opt.value)}
+                  onClick={() => toggleEquipment(opt.value)}
+                >
+                  {opt.label}
+                </Chip>
+              ))}
+            </div>
+          }
+        />
+      </Group>
 
       {/* ── motor de pesos ─────────────────────────────────────── */}
       <SectionLabel right={status("AFECTA A LOS CÁLCULOS")}>
         Motor de pesos
       </SectionLabel>
-      <RowStack className="mt-2.5">
+      <Group>
         <SettingRow
           name="Regla de regresión"
           sub="Qué hace el motor cuando fallas el rango del básico"
@@ -634,11 +646,11 @@ export function SettingsGroups({
             onChange={(sync_rm_after_retest) => save({ sync_rm_after_retest })}
           />
         </SettingRow>
-      </RowStack>
+      </Group>
 
       {/* ── sesión ─────────────────────────────────────────────── */}
       <SectionLabel right={status()}>Sesión</SectionLabel>
-      <RowStack className="mt-2.5">
+      <Group>
         <SettingRow
           name="Cronómetro automático"
           sub="Arranca el descanso al registrar cada serie"
@@ -683,11 +695,15 @@ export function SettingsGroups({
             onChange={(show_plate_breakdown) => save({ show_plate_breakdown })}
           />
         </SettingRow>
-      </RowStack>
+        {/* Device preference, not profile: it lives in localStorage. */}
+        <SettingRow name="Tema" sub="Claro, oscuro, o lo que diga el sistema">
+          <ThemeToggle />
+        </SettingRow>
+      </Group>
 
       {/* ── carrera ────────────────────────────────────────────── */}
       <SectionLabel right={status("ZONAS Y DATOS")}>Carrera</SectionLabel>
-      <RowStack className="mt-2.5">
+      <Group>
         <SettingRow
           name="LTHR"
           sub={
@@ -712,225 +728,167 @@ export function SettingsGroups({
             }
           />
         </SettingRow>
-      </RowStack>
+      </Group>
 
       {/* ── cuenta ─────────────────────────────────────────────── */}
       <SectionLabel>Cuenta</SectionLabel>
-      <RowStack className="mt-2.5">
+      <Group>
         <SettingRow name="Correo" sub="La cuenta con la que entras">
-          <span className="text-[11.5px] leading-none font-semibold text-mid">
+          <span className="font-display text-[13.5px] leading-none font-semibold">
             {email ?? "sin correo"}
           </span>
         </SettingRow>
         <form action={signOut}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-3 bg-paper px-4 py-3 text-left"
+          <SettingRow
+            name="Cerrar sesión"
+            sub="Habrá que volver a entrar con la contraseña"
           >
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] leading-[1.2] font-bold">
-                Cerrar sesión
-              </span>
-              <span className="mt-1 block text-[10.5px] leading-[1.35] text-faint">
-                Habrá que volver a entrar con la contraseña
-              </span>
-            </span>
-            <span
-              aria-hidden
-              className="flex-none text-[16px] leading-none font-bold"
-            >
-              →
-            </span>
-          </button>
+            <button type="submit" className={ACTION}>
+              Salir
+            </button>
+          </SettingRow>
         </form>
-      </RowStack>
+      </Group>
 
       {/* ── datos ──────────────────────────────────────────────── */}
       <SectionLabel right={status()}>Datos</SectionLabel>
       <SyncStatus />
-      <RowStack className="mt-2.5">
-        <a
-          href="/api/export"
-          download
-          className="flex w-full items-center gap-3 bg-paper px-4 py-3 text-left"
+      <Group>
+        <SettingRow
+          name="Exportar copia"
+          sub={
+            <span className={cn(exportStale && "font-semibold text-warn")}>
+              La copia es el único respaldo · {exportAge}
+            </span>
+          }
         >
-          <span className="min-w-0 flex-1">
-            <span className="block text-[13px] leading-[1.2] font-bold">
-              Exportar histórico (JSON)
-            </span>
-            <span
-              className={cn(
-                "mt-1 block text-[10.5px] leading-[1.35]",
-                exportAgeDays == null || exportAgeDays > 14
-                  ? "font-semibold text-warn"
-                  : "text-faint",
-              )}
-            >
-              {exportAgeDays == null
-                ? "Nunca descargada. En el plan gratuito esto ES la copia de seguridad."
-                : exportAgeDays > 14
-                  ? `Última copia hace ${exportAgeDays} días. Toca descargar: en el plan gratuito esto ES la copia de seguridad.`
-                  : `Última copia ${exportAgeDays === 0 ? "hoy" : exportAgeDays === 1 ? "ayer" : `hace ${exportAgeDays} días`}. Todo lo tuyo en un archivo.`}
-            </span>
-          </span>
-          <span
-            aria-hidden
-            className="flex-none text-[16px] leading-none font-bold"
-          >
-            ↓
-          </span>
-        </a>
+          <a href="/api/export" download className={ACTION}>
+            Exportar
+          </a>
+        </SettingRow>
 
         {programs.length > 0 ? (
-          <div className="bg-paper px-4 py-3">
-            <div className="text-[13px] leading-[1.2] font-bold">Programas</div>
-            <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
-              El activo manda en Hoy y en el motor. Los demás quedan
-              archivados con todo su historial.
-            </div>
-            <div className="mt-2.5 flex flex-col gap-2">
-              {programs.map((p) => (
-                <div key={p.id} className="flex items-center gap-2.5">
-                  <span className="min-w-0 flex-1 truncate text-[12px] leading-[1.2] font-semibold">
-                    {p.name}
-                  </span>
-                  {p.starts_on ? (
-                    <span className="num flex-none text-[10px] leading-none text-faint">
-                      {p.starts_on}
+          <SettingRow
+            name="Programas"
+            sub="El activo manda en Hoy y en el motor. Los demás quedan archivados con todo su historial."
+            below={
+              <div className="flex flex-col gap-2">
+                {programs.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2.5">
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] leading-[1.2] font-semibold">
+                      {p.name}
                     </span>
-                  ) : null}
-                  {p.is_active ? (
-                    <span className="flex-none text-[9.5px] leading-none font-extrabold tracking-[0.1em] text-ok uppercase">
-                      Activo
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={pending}
-                      onClick={() => {
-                        setError(null);
-                        startTransition(async () => {
-                          const res = await activateProgram(p.id);
-                          if (!res.ok) {
-                            setError(
-                              res.error ?? "No se ha podido activar.",
-                            );
-                            return;
-                          }
-                          router.refresh();
-                        });
-                      }}
-                      className="flex-none border-2 border-ink px-2 py-1.5 text-[9.5px] leading-none font-extrabold tracking-[0.1em] uppercase disabled:opacity-40"
-                    >
-                      Activar
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+                    {p.starts_on ? (
+                      <span className="num flex-none text-[11px] leading-none text-faint">
+                        {p.starts_on}
+                      </span>
+                    ) : null}
+                    {p.is_active ? (
+                      <span className="font-display flex-none rounded-full border border-lime-edge bg-lime-soft px-2 py-1 text-[9.5px] leading-none font-semibold tracking-[0.1em] text-lime uppercase">
+                        Activo
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => {
+                          setError(null);
+                          startTransition(async () => {
+                            const res = await activateProgram(p.id);
+                            if (!res.ok) {
+                              setError(
+                                res.error ?? "No se ha podido activar.",
+                              );
+                              return;
+                            }
+                            router.refresh();
+                          });
+                        }}
+                        className="font-display flex-none rounded-sm border border-edge bg-soft px-2 py-1.5 text-[9.5px] leading-none font-semibold tracking-[0.1em] uppercase disabled:opacity-40"
+                      >
+                        Activar
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            }
+          />
         ) : null}
 
-        <Row>
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] leading-[1.2] font-bold">
-                Desplazar el plan
-              </div>
-              <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
-                El calendario manda: lo no hecho se pierde. Esto mueve todas
-                las fases en bloque; lo ya registrado y la carrera no se
-                mueven.
-              </div>
+        <SettingRow
+          name="Desplazar el plan"
+          sub="El calendario manda: lo no hecho se pierde. Esto mueve todas las fases en bloque; lo ya registrado y la carrera no se mueven."
+          below={
+            <div className="flex items-center gap-1.5">
+              {confirmShift ? (
+                <>
+                  <Chip active onClick={doShift}>
+                    Sí, {shiftDays > 0 ? "+" : ""}
+                    {shiftDays} días
+                  </Chip>
+                  <Chip onClick={() => setConfirmShift(false)}>Cancelar</Chip>
+                </>
+              ) : (
+                <Chip onClick={() => setConfirmShift(true)}>Desplazar…</Chip>
+              )}
+              {shifted != null ? (
+                <span className="text-[11px] leading-none text-mid">
+                  Plan desplazado {shifted > 0 ? "+" : ""}
+                  {shifted} días.
+                </span>
+              ) : null}
             </div>
-            <Stepper
-              label="días de desplazamiento"
-              value={`${shiftDays > 0 ? "+" : ""}${shiftDays} d`}
-              onDecrement={() =>
-                setShiftDays((d) => Math.max(-90, d - 1 === 0 ? -1 : d - 1))
-              }
-              onIncrement={() =>
-                setShiftDays((d) => Math.min(90, d + 1 === 0 ? 1 : d + 1))
-              }
-            />
-          </div>
-          <div className="mt-2.5 flex items-center gap-1.5">
-            {confirmShift ? (
-              <>
-                <Chip
-                  active
-                  onClick={doShift}
-                  className="border-ink bg-ink text-paper"
-                >
-                  Sí, {shiftDays > 0 ? "+" : ""}
-                  {shiftDays} días
-                </Chip>
-                <Chip onClick={() => setConfirmShift(false)}>Cancelar</Chip>
-              </>
-            ) : (
-              <Chip onClick={() => setConfirmShift(true)}>Desplazar…</Chip>
-            )}
-            {shifted != null ? (
-              <span className="text-[10.5px] leading-none text-mid">
-                Plan desplazado {shifted > 0 ? "+" : ""}
-                {shifted} días.
-              </span>
-            ) : null}
-          </div>
-        </Row>
+          }
+        >
+          <Stepper
+            label="días de desplazamiento"
+            value={`${shiftDays > 0 ? "+" : ""}${shiftDays} d`}
+            onDecrement={() =>
+              setShiftDays((d) => Math.max(-90, d - 1 === 0 ? -1 : d - 1))
+            }
+            onIncrement={() =>
+              setShiftDays((d) => Math.min(90, d + 1 === 0 ? 1 : d + 1))
+            }
+          />
+        </SettingRow>
 
-        {confirmClear ? (
-          <Row className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] leading-[1.2] font-bold text-fail">
-                ¿Seguro?
-              </div>
-              <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
-                Se borran todas las sesiones y series registradas de esta
-                temporada
-              </div>
-            </div>
+        <SettingRow
+          name={<span className="text-fail">Borrar historial</span>}
+          sub={
+            confirmClear
+              ? "Se borran todas las sesiones y series registradas de esta temporada"
+              : "No se puede deshacer"
+          }
+        >
+          {confirmClear ? (
             <div className="flex flex-none gap-1.5">
               <Chip
                 active
                 onClick={wipeHistory}
-                className="border-fail bg-fail text-paper"
+                className="border-transparent bg-fail text-surface"
               >
                 Sí
               </Chip>
               <Chip onClick={() => setConfirmClear(false)}>Cancelar</Chip>
             </div>
-          </Row>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmClear(true)}
-            className="flex w-full items-center gap-3 bg-paper px-4 py-3 text-left"
-          >
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] leading-[1.2] font-bold text-fail">
-                Borrar historial
-              </span>
-              <span className="mt-1 block text-[10.5px] leading-[1.35] text-faint">
-                No se puede deshacer
-              </span>
-            </span>
-            <span
-              aria-hidden
-              className="flex-none text-[16px] leading-none font-bold text-fail"
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmClear(true)}
+              className={cn(ACTION, "text-fail")}
             >
-              →
-            </span>
-          </button>
-        )}
+              Borrar
+            </button>
+          )}
+        </SettingRow>
+
         {cleared ? (
-          <Row>
-            <div className="text-[11.5px] leading-[1.45] text-mid">
-              Historial borrado. Las RM, la ola y el programa siguen intactos.
-            </div>
-          </Row>
+          <div className="py-[11px] text-[11.5px] leading-[1.45] text-mid">
+            Historial borrado. Las RM, la ola y el programa siguen intactos.
+          </div>
         ) : null}
-      </RowStack>
+      </Group>
 
       <Footnote>
         Las RM, la ola y la regla de regresión son el motor: cambiarlas
@@ -942,27 +900,47 @@ export function SettingsGroups({
 
 /* ── row scaffolding ──────────────────────────────────────────── */
 
+/** A group of settings: one card, a hairline between each. */
+function Group({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-2 px-5">
+      <Card className="divide-y divide-line px-4 py-1">{children}</Card>
+    </div>
+  );
+}
+
+/**
+ * A setting: name left, control right. `below` takes the controls that need
+ * the whole width — the chip banks and the confirmations.
+ */
 function SettingRow({
   name,
   sub,
   children,
+  below,
 }: {
-  name: string;
+  name: ReactNode;
   sub?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
+  below?: ReactNode;
 }) {
   return (
-    <Row className="flex items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-[13px] leading-[1.2] font-bold">{name}</div>
-        {sub ? (
-          <div className="mt-1 text-[10.5px] leading-[1.35] text-faint">
-            {sub}
-          </div>
+    <div className="py-[11px]">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[13.5px] leading-[1.25]">{name}</div>
+          {sub ? (
+            <div className="mt-0.5 text-[11px] leading-[1.35] text-faint">
+              {sub}
+            </div>
+          ) : null}
+        </div>
+        {children ? (
+          <div className="flex flex-none justify-end">{children}</div>
         ) : null}
       </div>
-      <div className="flex flex-none justify-end">{children}</div>
-    </Row>
+      {below ? <div className="mt-2.5">{below}</div> : null}
+    </div>
   );
 }
 

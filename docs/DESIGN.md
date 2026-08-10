@@ -1,65 +1,101 @@
 # Bloques — design spec
 
-Swiss sport poster. Full-bleed colour panels, heavy type, hard 2px rules,
-**no border radius, no shadows, no gradients**. Session type readable from a
-metre away.
+**Foco.** One thing is lit per screen — the lime number — and everything else
+recedes into cards on the page colour. The engine's reasoning folds behind a
+single line. Dark and light are peers: the palette flips, the hierarchy does not.
+
+## Themes
+
+Light lives on `:root`, dark on `[data-theme="dark"]`. `THEME_SCRIPT` (from
+`src/lib/theme.ts`, inlined at the top of the body) resolves the athlete's
+preference against `prefers-color-scheme` and stamps `data-theme` before the
+first paint, so the CSS only ever knows two themes. `ThemeToggle` in Ajustes
+writes the override to `localStorage`; "sistema" removes the key.
 
 ## Palette (Tailwind tokens, defined in `src/app/globals.css`)
 
-| Token | Value | Use |
-|---|---|---|
-| `ink` | `#111110` | headers, bars, text |
-| `paper` | `#ecebe6` | page background, rows |
-| `mid` | `#6e6d67` | secondary text |
-| `faint` | `#8e8c85` | tertiary text, footnotes |
-| `line` | `#d7d5cd` | the 1px gap between rows (as a background) |
-| `quiet` | `#c9c6bc` | mobility accent, inert chips |
-| `soft` | `#e0ded7` | rest accent, stepper wells |
-| `hairline` | `#b6b3aa` | dashed borders, off knobs |
-| `ghost` | `#a9a7a0` | disabled text |
-| `ink-2` | `#2c2c29` | tracks inside black panels |
-| `ink-3` | `#7d7c76` | inactive nav text |
-| `sunk` | `#e4e2db` | expanded row background |
-| `strength` | `oklch(0.62 0.19 32)` | **fuerza** — the orange |
-| `run` | `oklch(0.62 0.19 250)` | **carrera** — the blue |
-| `ok` | `oklch(0.55 0.14 145)` | done |
-| `ok-bright` | `oklch(0.72 0.19 130)` | rest timer, registered |
-| `warn` | `oklch(0.72 0.16 75)` | partial, engine hold |
-| `fail` | `oklch(0.55 0.21 25)` | skipped, RM cut |
-| `tint` | `#f2e6cf` | "touched by AI" wash |
+Every token is a CSS custom property, so inline styles follow the theme too —
+use `var(--…)`, never a literal. `@theme inline` is what keeps the utilities
+pointing at the variable instead of copying its value at build time.
 
-Accents by session group live in `src/components/day-accents.ts` — always use
-`accentFor(group)`, never a literal.
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `bg` | `#0f1210` | `#f2f4ef` | the page |
+| `surface` | `#171b18` | `#ffffff` | cards and rows |
+| `soft` | `#22271f` | `#eef2e8` | chips, wells, tracks inside cards |
+| `sunk` | `#131711` | `#f7f9f3` | today / expanded row |
+| `chrome` | `#131714` | `#ffffff` | desktop rail, mobile tab bar |
+| `panel` / `on-panel` | `#171b18` | `#171b16` | the engine's box — light inverts, dark just cards |
+| `edge` | `#262b27` | `#dde3da` | card border |
+| `line` | `#232824` | `#e2e7df` | row border, dividers |
+| `hairline` | `#3a403b` | `#cfd8ca` | dashed borders, inert spines |
+| `ink` | `#eef2ec` | `#171b16` | primary text |
+| `mid` | `#9aa39b` | `#5f6a60` | secondary text |
+| `faint` / `ghost` | `#5d665e` | `#98a299` | tertiary text |
+| `strength` / `on-strength` | `#b8ee3c` | `#b8ee3c` | the lime **fill** — same in both themes |
+| `lime` | `#b8ee3c` | `#4c7d1a` | lime as **ink**: eyebrows, hero numbers |
+| `lime-line` | `#b8ee3c` | `#6cb520` | lime as a **stroke**: spines, progress, selection |
+| `lime-soft` / `lime-edge` | `#1c2b12` | `#e9f5d6` | the "done" pill, the active rail item |
+| `lime-dim` | `#7fa14a` | `#6f994a` | lime turned down — a sub-label beside a lime figure (`/15`, `EPLEY`) |
+| `run` | `#6fd3e8` | `#1f7f96` | **carrera** — the cyan |
+| `quiet` | `#2b302c` | `#dde3d2` | mobility accent, inert chips |
+| `ok` / `ok-bright` | = `lime` / `lime-line` | | done, rest timer |
+| `warn` | `#e8c65a` | `#8a5d00` | partial, engine hold |
+| `fail` | `#f08a7a` | `#b4382a` | skipped, RM cut |
+| `tint` | `#241f14` | `#f8f1e2` | "touched by AI" wash |
+| `ink-2` / `ink-3` | fixed | fixed | tracks and inactive text **inside** a panel |
 
-## Type scale (Archivo, `font-display`)
+`strength` is the lit surface and never moves; `lime` is that same green used as
+ink, which light has to darken to stay legible. Text on a `strength` fill is
+always `on-strength`. Accents by session group live in
+`src/components/day-accents.ts` — always use `accentFor(group)`.
+
+## Type
+
+Chakra Petch (`font-display`, 500/600/700) carries labels, actions and numbers.
+Barlow (`font-sans`, 400–700) carries prose and is the body default. Neither
+face ships 800 or 900, so `font-extrabold` and `font-black` are banned — the
+browser would fake them.
 
 | Role | Class |
 |---|---|
-| Section label | `text-[10px] font-extrabold tracking-[0.14em] text-mid uppercase` |
-| Header eyebrow | `text-[11px] font-extrabold tracking-[0.14em] uppercase` |
-| Screen title | `text-[26px] leading-[1.02] font-black tracking-[-0.03em]` |
-| Panel headline | `text-[31px] leading-[1.02] font-black tracking-[-0.03em]` |
-| Hero number | `text-[86px] sm:text-[106px] leading-[0.76] font-black tracking-[-0.055em]` |
-| KPI number | `text-[30px] leading-none font-black tracking-[-0.035em]` |
-| Row title | `text-[13.5px] leading-[1.2] font-bold` |
-| Row subtitle | `text-[11px] leading-[1.35] text-mid` |
-| Right-hand figure | `text-[12.5px] font-extrabold` + `num` |
-| Action bar | `h-16 text-[16px] font-extrabold tracking-[0.1em] uppercase` |
+| Section label | `font-display text-[12px] font-semibold tracking-[0.12em] text-mid uppercase` |
+| Header eyebrow | `font-display text-[12px] font-semibold tracking-[0.12em] uppercase` |
+| Card eyebrow | `font-display text-[11px] font-semibold tracking-[0.14em] text-lime uppercase` |
+| Screen title | `font-display text-[26px] leading-[1.1] font-bold` |
+| Hero number | `num text-[88px] sm:text-[108px] leading-[0.95] font-bold tracking-[-0.02em] text-lime` |
+| KPI number | `num text-[28px] leading-none font-bold tracking-[-0.02em]` |
+| Row title | `text-[15px] leading-[1.2] font-semibold` |
+| Row subtitle | `text-[12.5px] leading-[1.35] text-mid` |
+| Right-hand figure | `num text-[14px] font-semibold` |
+| Action | `font-display h-15 rounded-xl text-[16px] font-bold tracking-[0.06em] uppercase` |
 
-Put `num` on anything numeric — it turns on tabular figures.
+Put `num` on anything numeric — it turns on tabular figures **and** the display
+face. That one class is what makes numbers read as Chakra Petch app-wide.
 
 ## Layout idioms
 
-- **Header**: black band, eyebrow + title + subtitle. `ScreenHeader` in the kit.
-- **Hairline stacks**: `flex flex-col gap-px bg-line`, children `bg-paper`. The
-  background shows through the gap — that *is* the rule. `RowStack` + `Row`.
-- **Coloured spine**: `<div className="h-9 w-1.5" style={{background: accent}} />`
+- **Radii**: `sm` 8, `md` 10, `lg` 12, `xl` 14, `2xl` 18, `3xl` 22. Cards are
+  `rounded-2xl`, rows `rounded-lg`/`rounded-xl`, chips `rounded-sm`, actions
+  `rounded-xl`. Nothing is square any more, and nothing has a shadow.
+- **Header**: on the page, no band. Eyebrow + title + subtitle. `ScreenHeader`.
+- **Card**: `rounded-2xl border border-edge bg-surface`. `Card` in the kit. The
+  lit card carries a lime eyebrow, the hero number, `Tag` chips for the
+  prescription, then a divider and one line of engine reasoning.
+- **Row stacks**: `RowStack` is a `gap-1.5` column; each `Row` is its own
+  bordered rounded surface. The page shows through the gap.
+- **Grouped list card**: one card, internal dividers — `<Card className="divide-y
+  divide-line px-4 py-1">` with plain `py-[11px]` rows inside. Ajustes' groups,
+  Editar's exercise list, the engine breakdown. Use `divide-y`, not hand-rolled
+  borders. A `SectionLabel` sits above it.
+- **Coloured spine**: `<div className="h-8 w-[3px] rounded-full" style={{background: accent}} />`
   at the left of a row. `SessionRow` does this.
-- **Steppers**: `−` / value / `+`, 32px black squares with a `bg-soft` well.
-- **Chips**: `border-2 border-ink`, filled `bg-ink text-paper` when active.
-- **Segmented tabs**: flush, `gap-px bg-line`, active is `bg-ink text-paper`.
-- **Action bar**: full-bleed, 64px, pinned at the bottom of the screen.
-- **Callout**: black box, coloured eyebrow. This is the engine speaking.
+- **Steppers**: `−` / value / `+`, 32px `rounded-sm border-edge bg-surface`.
+- **Chips**: `rounded-sm border-edge bg-soft`, filled `bg-strength
+  text-on-strength` when active. `Tag` is the read-only variant.
+- **Action**: inset `px-5`, 60px, `rounded-xl`, lime. Pinned at the bottom.
+- **Callout**: `bg-panel text-on-panel`, coloured eyebrow. The engine speaking —
+  a dark box in the light theme, an ordinary card in the dark one.
 - **Language**: Spanish, lower-case sentences, decimal comma (`formatWeight`).
 
 ## Copy voice
@@ -72,7 +108,8 @@ baja un 5 %."* — never *"¡Buen trabajo!"*.
 
 Bottom nav (mobile): **Hoy · Semana · Progreso · Programa**.
 Desktop rail adds **Historial · Editar · Ajustes**; on mobile they hang off
-Programa via `SecondaryNav`.
+Programa via `SecondaryNav` — three pills, the active one filled lime, rendered
+on Programa, Historial, Editar and Ajustes.
 
 | Route | Screen |
 |---|---|

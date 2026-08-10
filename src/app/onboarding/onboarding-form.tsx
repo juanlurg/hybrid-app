@@ -32,16 +32,16 @@ export function OnboardingForm({
   const [selected, setSelected] = useState(templates[0]?.slug ?? "");
 
   return (
-    <div className="flex min-h-dvh flex-col bg-paper">
-      <header className="flex-none bg-ink px-5 py-6 text-paper">
+    <div className="flex min-h-dvh flex-col bg-bg">
+      <header className="flex-none px-5 pt-6 pb-2">
         <div className="mx-auto w-full max-w-xl">
-          <div className="text-[11px] leading-none font-extrabold tracking-[0.18em]">
+          <div className="font-display text-[13px] leading-none font-bold tracking-[0.18em]">
             BLOQUES
           </div>
-          <h1 className="mt-4 text-[30px] leading-[1.02] font-black tracking-[-0.03em]">
+          <h1 className="font-display mt-4 text-[30px] leading-[1.05] font-bold tracking-[-0.02em]">
             Monta tu temporada
           </h1>
-          <p className="mt-3 text-[12px] leading-[1.5] opacity-60">
+          <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">
             Elige el plan de partida y dinos cuatro números. Todo lo demás lo
             calcula el motor, y todo se puede cambiar después.
           </p>
@@ -51,28 +51,32 @@ export function OnboardingForm({
       <form action={action} className="mx-auto w-full max-w-xl flex-1 px-5 py-7">
         <input type="hidden" name="template" value={selected} />
 
-        <div className="text-[10px] leading-none font-extrabold tracking-[0.14em] text-mid uppercase">
+        <div className="font-display text-[10px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
           Plan de partida
         </div>
-        <div className="mt-3 flex flex-col gap-px bg-line">
+        <div className="mt-3 flex flex-col gap-1.5">
           {templates.map((t) => (
             <button
               key={t.slug}
               type="button"
               onClick={() => setSelected(t.slug)}
               className={cn(
-                "px-4 py-4 text-left",
-                selected === t.slug ? "bg-tint" : "bg-paper",
+                "rounded-lg px-4 py-4 text-left",
+                selected === t.slug
+                  ? "border-[1.5px] border-lime-line bg-lime-soft"
+                  : "border border-line bg-surface",
               )}
             >
               <div className="flex items-baseline gap-3">
-                <span className="flex-1 text-[14px] leading-[1.2] font-bold">
+                <span className="flex-1 text-[14px] leading-[1.2] font-semibold">
                   {t.name}
                 </span>
                 <span
                   className={cn(
-                    "h-4 w-4 flex-none border-2 border-ink",
-                    selected === t.slug && "bg-ink",
+                    "h-4 w-4 flex-none rounded-full border",
+                    selected === t.slug
+                      ? "border-lime-line bg-strength"
+                      : "border-hairline",
                   )}
                 />
               </div>

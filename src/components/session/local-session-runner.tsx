@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 
 import { SessionRunner } from "@/components/session/session-runner";
 import {
+  Footnote,
+  Row,
+  RowStack,
+  ScreenHeader,
+  StatGrid,
+} from "@/components/ui/kit";
+import {
   liftStateFrom,
   phaseEngineConfig,
   resolveDay,
@@ -111,7 +118,7 @@ export function LocalSessionRunner({ sessionId }: { sessionId: string }) {
     <SessionRunner
       sessionId={sessionId}
       sessionKey={local.key}
-      label={`${day.label} · SIN CONEXIÓN`}
+      label={`${day.label} · sin conexión`}
       exercises={day.exercises}
       initialLogs={initialLogs}
       initialUndone={local.undoneFailures}
@@ -178,65 +185,48 @@ function LocalSummary({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-      <header className="bg-ink px-4 pt-5 pb-4 text-paper">
-        <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase opacity-70">
-          {local.status === "done" ? "Sesión completa" : "Sesión parcial"} · sin
-          conexión
-        </div>
-        <h1 className="mt-2 text-[26px] leading-[1.02] font-black tracking-[-0.03em]">
-          Guardada en este móvil
-        </h1>
-        <p className="mt-2.5 text-[11.5px] leading-[1.45] opacity-70">
-          {pending
+      <ScreenHeader
+        eyebrow={`${local.status === "done" ? "Sesión completa" : "Sesión parcial"} · sin conexión`}
+        title="Guardada en este móvil"
+        subtitle={
+          pending
             ? `${pending} apunte(s) pendientes de subir. Se sincronizan solos al volver la red.`
-            : "Todo sincronizado."}
-        </p>
-      </header>
+            : "Todo sincronizado."
+        }
+      />
 
-      <div className="grid grid-cols-2 gap-px border-y-2 border-ink bg-line">
-        <div className="bg-paper px-4 py-3.5">
-          <div className="num text-[30px] leading-none font-black tracking-[-0.035em]">
-            {doneSets}
-          </div>
-          <div className="mt-1.5 text-[9.5px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
-            Series
-          </div>
-        </div>
-        <div className="bg-paper px-4 py-3.5">
-          <div className="num text-[30px] leading-none font-black tracking-[-0.035em]">
-            {formatTonnage(totalKg)}
-          </div>
-          <div className="mt-1.5 text-[9.5px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
-            Tonelaje
-          </div>
-        </div>
-      </div>
+      <StatGrid
+        items={[
+          { value: doneSets, label: "Series" },
+          { value: formatTonnage(totalKg), label: "Tonelaje" },
+        ]}
+      />
 
-      <div className="mt-2.5 flex flex-col gap-px bg-line">
+      <RowStack className="mt-1.5">
         {summaries.map((s) => (
-          <div key={s.key} className="flex items-baseline gap-2.5 bg-paper px-4 py-2.5">
+          <Row key={s.key} className="flex items-baseline gap-2.5">
             <span
               className={cn(
-                "flex-1 text-[13px] leading-[1.2] font-semibold",
-                s.doneSets === 0 && "text-ghost",
+                "min-w-0 flex-1 truncate text-[14px] leading-[1.2] font-semibold",
+                s.doneSets === 0 && "text-faint",
               )}
             >
               {s.name}
             </span>
-            <span className="num text-[11px] leading-none text-mid">
+            <span className="num text-[11.5px] leading-none text-mid">
               {s.doneSets}/{s.plannedSets ?? "—"}
             </span>
-            <span className="num min-w-[62px] text-right text-[12.5px] leading-none font-extrabold">
+            <span className="num min-w-[62px] text-right text-[13px] leading-none font-semibold">
               {s.weightLabel}
             </span>
-          </div>
+          </Row>
         ))}
-      </div>
+      </RowStack>
 
-      <p className="px-4 py-4 text-[11px] leading-[1.5] text-faint">
+      <Footnote>
         El resumen completo, con lo que diga el motor, aparece al abrir la
         sesión con conexión.
-      </p>
+      </Footnote>
     </div>
   );
 }
@@ -244,12 +234,8 @@ function LocalSummary({
 function ShellNote({ text }: { text: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="bg-ink px-4 pt-5 pb-4 text-paper">
-        <div className="text-[11px] leading-none font-extrabold tracking-[0.14em] uppercase opacity-70">
-          Sin conexión
-        </div>
-      </header>
-      <p className="px-4 py-6 text-[12px] leading-[1.5] text-mid">{text}</p>
+      <ScreenHeader eyebrow="Sin conexión" />
+      <p className="px-5 pt-4 text-[13px] leading-[1.5] text-mid">{text}</p>
     </div>
   );
 }

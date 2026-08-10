@@ -8,7 +8,7 @@ import {
   type SessionGroup,
 } from "@/lib/domain/plan";
 import { planWarnings } from "@/lib/domain/plan-rules";
-import { DAY_LABELS, formatDayShort } from "@/lib/domain/calendar";
+import { DAY_LABELS } from "@/lib/domain/calendar";
 import { cycleOf, isDeloadWeek, weekInCycle } from "@/lib/engine";
 import { changeOpSchema, type ChangeOp } from "@/lib/ai/schema";
 
@@ -123,7 +123,6 @@ export default async function EditorPage() {
 
   return (
     <ProgramEditor
-      programName={ctx.program.name}
       phase={{ id: phase.id, key: phase.key, name: phase.name, weeks: phase.weeks }}
       week={placement.week}
       absoluteWeek={placement.absoluteWeek}
@@ -150,7 +149,6 @@ export default async function EditorPage() {
       days={week.map((d) => ({
         dayIndex: d.dayIndex,
         dayLabel: DAY_LABELS[d.dayIndex],
-        dateLabel: formatDayShort(d.date),
         slotId: d.slot?.id ?? null,
         title: d.title,
         subtitle: d.subtitle,

@@ -6,9 +6,10 @@ import { useTransition } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * The − / value / + stepper in the black header. It moves the *absolute*
- * season week, so the well spells that coordinate out — the eyebrow next
- * to it counts weeks inside the phase, which is a different number.
+ * The − / value / + stepper next to the header eyebrow. It moves the
+ * *absolute* season week, so the well spells that coordinate out — the
+ * title next to it counts weeks inside the phase, which is a different
+ * number.
  *
  * Navigation is a URL change so the server re-resolves the plan for that
  * week — no client-side plan maths, ever.
@@ -33,14 +34,11 @@ export function WeekNav({
   };
 
   const square =
-    "flex h-[38px] w-[38px] flex-none items-center justify-center bg-ink-2 text-[18px] leading-none font-bold text-paper disabled:opacity-35";
+    "flex h-8 w-8 flex-none items-center justify-center rounded-sm border border-edge bg-surface text-[15px] leading-none text-mid disabled:opacity-35";
 
   return (
     <div
-      className={cn(
-        "flex flex-none items-center gap-px self-start",
-        pending && "opacity-60",
-      )}
+      className={cn("flex flex-none items-center gap-1", pending && "opacity-60")}
     >
       <button
         type="button"
@@ -53,7 +51,7 @@ export function WeekNav({
       </button>
       <div
         aria-live="polite"
-        className="num flex h-[38px] min-w-[52px] flex-none items-center justify-center bg-ink-2 px-2 text-[12.5px] leading-none font-extrabold text-paper"
+        className="num flex h-8 flex-none items-center justify-center rounded-sm border border-edge bg-surface px-2.5 text-[12px] leading-none font-semibold"
       >
         <span className="sr-only">Semana de temporada </span>
         {absoluteWeek}/{last}
