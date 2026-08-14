@@ -77,7 +77,7 @@ export function planWarnings(input: PlanRuleInput): PlanWarning[] {
   const runDays = groups.filter((g) => g === "run").length;
 
   // Mobility guards training weeks. A phase with no strength at all
-  // (F1: caminar ES el entreno) is legitimately mobility-free.
+  // (a run-only or walking block) is legitimately mobility-free.
   if (strengthDays > 0 && !groups.includes("mobility")) {
     warnings.push({
       tone: "fail",

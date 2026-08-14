@@ -18,11 +18,10 @@ import {
 
 // The Plan Maestro, exactly as seeded.
 const PHASES: PhaseSpan[] = [
-  { id: "f0", key: "F0", name: "Puente verano", position: 1, weeks: 4, startsOn: "2026-07-27" },
-  { id: "f1", key: "F1", name: "Camino Primitivo", position: 2, weeks: 3, startsOn: "2026-08-24" },
-  { id: "f2", key: "F2", name: "Hipertrofia / Fuerza", position: 3, weeks: 12, startsOn: "2026-09-14" },
-  { id: "f3", key: "F3", name: "Base híbrida", position: 4, weeks: 8, startsOn: "2026-12-07" },
-  { id: "f4", key: "F4", name: "Específico media", position: 5, weeks: 12, startsOn: "2027-02-01" },
+  { id: "f0b", key: "F0-bis", name: "Readaptación extendida", position: 1, weeks: 4, startsOn: "2026-08-17" },
+  { id: "f2", key: "F2", name: "Hipertrofia / Fuerza", position: 2, weeks: 12, startsOn: "2026-09-14" },
+  { id: "f3", key: "F3", name: "Base híbrida", position: 3, weeks: 8, startsOn: "2026-12-07" },
+  { id: "f4", key: "F4", name: "Específico media", position: 4, weeks: 12, startsOn: "2027-02-01" },
 ];
 
 describe("date maths", () => {
@@ -60,7 +59,7 @@ describe("date maths", () => {
 
 describe("season placement", () => {
   it("puts the phase boundaries exactly where the plan says", () => {
-    expect(placeDate(PHASES, "2026-07-27")).toMatchObject({ week: 1, absoluteWeek: 1, dayIndex: 0 });
+    expect(placeDate(PHASES, "2026-08-17")).toMatchObject({ week: 1, absoluteWeek: 1, dayIndex: 0 });
     expect(placeDate(PHASES, "2026-09-14")?.phase.key).toBe("F2");
     expect(placeDate(PHASES, "2026-12-07")?.phase.key).toBe("F3");
     expect(placeDate(PHASES, "2027-02-01")?.phase.key).toBe("F4");
@@ -71,13 +70,13 @@ describe("season placement", () => {
     const p = placeDate(PHASES, "2026-10-21");
     expect(p).toMatchObject({ week: 6, dayIndex: 2 });
     expect(p?.phase.key).toBe("F2");
-    expect(p?.absoluteWeek).toBe(4 + 3 + 6);
+    expect(p?.absoluteWeek).toBe(4 + 6);
   });
 
   it("clamps before the season starts", () => {
     const p = placeDate(PHASES, "2026-06-01");
     expect(p).toMatchObject({ week: 1, absoluteWeek: 1 });
-    expect(p?.phase.key).toBe("F0");
+    expect(p?.phase.key).toBe("F0-bis");
   });
 
   it("clamps after the season ends", () => {
@@ -88,26 +87,26 @@ describe("season placement", () => {
 
   it("maps an absolute week back to a phase", () => {
     expect(placeAbsoluteWeek(PHASES, 1)).toMatchObject({ week: 1 });
-    expect(placeAbsoluteWeek(PHASES, 8)?.phase.key).toBe("F2");
-    expect(placeAbsoluteWeek(PHASES, 8)?.week).toBe(1);
-    expect(placeAbsoluteWeek(PHASES, 39)?.phase.key).toBe("F4");
-    expect(placeAbsoluteWeek(PHASES, 39)?.week).toBe(12);
+    expect(placeAbsoluteWeek(PHASES, 5)?.phase.key).toBe("F2");
+    expect(placeAbsoluteWeek(PHASES, 5)?.week).toBe(1);
+    expect(placeAbsoluteWeek(PHASES, 36)?.phase.key).toBe("F4");
+    expect(placeAbsoluteWeek(PHASES, 36)?.week).toBe(12);
   });
 
-  it("knows the season is 39 weeks", () => {
-    expect(totalWeeks(PHASES)).toBe(39);
+  it("knows the season is 36 weeks", () => {
+    expect(totalWeeks(PHASES)).toBe(36);
   });
 
   it("computes a phase's last day", () => {
-    expect(phaseEnd(PHASES[0])).toBe("2026-08-23");
-    expect(phaseEnd(PHASES[4])).toBe("2027-04-25");
+    expect(phaseEnd(PHASES[0])).toBe("2026-09-13");
+    expect(phaseEnd(PHASES[3])).toBe("2027-04-25");
   });
 
   it("locates a specific training day", () => {
     // F2 week 1, Monday = 14 Sep 2026.
-    expect(dateForPhaseDay(PHASES[2], 1, 0)).toBe("2026-09-14");
+    expect(dateForPhaseDay(PHASES[1], 1, 0)).toBe("2026-09-14");
     // F2 week 12, Sunday.
-    expect(dateForPhaseDay(PHASES[2], 12, 6)).toBe("2026-12-06");
+    expect(dateForPhaseDay(PHASES[1], 12, 6)).toBe("2026-12-06");
   });
 
   it("counts down to the race", () => {

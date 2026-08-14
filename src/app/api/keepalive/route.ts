@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * One trivial query a day so the free-tier Supabase project never
- * pauses for inactivity — the F1 Camino block is three weeks of zero
- * app usage landing exactly on the season's most important transition.
+ * pauses for inactivity — a holiday or an injury layoff must not
+ * take the database down with it.
  * Driven by the vercel.json cron; a CRON_SECRET, when set, keeps
  * strangers from burning invocations.
  */

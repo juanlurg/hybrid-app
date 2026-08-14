@@ -189,7 +189,7 @@ async function main() {
       .from("program_phases")
       .select("*", { count: "exact", head: true })
       .eq("program_id", template!.id);
-    check("it has 5 phases", phaseCount === 5, `got ${phaseCount}`);
+    check("it has 4 phases", phaseCount === 4, `got ${phaseCount}`);
 
     const { data: maestroF4 } = await admin
       .from("program_phases")
@@ -246,7 +246,7 @@ async function main() {
       {
         p_display_name: "Atleta A",
         p_template_slug: "plan-maestro-hibrido",
-        p_starts_on: "2026-07-27",
+        p_starts_on: "2026-08-17",
         p_lthr: 168,
       },
     );
@@ -257,7 +257,7 @@ async function main() {
       .select("key, weeks, starts_on")
       .eq("program_id", programAId!)
       .order("position");
-    check("the clone has 5 phases", phasesA?.length === 5);
+    check("the clone has 4 phases", phasesA?.length === 4);
     check(
       "F2 starts on 14 Sep 2026, as the plan says",
       phasesA?.find((p) => p.key === "F2")?.starts_on === "2026-09-14",

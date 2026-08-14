@@ -151,4 +151,4 @@ on Programa, Historial, Editar and Ajustes.
    `scripts/restore.ts` replays it into a fresh project (catalogue ids
    re-linked by slug); Ajustes shows the age of the last copy and warns
    past 14 days; a daily `vercel.json` cron pings `/api/keepalive` so
-   the free project never pauses for inactivity (the Camino weeks).
+   the free project never pauses for inactivity (holidays, layoffs).

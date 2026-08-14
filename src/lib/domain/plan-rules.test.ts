@@ -40,7 +40,7 @@ describe("planWarnings", () => {
     ).toBe(true);
   });
 
-  it("a week with no strength at all is legitimately mobility-free — F1, caminar ES el entreno", () => {
+  it("a week with no strength at all is legitimately mobility-free", () => {
     const camino = {
       slots: [slot("camino", "run_long", "CAMINO")],
       exercises: [],
