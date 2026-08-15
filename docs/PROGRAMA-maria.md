@@ -1,19 +1,19 @@
-# Primer 10K — Base y fondo (18 semanas)
+# Primer 10K — Base y fondo (22 semanas)
 
 **Objetivo:** terminar 10 km corriendo, sana. El ritmo no es el objetivo y no aparece en ninguna sesión del plan.
 
-**Punto de partida:** 30′ seguidos a ~7:40/km, menos de un año corriendo, y tres semanas de Camino que han construido base aerobia pero no durabilidad de correr — el impacto es otro. De ahí que el plan empiece por debajo de lo que ya sabes hacer.
+**Punto de partida:** 30′ seguidos a ~7:40/km en julio, menos de un año corriendo, y desde entonces más de un mes parada — el Camino que iba a hacer de puente se cayó. De ahí el mes de readaptación con el que ahora abre el plan: se empieza por debajo de lo que sabías hacer, a propósito.
 
-**Reparto:** doce semanas donde solo se acumula fondo y seis donde aparece el ritmo de 10k. La fuerza son dos sesiones de cuerpo completo que sostienen la carrera; nunca compiten con ella.
+**Reparto:** cuatro semanas de puente para volver a moverte, doce donde solo se acumula fondo y seis donde aparece el ritmo de 10k. La fuerza son dos sesiones de cuerpo completo que sostienen la carrera; nunca compiten con ella.
 
-**La fecha de inicio la eliges en el onboarding.** Las fechas de aquí son las nominales de la plantilla (arranque el lunes 14 de septiembre de 2026); al clonar el plan, las fases se recolocan desde el lunes que elijas.
+**La fecha de inicio la eliges en el onboarding.** Las fechas de aquí son las nominales de la plantilla (arranque el lunes 17 de agosto de 2026); al clonar el plan, las fases se recolocan desde el lunes que elijas. El 10K no se mueve: el puente ocupa el hueco que dejó el Camino.
 
 ---
 
 ## 0. Antes de la semana 1
 
 1. Alta en `/registro` y en el onboarding elegir **«Primer 10K — Base y fondo»**, con tu lunes de inicio y tu peso.
-2. **LTHR en blanco.** No lo sabes todavía y el test cae en la semana 12. Hasta entonces se corre por sensación: Z2 es el ritmo al que puedes mantener una conversación. Ojo con esto — mientras no haya test, la app pinta las pulsaciones de cada bloque sobre un 168 supuesto: es un número de relleno, ignóralo.
+2. **LTHR en blanco.** No lo sabes todavía y el test cae en la semana 16. Hasta entonces se corre por sensación: Z2 es el ritmo al que puedes mantener una conversación. Ojo con esto — mientras no haya test, la app pinta las pulsaciones de cada bloque sobre un 168 supuesto: es un número de relleno, ignóralo.
 3. **Ajustes → redondeo 1,25 kg.** Con el redondeo de 2,5 que viene por defecto, el 75 % y el 80 % de la onda caen en el mismo peso sobre una sentadilla de 35 kg y la progresión desaparece.
 4. Las RM de arranque (sentadilla 35 kg, RDL 40 kg) son provisionales, están puestas por lo bajo a propósito. En cuanto tengas dos o tres sesiones registradas, corrígelas desde `/programa` con la calculadora de RM.
 
@@ -23,18 +23,19 @@
 
 | Fase | Fechas nominales | Duración | Énfasis | Fuerza | Carrera |
 |---|---|---|---|---|---|
+| **F00 — Puente** | 17 ago – 13 sep | 4 sem | Readaptación tras un mes parada | 2 d/sem, 12 series, barra casi vacía | 2 d/sem de correr-andar hasta 30′ seguidos |
 | **F0 — Reinicio** | 14 sep – 11 oct | 4 sem | Volver a correr y aprender las cargas | 2 d/sem, 13 series | Todo Z2 por sensación, larga 35→45′ |
 | **F1 — Base** | 12 oct – 6 dic | 8 sem | **Fondo** — el bloque grande | 2 d/sem, 15 series | 1h40 → 2h30/sem, strides, test LTHR en la sem 8 |
 | **F2 — Específico 10k** | 7 dic – 3 ene | 4 sem | Ritmo de 10k y llegar a la distancia | 2 d/sem, 14 series | Series Z4, ensayo de 5k, larga de 10 km |
 | **F3 — 10K** | 4 – 17 ene | 2 sem | Afinar y correrlo | 2 d/sem, 10 series | Bajada de volumen + la carrera |
 
-Doce de las dieciocho semanas no tienen nada de intensidad. Es deliberado: con menos de un año corriendo, lo que falta es tiempo de rodaje acumulado, no capacidad de sufrir.
+Dieciséis de las veintidós semanas no tienen nada de intensidad. Es deliberado: con menos de un año corriendo, lo que falta es tiempo de rodaje acumulado, no capacidad de sufrir.
 
 ---
 
 ## 2. Semana tipo
 
-Idéntica en las cuatro fases. Lo que cambia es el contenido, nunca los días.
+Idéntica de F0 a F3. Lo que cambia es el contenido, nunca los días. El puente es la única excepción: dos días de carrera en vez de tres — el martes es caminata rápida opcional, no rodaje.
 
 | Día | Sesión |
 |---|---|
@@ -52,6 +53,17 @@ El viernes es movilidad a propósito: la larga del sábado no lleva fuerza el d�
 
 ## 3. Carrera semana a semana
 
+### F00 — Puente (4 sem)
+
+| Sem | Jueves | Sábado | Vol. |
+|---|---|---|---|
+| 1 | 8×(2′ trote + 1′ andando) | 10×(2′ trote + 1′ andando) | 1h22 |
+| 2 | 6×(3′ + 1′ andando) | 8×(3′ + 1′ andando) | 1h24 |
+| 3 | 20′ trote suave | 25′ trote continuo | 55′ |
+| 4 | 25′ trote suave | **30′ Z2 continuo** | 1h05 |
+
+Toda sesión abre con 5′ andando rápido, y las de intervalos cierran con vuelta a la calma que también se puede andar — el volumen de la tabla lo incluye. Las dos primeras semanas no hay carrera continua a propósito: un mes parada se respeta, no se compensa. El sábado de la semana 4 cierra el puente con los 30′ seguidos con los que F0 cuenta. La caminata del martes es paseo y se cae sin culpa.
+
 ### F0 — Reinicio (4 sem)
 
 | Sem | Martes | Jueves | Sábado | Vol. |
@@ -61,7 +73,7 @@ El viernes es movilidad a propósito: la larga del sábado no lleva fuerza el d�
 | 3 | 20′ Z2 *(opcional)* | 30′ Z2 | 45′ Z2 | 1h35 |
 | 4 | 20′ Z2 | 25′ Z2 | 35′ Z2 | 1h20 · descarga |
 
-Todo por sensación, sin reloj. **El martes es opcional este mes:** dos días de carrera honestos valen más que tres apuntados. Es también el primer día que se cae si la semana se rompe. Los pies vienen del Camino: si algo molesta al correr, se para — no se negocia.
+Todo por sensación, sin reloj. **El martes es opcional este mes:** dos días de carrera honestos valen más que tres apuntados. Es también el primer día que se cae si la semana se rompe. Si algo molesta al correr, se para — no se negocia.
 
 ### F1 — Base (8 sem)
 
@@ -138,9 +150,11 @@ Dos sesiones de cuerpo completo. La estructura no cambia de fase en fase: cambia
 | Pallof press | 1-2 × 10-12 | 45″ | Por lado · superserie ↓ |
 | Sóleo excéntrico | 1-2 × 12-15 | 1′ | Bajada de 3″. Seguro anti-aquíleo |
 
+**En el puente** la estructura es la misma con una serie menos de básico (12 series por sesión) y los pesos en el suelo: la onda va del 50 al 60 % de unas RM puestas por lo bajo, así que la sentadilla y el RDL salen con la barra casi vacía. No es un error — el mes es de técnica, y los accesorios llevan sus pesos de arranque (barra sola, poleas de 10-20 kg).
+
 **Cómo progresa.** Solo la sentadilla y el RDL van al motor: la app calcula el peso cada semana como un % de tu RM (65 → 70 → 75 % y una semana suave), y sube la RM al cerrar cada ciclo de cuatro semanas. Los demás llevan peso fijo, y lo subes tú cuando cierres el rango alto de todas las series — 2,5 kg en barra, 5 kg en polea. Los saltos entre fases ya vienen puestos en el plan.
 
-**Volumen por fase:** 13 series en F0 (aprender), 15 en F1, 14 en F2 (la carrera empieza a mandar), 10 en F3. Ninguna sesión pasa de una hora.
+**Volumen por fase:** 12 series en el puente (técnica), 13 en F0 (aprender), 15 en F1, 14 en F2 (la carrera empieza a mandar), 10 en F3. Ninguna sesión pasa de una hora.
 
 Dos cambios que están puestos a propósito y no son un descuido: el **copenhagen plank** sustituye a la plancha lateral en F2 — es un isométrico exigente y no es de la primera semana — y el **split búlgaro** se carga con mancuernas de 5 kg también desde F2, cuando el equilibrio y la rodilla ya lo aguantan.
 
@@ -165,7 +179,7 @@ Dos cambios que están puestos a propósito y no son un descuido: el **copenhage
 
 | Qué | Cuándo | Cómo |
 |---|---|---|
-| **LTHR (umbral)** | F1 sem 8 (semana 12 del plan) | Test de 30′: media de FC de los últimos 20′ a esfuerzo máximo sostenible. Antes de eso se corre por sensación, y el pulso que pinta la app no significa nada |
+| **LTHR (umbral)** | F1 sem 8 (semana 16 del plan) | Test de 30′: media de FC de los últimos 20′ a esfuerzo máximo sostenible. Antes de eso se corre por sensación, y el pulso que pinta la app no significa nada |
 | **RM de sentadilla y RDL** | Semanas 2-3, y luego al final de F1 | 5 repeticiones a 2 de RIR → calculadora de Epley en `/programa`. Las de arranque están puestas por lo bajo: corregirlas es parte del plan |
 | **Desacople Pa:HR** | Cada larga ≥ 60′, a partir de F1 sem 8 | Deriva de FC por debajo del 5 % a ritmo constante = tu fondo está mejorando. Esta es la métrica de progreso, no el ritmo de un día suelto |
 | **La larga más larga** | Fin de cada fase | 45′ → 65′ → 10 km. Es la señal más honesta de que el fondo sube |

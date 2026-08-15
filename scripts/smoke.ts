@@ -655,10 +655,10 @@ async function main() {
       .select("id, key, weeks, progression_mode, pct_of_rm, wave, cycle_weeks")
       .eq("program_id", tenK.id)
       .order("position");
-    check("it has 4 phases over 18 weeks", tenKPhases?.length === 4);
+    check("it has 5 phases over 22 weeks", tenKPhases?.length === 5);
     check(
-      "the weeks add up to 18",
-      tenKPhases?.reduce((sum, p) => sum + p.weeks, 0) === 18,
+      "the weeks add up to 22",
+      tenKPhases?.reduce((sum, p) => sum + p.weeks, 0) === 22,
       `got ${tenKPhases?.reduce((sum, p) => sum + p.weeks, 0)}`,
     );
     check(
@@ -690,15 +690,16 @@ async function main() {
     );
     // The three blocking rules in src/lib/domain/plan-rules.ts, per phase.
     check(
-      "every week has a mobility day, 2 strength days and 3 run days",
-      tenKPhaseIds.every((id) => {
+      "every week has a mobility day, 2 strength days and its run days (2 in the puente, 3 after)",
+      tenKPhases!.every((phase) => {
         const types = tenKDays!
-          .filter((d) => d.phase_id === id)
+          .filter((d) => d.phase_id === phase.id)
           .map((d) => slotById.get(d.slot_id)!.session_type);
         return (
           types.filter((t) => t === "mobility").length === 1 &&
           types.filter((t) => t === "strength").length === 2 &&
-          types.filter((t) => t.startsWith("run")).length === 3
+          types.filter((t) => t.startsWith("run")).length ===
+            (phase.key === "F00" ? 2 : 3)
         );
       }),
     );
@@ -751,7 +752,7 @@ async function main() {
       .from("program_run_sessions")
       .select("phase_id, slot_id, week, prescription, target_minutes, structure")
       .in("phase_id", tenKPhaseIds);
-    check("there are 54 run sessions", tenKRuns?.length === 54, `got ${tenKRuns?.length}`);
+    check("there are 62 run sessions", tenKRuns?.length === 62, `got ${tenKRuns?.length}`);
     check(
       "every run slot covers every week of its phase",
       tenKPhases!.every((phase) =>
@@ -795,11 +796,11 @@ async function main() {
       .select("key, weeks, starts_on")
       .eq("program_id", programCId!)
       .order("position");
-    check("the clone has 4 phases", phasesC?.length === 4);
+    check("the clone has 5 phases", phasesC?.length === 5);
     check(
-      "F1 starts four weeks in, on 12 Oct 2026",
-      phasesC?.find((p) => p.key === "F1")?.starts_on === "2026-10-12",
-      phasesC?.find((p) => p.key === "F1")?.starts_on,
+      "F0 starts four weeks in, on 12 Oct 2026 — the puente owns the chosen Monday",
+      phasesC?.find((p) => p.key === "F0")?.starts_on === "2026-10-12",
+      phasesC?.find((p) => p.key === "F0")?.starts_on,
     );
 
     const { data: liftsC } = await c.client
