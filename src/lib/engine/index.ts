@@ -370,6 +370,39 @@ export function loadableWeight(
   }
 }
 
+/**
+ * One notch up or down that same ladder, for the athlete who changes
+ * the load mid-session. Kettlebells jump to the next bell owned; the
+ * rest move by their own step.
+ */
+export function nextLoadableWeight(
+  currentKg: number,
+  direction: 1 | -1,
+  equipment: Equipment | null | undefined,
+  config: EngineConfig = DEFAULT_ENGINE_CONFIG,
+): number {
+  if (equipment === "kettlebell") {
+    const bells = [...config.kettlebellsKg]
+      .filter((k) => k > 0)
+      .sort((a, b) => a - b);
+    if (bells.length) {
+      const next =
+        direction > 0
+          ? bells.find((k) => k > currentKg + 0.001)
+          : bells.reverse().find((k) => k < currentKg - 0.001);
+      return next ?? loadableWeight(currentKg, equipment, config);
+    }
+  }
+  const step =
+    equipment === "dumbbell"
+      ? config.dumbbellStepKg
+      : equipment === "pulley" || equipment === "machine"
+        ? config.pulleyStepKg
+        : config.roundingKg;
+  const target = round2(currentKg + direction * step);
+  return Math.max(0, loadableWeight(target, equipment, config));
+}
+
 /* ── warm-up ─────────────────────────────────────────────────── */
 
 export interface WarmupSet {

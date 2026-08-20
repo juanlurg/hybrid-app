@@ -109,6 +109,7 @@ export function LocalSessionRunner({ sessionId }: { sessionId: string }) {
         setIndex: idx,
         reps: entry.timed ? null : entry.value,
         seconds: entry.timed ? entry.value : null,
+        weightKg: entry.weightKg,
         missedRange: entry.missed,
       },
     ];

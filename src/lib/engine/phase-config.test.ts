@@ -5,6 +5,7 @@ import {
   DEFAULT_ENGINE_CONFIG,
   isDeloadWeek,
   loadableWeight,
+  nextLoadableWeight,
   setsForWeek,
   waveFactor,
   workingWeight,
@@ -171,5 +172,32 @@ describe("loadableWeight", () => {
 
   it("unknown equipment falls back to the profile rounding", () => {
     expect(loadableWeight(61, null, cfg)).toBe(60);
+  });
+});
+
+describe("nextLoadableWeight", () => {
+  const cfg = DEFAULT_ENGINE_CONFIG; // rounding 2.5, dumbbell 2.5, pulley 5, KBs 12/16
+
+  it("moves a barbell one plate step at a time", () => {
+    expect(nextLoadableWeight(60, 1, "barbell", cfg)).toBe(62.5);
+    expect(nextLoadableWeight(60, -1, "barbell", cfg)).toBe(57.5);
+  });
+
+  it("jumps to the next bell owned, not to a bell that does not exist", () => {
+    expect(nextLoadableWeight(12, 1, "kettlebell", cfg)).toBe(16);
+    expect(nextLoadableWeight(16, -1, "kettlebell", cfg)).toBe(12);
+  });
+
+  it("stays put at the ends of the rack", () => {
+    expect(nextLoadableWeight(16, 1, "kettlebell", cfg)).toBe(16);
+    expect(nextLoadableWeight(12, -1, "kettlebell", cfg)).toBe(12);
+  });
+
+  it("moves a pulley by the stack's pin spacing", () => {
+    expect(nextLoadableWeight(25, 1, "pulley", cfg)).toBe(30);
+  });
+
+  it("never goes below the bare bodyweight", () => {
+    expect(nextLoadableWeight(0, -1, "dip_bars", cfg)).toBe(0);
   });
 });

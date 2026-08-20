@@ -121,6 +121,7 @@ export default async function SessionPage({
         setIndex: l.set_index,
         reps: l.reps,
         seconds: l.seconds,
+        weightKg: l.weight_kg == null ? null : Number(l.weight_kg),
         missedRange: l.missed_range,
       }))}
       initialUndone={initialUndone}
