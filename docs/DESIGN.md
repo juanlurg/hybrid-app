@@ -114,7 +114,7 @@ on Programa, Historial, Editar and Ajustes.
 | Route | Screen |
 |---|---|
 | `/` | Hoy — today's session, big weight, start bar |
-| `/sesion/[id]` | Live runner — set pills, rest timer, regression banner |
+| `/sesion/[id]` | Live runner — set pills, weight stepper, rest timer, regression banner |
 | `/sesion/[id]/resumen` | Summary — KPIs and what the engine changed |
 | `/semana` | The 7 days + season phase bar |
 | `/progreso` | Per-lift chart, engine breakdown, Pa:HR |
@@ -129,7 +129,10 @@ on Programa, Historial, Editar and Ajustes.
 ## Non-negotiables
 
 1. **Only the engine invents weights.** UI reads `ResolvedExercise.weightKg`.
-   Never compute a load in a component.
+   Never compute a load in a component. The athlete may still log a
+   different one: the runner's stepper moves it with `nextLoadableWeight()`
+   and the load travels with the set (`set_logs.weight_kg`), so the
+   regression holds at the weight actually missed.
 2. **Only the basic of the day moves the engine.** Accessories never trigger
    a regression — say so in the UI where it matters.
 3. **The AI proposes, the athlete disposes.** Changes are a diff to tick.

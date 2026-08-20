@@ -8,13 +8,20 @@ import {
   Card,
   HeroNumber,
   SessionRow,
+  Stepper,
   TopBar,
 } from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
-import { formatWeight, type EngineConfig, type LiftState } from "@/lib/engine";
+import {
+  formatWeight,
+  nextLoadableWeight,
+  plateBreakdown,
+  type EngineConfig,
+  type LiftState,
+} from "@/lib/engine";
 import { replayEngine, type ReplayPrimary } from "@/lib/engine/replay";
-import type { ResolvedExercise } from "@/lib/domain/plan";
+import { weightLabelFor, type ResolvedExercise } from "@/lib/domain/plan";
 import {
   createLocalSession,
   recordLocalSet,
@@ -37,6 +44,7 @@ interface LoggedSet {
   setIndex: number;
   reps: number | null;
   seconds: number | null;
+  weightKg: number | null;
   missedRange: boolean;
 }
 
@@ -48,8 +56,12 @@ export interface ReplayContext {
   config: EngineConfig;
 }
 
-/** `value` is reps or seconds, whichever the exercise's effort counts. */
-type LogMap = Record<string, { value: number; missed: boolean }>;
+/** `value` is reps or seconds, whichever the exercise's effort counts;
+    `weightKg` is the load actually moved, not necessarily the plan's. */
+type LogMap = Record<
+  string,
+  { value: number; missed: boolean; weightKg: number | null }
+>;
 
 const keyOf = (exerciseId: string, setIndex: number) =>
   `${exerciseId}:${setIndex}`;
@@ -103,10 +115,15 @@ export function SessionRunner({
       map[keyOf(l.programExerciseId, l.setIndex)] = {
         value,
         missed: l.missedRange,
+        weightKg: l.weightKg,
       };
     }
     return map;
   });
+
+  /** Load the athlete moved to with the stepper, per exercise: what the
+      next set of it goes on until another set says otherwise. */
+  const [weights, setWeights] = useState<Record<string, number>>({});
 
   /** The persisted mirror of this session — survives a killed tab. */
   const localRef = useRef<LocalSessionState | null>(null);
@@ -143,7 +160,8 @@ export function SessionRunner({
         setIndex: i,
         reps: primaryExercise.effort === "seconds" ? null : entry.value,
         seconds: primaryExercise.effort === "seconds" ? entry.value : null,
-        weightKg: primaryExercise.weightKg,
+        // The hold lands on the weight that was actually missed.
+        weightKg: entry.weightKg ?? primaryExercise.weightKg,
       });
     }
     return replayEngine({
@@ -202,7 +220,13 @@ export function SessionRunner({
           const ex = exercises.find((e) => e.position === pos);
           if (!ex) continue;
           const key = keyOf(ex.id, idx);
-          if (!(key in next)) next[key] = { value: entry.value, missed: entry.missed };
+          if (!(key in next)) {
+            next[key] = {
+              value: entry.value,
+              missed: entry.missed,
+              weightKg: entry.weightKg,
+            };
+          }
         }
         return next;
       });
@@ -227,6 +251,24 @@ export function SessionRunner({
     // Mount-only: the restore reads a device-local mirror once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  /**
+   * The load a set goes on. A set already logged keeps the weight it was
+   * logged with; a new one takes the stepper's, else the last one the
+   * athlete actually moved, else what the plan prescribes.
+   */
+  function weightAt(ex: ResolvedExercise, setIndex: number | null): number | null {
+    const logged = setIndex == null ? null : logs[keyOf(ex.id, setIndex)];
+    if (logged) return logged.weightKg;
+    if (ex.id in weights) return weights[ex.id];
+    for (let i = ex.sets - 1; i >= 0; i--) {
+      const entry = logs[keyOf(ex.id, i)];
+      if (entry) return entry.weightKg;
+    }
+    return ex.weightKg;
+  }
+
+  const currentWeight = weightAt(exercise, editingIndex);
 
   const doneForExercise = countDone(logs, exercise.id, exercise.sets);
   const totalSets = exercises.reduce((acc, e) => acc + e.sets, 0);
@@ -297,6 +339,7 @@ export function SessionRunner({
     }
 
     const missed = value < exercise.repMin;
+    const weightKg = weightAt(exercise, atIndex);
     const k = keyOf(exercise.id, setIndex);
     const rir = pendingRir;
     const timed = exercise.effort === "seconds";
@@ -304,7 +347,11 @@ export function SessionRunner({
 
     // Local-first: the number lands instantly and survives a killed tab;
     // the queue takes it to the server whenever there is network.
-    setLogs((prev) => ({ ...prev, [k]: { value, missed } }));
+    setLogs((prev) => ({ ...prev, [k]: { value, missed, weightKg } }));
+    // What you just moved is what the next set starts from.
+    if (weightKg != null) {
+      setWeights((prev) => ({ ...prev, [exercise.id]: weightKg }));
+    }
     setRepsOpen(false);
     setEditingIndex(null);
     setPendingRir(null);
@@ -347,7 +394,7 @@ export function SessionRunner({
           setIndex,
           value,
           missed,
-          weightKg: exercise.weightKg,
+          weightKg,
           rir,
           timed,
           loggedAt,
@@ -364,10 +411,69 @@ export function SessionRunner({
         reps: timed ? null : value,
         seconds: timed ? value : null,
         rir,
-        weightKg: exercise.weightKg,
+        weightKg,
         loggedAt,
       });
       if (groupDone) advance(lastGroupIndex);
+    });
+  }
+
+  /**
+   * Change the load. On a set already logged it rewrites that set in
+   * place — same reps, same op key, so it flows through the idempotent
+   * path a first write does; otherwise it sets what the next set uses.
+   */
+  function nudgeWeight(direction: 1 | -1) {
+    if (currentWeight == null) return;
+    const next = nextLoadableWeight(
+      currentWeight,
+      direction,
+      exercise.equipment,
+      replayCtx.config,
+    );
+    if (next === currentWeight) return;
+    setWeights((prev) => ({ ...prev, [exercise.id]: next }));
+
+    const setIndex = editingIndex;
+    const editing = setIndex == null ? null : logs[keyOf(exercise.id, setIndex)];
+    if (!editing || setIndex == null) return;
+
+    setLogs((prev) => ({
+      ...prev,
+      [keyOf(exercise.id, setIndex)]: { ...editing, weightKg: next },
+    }));
+    const timed = exercise.effort === "seconds";
+    const loggedAt = new Date().toISOString();
+    startTransition(async () => {
+      // Only the load changes: the RIR already stored for the set stays.
+      let rir: number | null = null;
+      await withLocal((s) => {
+        rir = s.logs[`${exercise.position}:${setIndex}`]?.rir ?? null;
+        return recordLocalSet(s, {
+          position: exercise.position,
+          setIndex,
+          value: editing.value,
+          missed: editing.missed,
+          weightKg: next,
+          rir,
+          timed,
+          loggedAt,
+        });
+      });
+      await enqueueAndFlush({
+        kind: "set_log",
+        localSessionId: sessionId,
+        programExerciseId: exercise.id,
+        liftKey: exercise.liftKey,
+        exerciseName: exercise.name,
+        position: exercise.position,
+        setIndex,
+        reps: timed ? null : editing.value,
+        seconds: timed ? editing.value : null,
+        rir,
+        weightKg: next,
+        loggedAt,
+      });
     });
   }
 
@@ -408,10 +514,13 @@ export function SessionRunner({
     : exercise.supersetGroup != null
       ? `Superserie · serie ${setNumber}/${exercise.sets}`
       : `Ejercicio ${exIndex + 1} · serie ${setNumber}/${exercise.sets}`;
-  const plates =
-    showPlates && exercise.plates && !exercise.plates.barOnly
-      ? exercise.plates
-      : null;
+  const load =
+    currentWeight == null || !exercise.plates
+      ? null
+      : currentWeight === exercise.weightKg
+        ? exercise.plates
+        : plateBreakdown(currentWeight, replayCtx.config);
+  const plates = showPlates && load && !load.barOnly ? load : null;
   const nextExercise =
     exercises[Math.min(exIndex, exercises.length - 1) + 1] ?? null;
 
@@ -448,11 +557,11 @@ export function SessionRunner({
 
         <HeroNumber
           value={
-            exercise.loadMode === "rpe" || exercise.weightKg == null
+            exercise.loadMode === "rpe" || currentWeight == null
               ? "—"
               : exercise.loadMode === "weighted_bodyweight"
-                ? `+${formatWeight(exercise.weightKg)}`
-                : formatWeight(exercise.weightKg)
+                ? `+${formatWeight(currentWeight)}`
+                : formatWeight(currentWeight)
           }
           unit={
             exercise.loadMode === "rpe"
@@ -483,6 +592,29 @@ export function SessionRunner({
             </>
           }
         />
+
+        {/* The load is the athlete's to change: the plan prescribes, the
+            bar decides. Each notch is a weight the equipment can rack. */}
+        {exercise.loadMode !== "rpe" && currentWeight != null ? (
+          <div className="mt-4 flex items-center gap-2.5">
+            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+              {editingIndex != null && logs[keyOf(exercise.id, editingIndex)]
+                ? `Peso serie ${editingIndex + 1}`
+                : "Peso"}
+            </span>
+            <Stepper
+              label="peso"
+              value={weightLabelFor(exercise.loadMode, currentWeight)}
+              onDecrement={() => nudgeWeight(-1)}
+              onIncrement={() => nudgeWeight(1)}
+            />
+            {exercise.weightKg != null && currentWeight !== exercise.weightKg ? (
+              <span className="num text-[11.5px] leading-none text-faint">
+                programado {formatWeight(exercise.weightKg)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* One pill per prescribed set. A logged pill re-opens the picker
             for THAT set — a wrong value is never permanent. */}
@@ -564,7 +696,8 @@ export function SessionRunner({
               {nextExercise.name}
             </span>
             <span className="num flex-none text-[13.5px] leading-none font-semibold text-mid">
-              {nextExercise.schemeLabel} · {nextExercise.weightLabel}
+              {nextExercise.schemeLabel} ·{" "}
+              {weightLabelFor(nextExercise.loadMode, weightAt(nextExercise, null))}
             </span>
           </div>
         ) : null}
@@ -680,7 +813,7 @@ export function SessionRunner({
                 title={e.name}
                 status={complete ? "✓ HECHA" : i === exIndex ? "AHORA" : undefined}
                 statusTone={complete ? "text-ok" : "text-lime"}
-                primary={e.weightLabel}
+                primary={weightLabelFor(e.loadMode, weightAt(e, null))}
                 secondary={`${done}/${e.sets}`}
                 muted={complete}
                 onClick={() => {

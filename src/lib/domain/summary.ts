@@ -36,8 +36,16 @@ export function summarise(
   loadMode: LoadMode | null,
   rows: SummarySetRow[],
 ): ExerciseSummary {
-  const raw = rows.find((r) => r.weight_kg != null)?.weight_kg;
-  const loggedKg = raw == null ? null : Number(raw);
+  const kgs = rows
+    .filter((r) => r.weight_kg != null)
+    .map((r) => Number(r.weight_kg));
+  const loggedKg = kgs.length ? kgs[0] : null;
+  // The athlete can change the load mid-exercise: say so instead of
+  // reporting the first set's weight as if it held for all of them.
+  const spread =
+    kgs.length > 1 && Math.min(...kgs) !== Math.max(...kgs)
+      ? `${formatWeight(Math.min(...kgs))}–${formatWeight(Math.max(...kgs))} kg`
+      : null;
   return {
     key,
     name,
@@ -52,11 +60,13 @@ export function summarise(
         return r.reps == null ? `${value}″` : String(value);
       })
       .join(" · "),
-    weightLabel: loadMode
-      ? weightLabelFor(loadMode, loggedKg)
-      : loggedKg == null
-        ? "—"
-        : `${formatWeight(loggedKg)} kg`,
+    weightLabel:
+      spread ??
+      (loadMode
+        ? weightLabelFor(loadMode, loggedKg)
+        : loggedKg == null
+          ? "—"
+          : `${formatWeight(loggedKg)} kg`),
   };
 }
 
