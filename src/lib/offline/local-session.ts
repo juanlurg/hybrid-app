@@ -34,6 +34,13 @@ export interface LocalSessionState {
   logs: Record<string, LocalSetEntry>;
   undoneFailures: Array<{ position: number; setIndex: number }>;
   rest: LocalRestState | null;
+  /** Stepper overrides by exercise position — what the next set of each
+      exercise goes on. Optional: states persisted before the field load
+      fine, and the first logged set makes it redundant anyway. */
+  weights?: Record<string, number>;
+  /** Tombstones ("position:setIndex") for unlogged sets whose delete may
+      not have flushed yet — server rows must not resurrect them. */
+  removed?: string[];
 }
 
 const setKey = (position: number, setIndex: number) =>
@@ -70,11 +77,12 @@ export function recordLocalSet(
     loggedAt: string;
   },
 ): LocalSessionState {
+  const k = setKey(input.position, input.setIndex);
   return {
     ...state,
     logs: {
       ...state.logs,
-      [setKey(input.position, input.setIndex)]: {
+      [k]: {
         value: input.value,
         missed: input.missed,
         weightKg: input.weightKg,
@@ -83,6 +91,40 @@ export function recordLocalSet(
         loggedAt: input.loggedAt,
       },
     },
+    // A re-log cancels the tombstone: the set exists again.
+    removed: state.removed?.filter((r) => r !== k),
+  };
+}
+
+/** Remember the load the athlete moved the stepper to, per exercise, so
+    a killed tab before the first set does not forget the change. */
+export function setLocalWeight(
+  state: LocalSessionState,
+  position: number,
+  weightKg: number,
+): LocalSessionState {
+  return {
+    ...state,
+    weights: { ...(state.weights ?? {}), [String(position)]: weightKg },
+  };
+}
+
+/** Delete one logged set — the mirror of `recordLocalSet`. The key is
+    tombstoned so a server row cannot resurrect it before the flush. */
+export function removeLocalSet(
+  state: LocalSessionState,
+  position: number,
+  setIndex: number,
+): LocalSessionState {
+  const k = setKey(position, setIndex);
+  if (!(k in state.logs)) return state;
+  const logs = { ...state.logs };
+  delete logs[k];
+  const removed = state.removed ?? [];
+  return {
+    ...state,
+    logs,
+    removed: removed.includes(k) ? removed : [...removed, k],
   };
 }
 
@@ -144,6 +186,7 @@ export function mergeServerLogs(
   for (const l of serverLogs) {
     const k = setKey(l.position, l.setIndex);
     if (k in logs) continue; // local wins
+    if (state.removed?.includes(k)) continue; // unlogged here, delete pending
     const value = l.reps ?? l.seconds;
     if (value == null) continue;
     logs[k] = {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -45,11 +46,29 @@ export function StartSessionButton({
   }
 
   if (existingStatus === "done" || existingStatus === "partial") {
+    // The registered pill opens the record: the strength resumen, or the
+    // day screen that owns runs and mobility.
+    const recordHref =
+      day.group === "strength"
+        ? existingSessionId
+          ? `/sesion/${existingSessionId}/resumen`
+          : null
+        : day.group === "run"
+          ? `/carrera/${day.scheduledOn}`
+          : day.group === "mobility"
+            ? "/movilidad"
+            : null;
+    const pill =
+      "font-display flex h-15 w-full items-center justify-center gap-3 rounded-xl border border-lime-edge bg-lime-soft text-[15px] leading-none font-bold tracking-[0.06em] text-lime uppercase";
     return (
       <div className="flex-none px-5 pt-3.5 pb-3">
-        <div className="font-display flex h-15 w-full items-center justify-center gap-3 rounded-xl border border-lime-edge bg-lime-soft text-[15px] leading-none font-bold tracking-[0.06em] text-lime uppercase">
-          ✓ Registrada
-        </div>
+        {recordHref ? (
+          <Link href={recordHref} className={pill}>
+            ✓ Registrada · ver
+          </Link>
+        ) : (
+          <div className={pill}>✓ Registrada</div>
+        )}
       </div>
     );
   }

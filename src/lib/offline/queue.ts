@@ -46,6 +46,12 @@ export type QueueOp =
       setIndex: number;
     }
   | {
+      kind: "set_unlog";
+      localSessionId: string;
+      position: number;
+      setIndex: number;
+    }
+  | {
       kind: "session_finish";
       localSessionId: string;
       finishedAt: string;
@@ -82,6 +88,11 @@ export function opKey(op: QueueOp): string {
     case "session_start":
       return `${op.localSessionId}:start`;
     case "set_log":
+      return `${op.localSessionId}:set:${op.position}:${op.setIndex}`;
+    // DELIBERATELY the same key as set_log: exactly one op per set
+    // survives in the queue, so a log and its unlog can never travel in
+    // one envelope and the server needs no ordering rules between them.
+    case "set_unlog":
       return `${op.localSessionId}:set:${op.position}:${op.setIndex}`;
     case "engine_undo":
       return `${op.localSessionId}:undo:${op.position}:${op.setIndex}`;
@@ -144,6 +155,8 @@ export interface SessionEnvelope {
     loggedAt: string;
   }>;
   undoneFailures: Array<{ position: number; setIndex: number }>;
+  /** Sets to delete server-side — the athlete unmarked them. */
+  unlogs: Array<{ position: number; setIndex: number }>;
   finish: { finishedAt: string; notes?: string | null } | null;
   /** Queue keys this envelope covers — acked together on success. */
   opKeys: string[];
@@ -229,6 +242,7 @@ export function buildEnvelopes(
         startedAt: null,
         sets: [],
         undoneFailures: [],
+        unlogs: [],
         finish: null,
         opKeys: [],
       };
@@ -270,6 +284,12 @@ export function buildEnvelopes(
           position: op.position,
           setIndex: op.setIndex,
         });
+        env.opKeys.push(k);
+        break;
+      }
+      case "set_unlog": {
+        const env = envelopeFor(op.localSessionId, null);
+        env.unlogs.push({ position: op.position, setIndex: op.setIndex });
         env.opKeys.push(k);
         break;
       }

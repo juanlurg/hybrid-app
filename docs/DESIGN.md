@@ -120,11 +120,17 @@ on Programa, Historial, Editar and Ajustes.
 | `/progreso` | Per-lift chart, engine breakdown, Pa:HR |
 | `/programa` | RMs, calculadora de RM (Epley), regression rule, engine parameters |
 | `/carrera/[fecha]` | Run blocks, HR zones, mark done |
+| `/fuerza/[fecha]` | Strength day read-only, any date + within-week catch-up |
 | `/movilidad` | Guided / list mobility block |
 | `/historial` | Consistency grid, records, log, engine timeline |
 | `/editor` | Weekly template editor + AI refinement |
 | `/generar` | AI program builder — brief in, preview, explicit activation |
 | `/ajustes` | Every knob, grouped |
+
+Session notifications are client-side only: one tray card per session
+(`tag`), the rest line carries an absolute end time so a frozen tab still
+tells the truth; no push server, no background countdown, iOS only as an
+installed PWA.
 
 ## Non-negotiables
 
@@ -132,17 +138,22 @@ on Programa, Historial, Editar and Ajustes.
    Never compute a load in a component. The athlete may still log a
    different one: the runner's stepper moves it with `nextLoadableWeight()`
    and the load travels with the set (`set_logs.weight_kg`), so the
-   regression holds at the weight actually missed.
+   regression holds at the weight actually missed — and only a clean
+   session at (or above) the held weight releases the hold.
 2. **Only the basic of the day moves the engine.** Accessories never trigger
    a regression — say so in the UI where it matters.
 3. **The AI proposes, the athlete disposes.** Changes are a diff to tick.
    The AI never edits `lifts`. It picks exercises from the catalogue by
    slug — it never invents a name.
 4. **Every engine action is undoable and logged** in `engine_events`.
-5. **The calendar rules.** The plan lives on dates; a missed day is lost,
-   never re-queued. Moving the season is a bulk shift (`shift_program`,
-   Ajustes → Datos): phases move together, logged sessions keep their real
-   dates, the race does not move.
+5. **The calendar rules.** The plan lives on dates; a missed day is lost
+   once its week ends — inside the current week it can still be trained
+   late from `/fuerza/[fecha]`, and the late session fulfils its plan day
+   (`scheduled_on`; the real timing lives in `started_at`/`completed_at`).
+   Training before the season starts files under the real date and marks
+   no plan day. Moving the season is a bulk shift (`shift_program`,
+   Ajustes → Zona de peligro): phases move together, logged sessions keep
+   their real dates, the race does not move.
 6. **The engine speaks phase-local weeks.** Every phase starts at wave[0]
    with its own progression (`program_phases.progression_mode`): F2 waves,
    F3/F4 hold a fixed %RM. Never feed `absoluteWeek` to the engine.

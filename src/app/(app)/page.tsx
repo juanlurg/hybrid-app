@@ -1,6 +1,11 @@
 import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
+import {
+  formatDayLong,
+  formatDayShort,
+  type IsoDate,
+} from "@/lib/domain/calendar";
 import { resolveDay, type ResolvedExercise } from "@/lib/domain/plan";
 import { createClient } from "@/lib/supabase/server";
 import { formatWeight } from "@/lib/engine";
@@ -34,8 +39,13 @@ function shortLoad(e: ResolvedExercise): { label: string; muted: boolean } {
 
 export default async function HoyPage() {
   const athlete = await requireAthlete();
-  const { ctx, config, placement } = athlete;
+  const { ctx, config, placement, today } = athlete;
   const phase = ctx.phases.find((p) => p.id === placement.phase.id)!;
+  // Out of season, placeDate clamps: Hoy previews the clamped plan day,
+  // but anything trained lands on the REAL date and the plan day stays
+  // unmarked — the athlete decided pre-season work is history, not plan.
+  const clamped = placement.date !== today;
+  const preSeason = clamped && today < (ctx.program.starts_on as IsoDate);
 
   const day = resolveDay(
     {
@@ -48,13 +58,20 @@ export default async function HoyPage() {
     placement.dayIndex,
   );
 
+  // The date a session started today files under — and is looked up by.
+  // Only strength files under the REAL date out of season: runs and
+  // mobility navigate to their own screens, which are plan-date
+  // addressed, so the clamped plan date keeps those links resolving.
+  const effectiveOn =
+    clamped && day.group === "strength" ? today : day.date;
+
   const supabase = await createClient();
   const [{ data: sessions }, { data: heldLifts }] = await Promise.all([
     supabase
       .from("sessions")
       .select("id, slot_id, status")
       .eq("user_id", athlete.userId)
-      .eq("scheduled_on", day.date),
+      .eq("scheduled_on", effectiveOn),
     supabase
       .from("lifts")
       .select("id, key, name, hold, hold_at_kg, fail_count, penalty")
@@ -99,7 +116,7 @@ export default async function HoyPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        eyebrow={day.dateLabel}
+        eyebrow={clamped ? formatDayLong(today) : day.dateLabel}
         right={
           <span className="font-display text-[12px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
             {phase.key} · sem {placement.week}/{phase.weeks}
@@ -111,6 +128,17 @@ export default async function HoyPage() {
 
       <div className="flex-1 overflow-auto pt-4 pb-6">
         <SyncStatus />
+
+        {preSeason ? (
+          <div className="mb-3.5 px-5">
+            <Callout eyebrow="El plan aún no ha empezado">
+              Empieza el lunes{" "}
+              {formatDayShort(ctx.program.starts_on as IsoDate)}. Esto es un
+              adelanto de ese día: lo que entrenes antes se guarda en el
+              historial con su fecha real y no marca ningún día del plan.
+            </Callout>
+          </div>
+        ) : null}
 
         {primary ? (
           <div className="px-5">
@@ -285,7 +313,7 @@ export default async function HoyPage() {
           day={{
             phaseId: phase.id,
             slotId: day.slot.id,
-            scheduledOn: day.date,
+            scheduledOn: effectiveOn,
             week: placement.week,
             dayIndex: day.dayIndex,
             sessionType: day.sessionType,

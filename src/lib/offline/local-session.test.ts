@@ -5,7 +5,9 @@ import {
   finishLocalSession,
   mergeServerLogs,
   recordLocalSet,
+  removeLocalSet,
   setLocalRest,
+  setLocalWeight,
   undoLocalFailure,
 } from "./local-session";
 import type { SessionKey } from "./queue";
@@ -23,6 +25,69 @@ const KEY: SessionKey = {
 const base = () => createLocalSession("loc-1", KEY, "2026-09-14T18:00:00Z");
 
 describe("local session reducers", () => {
+  it("setLocalWeight survives round-trips and absence of the field", () => {
+    // A state persisted before the field existed has no `weights`.
+    const legacy = base();
+    expect(legacy.weights).toBeUndefined();
+    const s = setLocalWeight(setLocalWeight(legacy, 1, 45), 3, 20);
+    expect(s.weights).toEqual({ "1": 45, "3": 20 });
+    expect(setLocalWeight(s, 1, 47.5).weights?.["1"]).toBe(47.5);
+  });
+
+  it("removeLocalSet deletes exactly one entry and tolerates absence", () => {
+    let s = recordLocalSet(base(), {
+      position: 1,
+      setIndex: 0,
+      value: 6,
+      missed: false,
+      weightKg: 90,
+      rir: null,
+      timed: false,
+      loggedAt: "t1",
+    });
+    s = recordLocalSet(s, {
+      position: 1,
+      setIndex: 1,
+      value: 6,
+      missed: false,
+      weightKg: 90,
+      rir: null,
+      timed: false,
+      loggedAt: "t2",
+    });
+    const removed = removeLocalSet(s, 1, 0);
+    expect(Object.keys(removed.logs)).toEqual(["1:1"]);
+    // Removing a set that is not there is a no-op, not an error.
+    expect(removeLocalSet(removed, 1, 0)).toBe(removed);
+    // The tombstone blocks a server row from resurrecting the set…
+    expect(removed.removed).toEqual(["1:0"]);
+    const merged = mergeServerLogs(removed, [
+      {
+        position: 1,
+        setIndex: 0,
+        reps: 6,
+        seconds: null,
+        rir: null,
+        weightKg: 90,
+        missedRange: false,
+        loggedAt: "t1",
+      },
+    ]);
+    expect(merged.logs["1:0"]).toBeUndefined();
+    // …and a re-log cancels it.
+    const relogged = recordLocalSet(removed, {
+      position: 1,
+      setIndex: 0,
+      value: 5,
+      missed: false,
+      weightKg: 90,
+      rir: null,
+      timed: false,
+      loggedAt: "t3",
+    });
+    expect(relogged.removed).toEqual([]);
+  });
+
   it("re-recording a set overwrites it", () => {
     let s = recordLocalSet(base(), {
       position: 1,

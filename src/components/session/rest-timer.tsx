@@ -63,11 +63,14 @@ export function useRestTimer({
   sound,
   vibration,
   onChange,
+  onExpire,
 }: {
   sound: boolean;
   vibration: boolean;
   /** Fires on start/extend/stop/expiry — the hook's persistence outlet. */
   onChange?: (rest: RestSnapshot | null) => void;
+  /** Fires only when the countdown actually reaches zero (page alive). */
+  onExpire?: () => void;
 }) {
   const [rest, setRest] = useState<RestState | null>(null);
   const [flash, setFlash] = useState(false);
@@ -75,9 +78,11 @@ export function useRestTimer({
   // remaining time still has to be right when the athlete looks back.
   const deadline = useRef<number | null>(null);
   const notify = useRef(onChange);
+  const expire = useRef(onExpire);
   useEffect(() => {
     notify.current = onChange;
-  }, [onChange]);
+    expire.current = onExpire;
+  }, [onChange, onExpire]);
 
   const start = useCallback(
     (seconds: number, label: string) => {
@@ -147,6 +152,7 @@ export function useRestTimer({
           navigator.vibrate([140, 90, 140]);
         }
         if (sound) beep();
+        expire.current?.();
         return;
       }
       setRest((prev) => (prev ? { ...prev, left } : prev));

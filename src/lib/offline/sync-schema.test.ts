@@ -104,6 +104,35 @@ describe("buildEnvelopes output vs the /api/sync schema", () => {
     expect(parsed.success && parsed.data.sessions[0].key).toBeNull();
   });
 
+  it("an unlog envelope parses, and the deleted set travels in `unlogs`", () => {
+    let q = enqueue(EMPTY_QUEUE, set);
+    q = enqueue(q, {
+      kind: "set_unlog",
+      localSessionId: LOCAL_ID,
+      position: 1,
+      setIndex: 0,
+    });
+    const parsed = syncRequestSchema.safeParse(request(buildEnvelopes(q)));
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.sessions[0].unlogs).toEqual([
+      { position: 1, setIndex: 0 },
+    ]);
+    expect(parsed.success && parsed.data.sessions[0].sets).toHaveLength(0);
+  });
+
+  it("an envelope without the unlogs field still parses — pre-deploy queues drain", () => {
+    const q = enqueue(EMPTY_QUEUE, set);
+    const parts = buildEnvelopes(q);
+    const raw = JSON.parse(JSON.stringify(request(parts))) as Record<
+      string,
+      unknown
+    >;
+    delete (raw.sessions as Array<Record<string, unknown>>)[0].unlogs;
+    const parsed = syncRequestSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.sessions[0].unlogs).toEqual([]);
+  });
+
   it("run and mobility envelopes parse", () => {
     let q = enqueue(EMPTY_QUEUE, {
       kind: "run_log",

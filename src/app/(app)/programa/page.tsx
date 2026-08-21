@@ -226,6 +226,18 @@ export default async function ProgramaPage() {
           </span>
         </Row>
 
+        <Link
+          href="/generar"
+          className="mt-2.5 flex items-center gap-2.5 px-6 py-1"
+        >
+          <span className="flex-1 text-[13px] leading-[1.4] text-mid">
+            Generar otro programa con IA
+          </span>
+          <span aria-hidden className="text-[13px] leading-none text-faint">
+            ›
+          </span>
+        </Link>
+
         <SectionLabel
           right={
             lastRetest

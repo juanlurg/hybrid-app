@@ -197,6 +197,21 @@ export async function POST(request: Request) {
         slotExercises = archivedRows ?? [];
       }
 
+      /* ── deletions first: an unmarked set stops existing ──── */
+      // The replay below re-folds from whatever rows survive, and the
+      // stale-event reverter cleans up any fail event whose source set
+      // is gone — the engine needs no unlog concept of its own.
+      if (env.unlogs.length) {
+        for (const u of env.unlogs) {
+          const { error } = await supabase.from("set_logs").delete().match({
+            session_id: sessionId,
+            position: u.position,
+            set_index: u.setIndex,
+          });
+          if (error) throw new Error(error.message);
+        }
+      }
+
       /* ── upsert the sets, missed_range recomputed here ────── */
       if (env.sets.length) {
         const rows = env.sets.map((s) => {
@@ -273,6 +288,13 @@ export async function POST(request: Request) {
         const failEvents = (priorEvents ?? []).filter(
           (e) => e.kind === "fail_hold" || e.kind === "fail_penalty",
         );
+        // Clean releases rewind too: without their `previous` snapshot,
+        // unlogging the set that made a session clean could never bring
+        // the released hold back. Rows written before the payload
+        // existed parse to null and are simply skipped.
+        const cleanEvents = (priorEvents ?? []).filter(
+          (e) => e.kind === "clean_reset",
+        );
         // A session with legacy events (no dedup_key) was driven by the
         // old per-set action path: its effects are already applied and
         // cannot be told apart. Leave the engine alone for it.
@@ -281,7 +303,7 @@ export async function POST(request: Request) {
         if (!legacy) {
           const pre = preSessionLiftState(
             liftStateFrom(liftRow),
-            failEvents.map((e) => ({
+            [...failEvents, ...cleanEvents].map((e) => ({
               createdAt: e.created_at,
               previous: parsePreviousLiftState(
                 (e.payload as { previous?: unknown } | null)?.previous,
@@ -370,10 +392,27 @@ export async function POST(request: Request) {
             staleReverted += 1;
           }
 
+          // A clean release goes stale the same way a fail does: if this
+          // replay no longer earns it (a set was unlogged, or corrected
+          // below the range and then undone), the persisted clean_reset
+          // is a lie — revert it and let the lift fold back to held.
+          let cleanStaleReverted = 0;
+          if (!replay.released) {
+            for (const e of cleanEvents) {
+              if (!e.dedup_key || e.reverted_at) continue;
+              await supabase
+                .from("engine_events")
+                .update({ reverted_at: new Date().toISOString() })
+                .eq("dedup_key", e.dedup_key);
+              cleanStaleReverted += 1;
+            }
+          }
+
           const touched =
             replay.events.some((e) => !e.undone) ||
             env.undoneFailures.length > 0 ||
             staleReverted > 0 ||
+            cleanStaleReverted > 0 ||
             replay.released;
           if (touched && replay.lift) {
             await supabase
@@ -397,10 +436,19 @@ export async function POST(request: Request) {
                   title: `${liftRow.name} · sesión limpia`,
                   detail:
                     "Todas las series dentro del rango. El contador de fallos vuelve a cero y el peso deja de estar en espera.",
+                  // The state the release acted on — what a later replay
+                  // rewinds to if this session stops being clean.
+                  payload: { previous: { ...pre } },
                 },
                 { onConflict: "dedup_key", ignoreDuplicates: true },
               );
             if (cleanError) throw new Error(cleanError.message);
+            // Re-earned after a stale revert: the event is true again.
+            await supabase
+              .from("engine_events")
+              .update({ reverted_at: null })
+              .eq("dedup_key", replay.cleanDedupKey)
+              .not("reverted_at", "is", null);
           }
 
           banner = replay.banner;

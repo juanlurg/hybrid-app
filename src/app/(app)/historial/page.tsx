@@ -431,6 +431,15 @@ export default async function HistorialPage() {
       );
     }
 
+    // The expanded panel links out to the session's own screen: the log
+    // is the index, the resumen (or the run page) is the record.
+    const href =
+      group === "strength" && (s.status === "done" || s.status === "partial")
+        ? `/sesion/${s.id}/resumen`
+        : group === "run" && s.status !== "skipped"
+          ? `/carrera/${s.scheduled_on}`
+          : null;
+
     return {
       id: s.id,
       group,
@@ -444,6 +453,7 @@ export default async function HistorialPage() {
       dateLabel: formatDayShort(s.scheduled_on),
       incomplete: s.status === "partial" || s.status === "skipped",
       details,
+      href,
     };
   });
 

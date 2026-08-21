@@ -141,6 +141,61 @@ describe("replayEngine", () => {
     expect(r.lift?.failCount).toBe(1);
   });
 
+  it("a clean session at a self-lowered weight does not release the hold", () => {
+    // Decision D4: the athlete dropped 90 → 85 with the stepper and hit
+    // the range — the held weight was never moved, so it stays held.
+    const held: LiftState = { ...squat, hold: true, holdAtKg: 90, failCount: 1 };
+    const r = replayEngine(
+      input({
+        lift: held,
+        logs: [log(0, 5, 85), log(1, 5, 85), log(2, 5, 85), log(3, 5, 85)],
+      }),
+    );
+    expect(r.clean).toBe(true);
+    expect(r.released).toBe(false);
+    expect(r.lift?.hold).toBe(true);
+    expect(r.lift?.failCount).toBe(1);
+  });
+
+  it("one clean set at (or above) the held weight is a real test", () => {
+    const held: LiftState = { ...squat, hold: true, holdAtKg: 90, failCount: 1 };
+    const r = replayEngine(
+      input({
+        lift: held,
+        logs: [log(0, 5, 92.5), log(1, 5, 85), log(2, 5, 85), log(3, 5, 85)],
+      }),
+    );
+    expect(r.released).toBe(true);
+    expect(r.lift?.hold).toBe(false);
+  });
+
+  it("pre-stepper rows (null weight) count as lifted at the prescription", () => {
+    const held: LiftState = { ...squat, hold: true, holdAtKg: 90, failCount: 1 };
+    const nullLog = (i: number) => ({ ...log(i, 5), weightKg: null });
+    const r = replayEngine(
+      input({
+        lift: held,
+        logs: [nullLog(0), nullLog(1), nullLog(2), nullLog(3)],
+      }),
+    );
+    expect(r.released).toBe(true);
+    expect(r.lift?.hold).toBe(false);
+  });
+
+  it("a plain fail-count (no hold) still clears at any weight", () => {
+    const hurt: LiftState = { ...squat, failCount: 1, penalty: 0.05 };
+    const r = replayEngine(
+      input({
+        lift: hurt,
+        logs: [log(0, 5, 80), log(1, 5, 80), log(2, 5, 80), log(3, 5, 80)],
+      }),
+    );
+    expect(r.released).toBe(true);
+    expect(r.lift?.failCount).toBe(0);
+    // Penalties are not refunded here — the RM climbs back by cycle bump.
+    expect(r.lift?.penalty).toBe(0.05);
+  });
+
   it("no primary or no lift → nothing to do", () => {
     expect(replayEngine(input({ primary: null })).lift).toBeNull();
     expect(replayEngine(input({ lift: null })).events).toHaveLength(0);

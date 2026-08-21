@@ -14,7 +14,12 @@ import {
 import { TONE } from "@/components/day-accents";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
 import {
+  restNotificationsEnabled,
+  useSessionNotification,
+} from "@/components/session/session-notification";
+import {
   formatWeight,
+  loadableWeight,
   nextLoadableWeight,
   plateBreakdown,
   type EngineConfig,
@@ -25,6 +30,8 @@ import { weightLabelFor, type ResolvedExercise } from "@/lib/domain/plan";
 import {
   createLocalSession,
   recordLocalSet,
+  removeLocalSet,
+  setLocalWeight,
   undoLocalFailure,
   finishLocalSession,
   type LocalSessionState,
@@ -106,6 +113,12 @@ export function SessionRunner({
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [finishNotes, setFinishNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const finishRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (confirmFinish) {
+      finishRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [confirmFinish]);
 
   const [logs, setLogs] = useState<LogMap>(() => {
     const map: LogMap = {};
@@ -124,6 +137,9 @@ export function SessionRunner({
   /** Load the athlete moved to with the stepper, per exercise: what the
       next set of it goes on until another set says otherwise. */
   const [weights, setWeights] = useState<Record<string, number>>({});
+  /** Direct weight entry: tap the stepper value, type the number. */
+  const [weightEditing, setWeightEditing] = useState(false);
+  const [weightDraft, setWeightDraft] = useState("");
 
   /** The persisted mirror of this session — survives a killed tab. */
   const localRef = useRef<LocalSessionState | null>(null);
@@ -197,11 +213,16 @@ export function SessionRunner({
   const [pendingRir, setPendingRir] = useState<number | null>(null);
   const exercise = exercises[Math.min(exIndex, exercises.length - 1)];
 
+  // Read once on mount: the toggle lives in Ajustes, a session apart.
+  const [notifEnabled] = useState(() => restNotificationsEnabled());
+  const notif = useSessionNotification({ enabled: notifEnabled, vibration });
+
   const { rest, flash, start, stop, extend, resume } = useRestTimer({
     sound,
     vibration,
     // Persist the deadline: a reload mid-rest keeps counting.
     onChange: (snapshot) => void withLocal((s) => ({ ...s, rest: snapshot })),
+    onExpire: () => notif.showExpired(),
   });
   useWakeLock(keepAwake);
 
@@ -228,6 +249,13 @@ export function SessionRunner({
             };
           }
         }
+        // Unlogged sets whose delete has not flushed yet: the server-
+        // seeded row must not resurrect them.
+        for (const k of local.removed ?? []) {
+          const [pos, idx] = k.split(":").map(Number);
+          const ex = exercises.find((e) => e.position === pos);
+          if (ex) delete next[keyOf(ex.id, idx)];
+        }
         return next;
       });
       if (local.undoneFailures.length) {
@@ -239,6 +267,17 @@ export function SessionRunner({
               (u) => !seen.has(`${u.position}:${u.setIndex}`),
             ),
           ];
+        });
+      }
+      if (local.weights) {
+        // Stepper overrides made before any set — position → exercise.
+        setWeights((prev) => {
+          const next = { ...prev };
+          for (const [pos, kg] of Object.entries(local.weights ?? {})) {
+            const ex = exercises.find((e) => e.position === Number(pos));
+            if (ex && !(ex.id in next)) next[ex.id] = kg;
+          }
+          return next;
         });
       }
       if (local.rest && local.rest.deadlineEpochMs > Date.now()) {
@@ -270,12 +309,30 @@ export function SessionRunner({
 
   const currentWeight = weightAt(exercise, editingIndex);
 
-  const doneForExercise = countDone(logs, exercise.id, exercise.sets);
+  // The next set to log is the first WITHOUT an entry, not "count done":
+  // deleting a set leaves a gap, and the gap is what gets filled next.
+  const nextFreeIndex = (() => {
+    for (let i = 0; i < exercise.sets; i++) {
+      if (!logs[keyOf(exercise.id, i)]) return i;
+    }
+    return exercise.sets;
+  })();
   const totalSets = exercises.reduce((acc, e) => acc + e.sets, 0);
   const totalDone = exercises.reduce(
     (acc, e) => acc + countDone(logs, e.id, e.sets),
     0,
   );
+
+  // The quiet between-rests card when the app goes to the background.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden" && !rest) {
+        notif.showProgress(exercise.name, totalDone, totalSets);
+      }
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [rest, exercise.name, totalDone, totalSets, notif]);
 
   /** The other members of this exercise's superset, in plan order. */
   const groupMembers = useMemo(
@@ -287,6 +344,7 @@ export function SessionRunner({
   );
 
   function finish() {
+    notif.clear();
     startTransition(async () => {
       const finishedAt = new Date().toISOString();
       await withLocal((s) => finishLocalSession(s, finishedAt, totalSets));
@@ -318,7 +376,9 @@ export function SessionRunner({
 
   function advance(fromIndex: number) {
     if (fromIndex + 1 >= exercises.length) {
-      finish();
+      // The last set never slams the door: closing the session is an
+      // explicit tap, so a mis-tap cannot register a day by accident.
+      setConfirmFinish(true);
       return;
     }
     setExIndex(fromIndex + 1);
@@ -332,7 +392,7 @@ export function SessionRunner({
     // superset jump, no advancing.
     const overwrite =
       atIndex != null && Boolean(logs[keyOf(exercise.id, atIndex)]);
-    const setIndex = atIndex ?? doneForExercise;
+    const setIndex = atIndex ?? nextFreeIndex;
     if (setIndex >= exercise.sets) {
       advance(exIndex);
       return;
@@ -348,8 +408,10 @@ export function SessionRunner({
     // Local-first: the number lands instantly and survives a killed tab;
     // the queue takes it to the server whenever there is network.
     setLogs((prev) => ({ ...prev, [k]: { value, missed, weightKg } }));
-    // What you just moved is what the next set starts from.
-    if (weightKg != null) {
+    // What you just moved is what the next set starts from — but only a
+    // FRESH set: correcting an old set's reps must not resurrect that
+    // set's old weight as the next set's default.
+    if (!overwrite && weightKg != null) {
       setWeights((prev) => ({ ...prev, [exercise.id]: weightKg }));
     }
     setRepsOpen(false);
@@ -371,6 +433,12 @@ export function SessionRunner({
         setExIndex(exercises.findIndex((e) => e.id === laggard.id));
       } else if (autoRest) {
         start(exercise.restSeconds, `${exercise.name} · serie ${setIndex + 1}`);
+        notif.showRest(
+          exercise.name,
+          setIndex + 1,
+          exercise.sets,
+          exercise.restSeconds,
+        );
       }
 
       // Done with the whole group (not just this row) → move past it.
@@ -421,22 +489,21 @@ export function SessionRunner({
   /**
    * Change the load. On a set already logged it rewrites that set in
    * place — same reps, same op key, so it flows through the idempotent
-   * path a first write does; otherwise it sets what the next set uses.
+   * path a first write does; otherwise it sets what the next set uses,
+   * persisted so a killed tab before the first set still remembers it.
    */
-  function nudgeWeight(direction: 1 | -1) {
-    if (currentWeight == null) return;
-    const next = nextLoadableWeight(
-      currentWeight,
-      direction,
-      exercise.equipment,
-      replayCtx.config,
-    );
+  function applyWeight(next: number) {
     if (next === currentWeight) return;
     setWeights((prev) => ({ ...prev, [exercise.id]: next }));
 
     const setIndex = editingIndex;
     const editing = setIndex == null ? null : logs[keyOf(exercise.id, setIndex)];
-    if (!editing || setIndex == null) return;
+    if (!editing || setIndex == null) {
+      startTransition(async () => {
+        await withLocal((s) => setLocalWeight(s, exercise.position, next));
+      });
+      return;
+    }
 
     setLogs((prev) => ({
       ...prev,
@@ -449,7 +516,7 @@ export function SessionRunner({
       let rir: number | null = null;
       await withLocal((s) => {
         rir = s.logs[`${exercise.position}:${setIndex}`]?.rir ?? null;
-        return recordLocalSet(s, {
+        return recordLocalSet(setLocalWeight(s, exercise.position, next), {
           position: exercise.position,
           setIndex,
           value: editing.value,
@@ -473,6 +540,55 @@ export function SessionRunner({
         rir,
         weightKg: next,
         loggedAt,
+      });
+    });
+  }
+
+  function nudgeWeight(direction: 1 | -1) {
+    if (currentWeight == null) return;
+    applyWeight(
+      nextLoadableWeight(
+        currentWeight,
+        direction,
+        exercise.equipment,
+        replayCtx.config,
+      ),
+    );
+  }
+
+  /** Direct entry: the athlete proposes a number, `loadableWeight`
+      disposes — the engine stays the only load authority. */
+  function commitWeightDraft() {
+    setWeightEditing(false);
+    const parsed = Number.parseFloat(weightDraft.trim().replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    const snapped = loadableWeight(parsed, exercise.equipment, replayCtx.config);
+    if (snapped > 0) applyWeight(snapped);
+  }
+
+  /**
+   * Unmark a set: the mis-tap stops counting as done. The op shares the
+   * set_log key, so exactly one of {log, unlog} per set ever flushes;
+   * server-side the row is deleted and the replay heals the engine.
+   */
+  function unlogSet(setIndex: number) {
+    const k = keyOf(exercise.id, setIndex);
+    if (!logs[k]) return;
+    setLogs((prev) => {
+      const next = { ...prev };
+      delete next[k];
+      return next;
+    });
+    setRepsOpen(false);
+    setEditingIndex(null);
+    setPendingRir(null);
+    startTransition(async () => {
+      await withLocal((s) => removeLocalSet(s, exercise.position, setIndex));
+      await enqueueAndFlush({
+        kind: "set_unlog",
+        localSessionId: sessionId,
+        position: exercise.position,
+        setIndex,
       });
     });
   }
@@ -508,7 +624,7 @@ export function SessionRunner({
     return out;
   }, [exercise.repMax, exercise.effort]);
 
-  const setNumber = Math.min(doneForExercise + 1, exercise.sets);
+  const setNumber = Math.min(nextFreeIndex + 1, exercise.sets);
   const eyebrow = exercise.isPrimary
     ? `Básico del día · serie ${setNumber}/${exercise.sets}`
     : exercise.supersetGroup != null
@@ -570,28 +686,42 @@ export function SessionRunner({
                 ? "corporal"
                 : "kg"
           }
-          lines={
-            <>
-              objetivo {exercise.repsLabel}
-              {exercise.effort === "seconds" ? "″" : ""}
-              {exercise.isPrimary ? ` · RIR ${targetRir}` : ""}
-              <br />
-              {plates ? (
-                <>
-                  por lado {plates.perSide.map(formatWeight).join(" + ")}
-                  {plates.remainderKg ? (
-                    <span className="text-fail">
-                      {" "}
-                      +{formatWeight(plates.remainderKg)} sin disco
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                `desc. ${exercise.restLabel}`
-              )}
-            </>
-          }
         />
+
+        {/* The two numbers read mid-set, with chalk on the hands: the rep
+            target and the plates per side get real rows, not hero fine print. */}
+        <div className="mt-4 flex items-baseline gap-2.5">
+          <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+            Objetivo
+          </span>
+          <span className="text-[15px] leading-[1.3] font-semibold">
+            <span className="num">
+              {exercise.repsLabel}
+              {exercise.effort === "seconds" ? "″" : ""}
+            </span>
+            {exercise.isPrimary ? (
+              <span className="text-mid"> · RIR {targetRir}</span>
+            ) : null}
+            <span className="text-mid"> · desc. {exercise.restLabel}</span>
+          </span>
+        </div>
+
+        {plates ? (
+          <div className="mt-2 flex items-baseline gap-2.5">
+            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+              Por lado
+            </span>
+            <span className="num text-[17px] leading-[1.2] font-semibold">
+              {plates.perSide.map(formatWeight).join(" + ")}
+              {plates.remainderKg ? (
+                <span className="text-[13px] text-fail">
+                  {" "}
+                  +{formatWeight(plates.remainderKg)} sin disco
+                </span>
+              ) : null}
+            </span>
+          </div>
+        ) : null}
 
         {/* The load is the athlete's to change: the plan prescribes, the
             bar decides. Each notch is a weight the equipment can rack. */}
@@ -604,12 +734,43 @@ export function SessionRunner({
             </span>
             <Stepper
               label="peso"
-              value={weightLabelFor(exercise.loadMode, currentWeight)}
+              value={
+                weightEditing ? (
+                  <input
+                    autoFocus
+                    inputMode="decimal"
+                    value={weightDraft}
+                    aria-label="Peso en kg"
+                    onChange={(e) => setWeightDraft(e.target.value)}
+                    onBlur={commitWeightDraft}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        setWeightDraft("");
+                        setWeightEditing(false);
+                      }
+                    }}
+                    className="num w-[52px] bg-transparent text-center text-[14px] leading-none font-semibold outline-none"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    aria-label="Escribir el peso"
+                    onClick={() => {
+                      setWeightDraft(formatWeight(currentWeight));
+                      setWeightEditing(true);
+                    }}
+                    className="num text-[14px] leading-none font-semibold"
+                  >
+                    {weightLabelFor(exercise.loadMode, currentWeight)}
+                  </button>
+                )
+              }
               onDecrement={() => nudgeWeight(-1)}
               onIncrement={() => nudgeWeight(1)}
             />
             {exercise.weightKg != null && currentWeight !== exercise.weightKg ? (
-              <span className="num text-[11.5px] leading-none text-faint">
+              <span className="num text-[12px] leading-none text-faint">
                 programado {formatWeight(exercise.weightKg)}
               </span>
             ) : null}
@@ -623,7 +784,7 @@ export function SessionRunner({
             const entry = logs[keyOf(exercise.id, i)];
             const bad = entry?.missed ?? false;
             const editing = editingIndex === i;
-            const current = !entry && i === doneForExercise;
+            const current = !entry && i === nextFreeIndex;
             return (
               <button
                 key={i}
@@ -664,7 +825,7 @@ export function SessionRunner({
                 </span>
                 <span
                   className={cn(
-                    "font-display text-[9px] leading-none font-semibold tracking-[0.1em] uppercase",
+                    "font-display text-[11px] leading-none font-semibold tracking-[0.1em] uppercase",
                     entry
                       ? bad
                         ? "text-fail"
@@ -683,7 +844,14 @@ export function SessionRunner({
 
         {rest ? (
           <div className="mt-5">
-            <RestBar rest={rest} onSkip={stop} onExtend={() => extend(30)} />
+            <RestBar
+              rest={rest}
+              onSkip={() => {
+                stop();
+                notif.dismissRest(exercise.name, totalDone, totalSets);
+              }}
+              onExtend={() => extend(30)}
+            />
           </div>
         ) : null}
 
@@ -788,6 +956,15 @@ export function SessionRunner({
                 ? "el motor reacciona: primero congela el peso, luego recorta la RM."
                 : "no pasa nada: los accesorios no tocan el motor."}
             </p>
+            {editingIndex != null && logs[keyOf(exercise.id, editingIndex)] ? (
+              <button
+                type="button"
+                onClick={() => unlogSet(editingIndex)}
+                className="mt-3 text-[12px] leading-none font-medium text-fail underline"
+              >
+                borrar serie {editingIndex + 1} — queda sin hacer
+              </button>
+            ) : null}
           </Card>
         ) : null}
 
@@ -828,14 +1005,27 @@ export function SessionRunner({
         </div>
 
         {/* Explicit exit: the gym closes, the shoulder hurts — a session
-            can close as partial without inventing sets. */}
-        {totalDone < totalSets ? (
-          confirmFinish ? (
-            <Card className="mt-4 border-fail px-4 py-4">
+            can close as partial without inventing sets. A complete one
+            confirms too: the last set never registers the day by itself. */}
+        {confirmFinish ? (
+          <div ref={finishRef}>
+            <Card
+              className={cn(
+                "mt-4 px-4 py-4",
+                totalDone < totalSets ? "border-fail" : "border-lime-edge",
+              )}
+            >
               <div className="flex items-center gap-2.5">
                 <span className="flex-1 text-[12.5px] leading-[1.4] font-semibold">
-                  ¿Terminar con {totalSets - totalDone}{" "}
-                  {totalSets - totalDone === 1 ? "serie" : "series"} sin hacer?
+                  {totalDone < totalSets ? (
+                    <>
+                      ¿Terminar con {totalSets - totalDone}{" "}
+                      {totalSets - totalDone === 1 ? "serie" : "series"} sin
+                      hacer?
+                    </>
+                  ) : (
+                    <>Sesión completa. ¿Terminar y registrar?</>
+                  )}
                 </span>
                 <button
                   type="button"
@@ -843,7 +1033,7 @@ export function SessionRunner({
                   onClick={finish}
                   className="font-display flex h-11 items-center rounded-md bg-strength px-3.5 text-[11.5px] leading-none font-bold tracking-[0.06em] text-on-strength uppercase disabled:opacity-40"
                 >
-                  Sí, terminar
+                  {totalDone < totalSets ? "Sí, terminar" : "Terminar"}
                 </button>
                 <button
                   type="button"
@@ -858,26 +1048,30 @@ export function SessionRunner({
                 onChange={(e) => setFinishNotes(e.target.value)}
                 rows={2}
                 maxLength={2000}
-                placeholder="Por qué cierras antes — «aquíleo molesto», «sin tiempo»… (opcional)"
+                placeholder={
+                  totalDone < totalSets
+                    ? "Por qué cierras antes — «aquíleo molesto», «sin tiempo»… (opcional)"
+                    : "Nota de la sesión — «última serie dura», «buenas sensaciones»… (opcional)"
+                }
                 aria-label="Nota de la sesión"
                 className="mt-3 w-full rounded-md border border-edge bg-soft px-3 py-2.5 text-[12.5px] leading-[1.45] outline-none"
               />
             </Card>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmFinish(true)}
-              className="mt-4 flex w-full items-center justify-between rounded-xl border border-dashed border-hairline px-4 py-3.5 text-left"
-            >
-              <span className="font-display text-[12px] leading-none font-semibold tracking-[0.06em] uppercase">
-                Terminar sesión
-              </span>
-              <span className="num text-[12px] leading-none text-mid">
-                {totalDone}/{totalSets} series
-              </span>
-            </button>
-          )
-        ) : null}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmFinish(true)}
+            className="mt-4 flex w-full items-center justify-between rounded-xl border border-dashed border-hairline px-4 py-3.5 text-left"
+          >
+            <span className="font-display text-[12px] leading-none font-semibold tracking-[0.06em] uppercase">
+              Terminar sesión
+            </span>
+            <span className="num text-[12px] leading-none text-mid">
+              {totalDone}/{totalSets} series
+            </span>
+          </button>
+        )}
       </div>
 
       {/* AppShell already pays `--safe-bottom` on the runner branch. */}
