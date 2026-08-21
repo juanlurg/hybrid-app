@@ -433,8 +433,17 @@ en su variante semanal (decisión 2: recuperar dentro de la semana desde
 retenido), ERR-02 (`set_unlog`), ERR-07 (peso persistido + entrada directa)
 y PWA-01/02 v1 (decisión 3: aviso de descanso con hora absoluta, capa
 persistente solo Android) implementados; DEN-04 parcial (zona de peligro y
-reorden hechos; faltan las anclas). Quedan: FLEX-03/04, NAV-03/07,
-DEN-03/05/06 y ERR-06.
+reorden hechos; faltan las anclas).
+
+Estado (segunda tanda, misma fecha): todo lo restante implementado —
+NAV-03 (chips de semana en la barra de fases), NAV-07 (parámetros del motor
+solo en ajustes), DEN-03 (pliegue «toda la sesión» en el runner), DEN-04
+(índice de secciones en ajustes), DEN-05 (historial en cuatro pestañas),
+DEN-06 (editor con acordeón por ejercicio), FLEX-03 (`/editor?fase=`),
+FLEX-04 (cualquier día de la semana en curso entrenable desde
+`/fuerza/[fecha]`) y ERR-06 (corregir una sesión cerrada desde el resumen,
+con re-evaluación de duración, tonelaje y bumps de accesorios). La hoja de
+ruta de esta auditoría queda completa.
 
 **ola 1 — victorias rápidas (E1)**
 1. DEN-01 + DEN-02 — reps objetivo y discos por lado a tamaño legible.
