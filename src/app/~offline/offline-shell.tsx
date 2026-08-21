@@ -154,10 +154,14 @@ export function OfflineShell() {
     if (!today?.slot) return;
     const localId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
+    // Out of season, placeDate clamps and `today.date` is a plan date in
+    // the future (or past): the session still happened on the real day,
+    // so that is the date it is filed under. The plan day stays unmarked.
+    const realToday = todayIso();
     const key = {
       phaseId: today.phaseId,
       slotId: today.slot.id,
-      scheduledOn: today.date,
+      scheduledOn: today.date === realToday ? today.date : realToday,
       week: today.week,
       dayIndex: today.dayIndex,
       sessionType: today.sessionType,
