@@ -20,10 +20,27 @@ export interface EditorWarning {
   detail: string;
 }
 
-export default async function EditorPage() {
+export default async function EditorPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ fase?: string | string[] }>;
+}) {
   const athlete = await requireAthlete();
   const { ctx, config, placement } = athlete;
-  const phase = ctx.phases.find((p) => p.id === placement.phase.id)!;
+  const params = await searchParams;
+  const askedKey = Array.isArray(params.fase) ? params.fase[0] : params.fase;
+
+  // Any phase is editable; today's is just the default. The template
+  // actions are all id-scoped, so nothing below cares which phase it is.
+  const phases = [...ctx.phases].sort((a, b) => a.position - b.position);
+  const phase =
+    phases.find((p) => p.key === askedKey) ??
+    phases.find((p) => p.id === placement.phase.id)!;
+  const isCurrentPhase = phase.id === placement.phase.id;
+  const phaseWeek = isCurrentPhase ? placement.week : 1;
+  const phaseIndex = phases.findIndex((p) => p.id === phase.id);
+  const absoluteWeekShown =
+    phaseWeek + phases.slice(0, phaseIndex).reduce((n, p) => n + p.weeks, 0);
   const phaseConfig = phaseEngineConfig(config, phase);
 
   const slots = ctx.slots
@@ -34,8 +51,8 @@ export default async function EditorPage() {
     ctx,
     config,
     phase,
-    week: placement.week,
-    absoluteWeek: placement.absoluteWeek,
+    week: phaseWeek,
+    absoluteWeek: absoluteWeekShown,
   });
 
   const supabase = await createClient();
@@ -124,10 +141,16 @@ export default async function EditorPage() {
   return (
     <ProgramEditor
       phase={{ id: phase.id, key: phase.key, name: phase.name, weeks: phase.weeks }}
-      week={placement.week}
-      absoluteWeek={placement.absoluteWeek}
-      isDeload={isDeloadWeek(placement.week, phaseConfig)}
-      waveIndex={weekInCycle(placement.week, phaseConfig.cycleWeeks)}
+      phaseOptions={phases.map((p) => ({
+        key: p.key,
+        active: p.id === phase.id,
+        current: p.id === placement.phase.id,
+      }))}
+      isCurrentPhase={isCurrentPhase}
+      week={phaseWeek}
+      absoluteWeek={absoluteWeekShown}
+      isDeload={isDeloadWeek(phaseWeek, phaseConfig)}
+      waveIndex={weekInCycle(phaseWeek, phaseConfig.cycleWeeks)}
       wave={[...phaseConfig.wave]}
       waveScope={
         phase.progression_mode === "fixed_pct"

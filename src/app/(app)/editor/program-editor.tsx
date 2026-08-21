@@ -83,6 +83,8 @@ function metaFor(day: DayView): string {
 
 export function ProgramEditor({
   phase,
+  phaseOptions,
+  isCurrentPhase,
   week,
   isDeload,
   waveIndex,
@@ -101,6 +103,10 @@ export function ProgramEditor({
   appliedTotal,
 }: {
   phase: { id: string; key: string; name: string; weeks: number };
+  /** Every phase of the season; `active` is the one on screen. */
+  phaseOptions: Array<{ key: string; active: boolean; current: boolean }>;
+  /** False when looking at a phase other than today's. */
+  isCurrentPhase: boolean;
   week: number;
   absoluteWeek: number;
   isDeload: boolean;
@@ -189,7 +195,9 @@ export function ProgramEditor({
             Plantilla semanal
           </h1>
           <span className="num flex-none text-[11px] leading-none text-faint">
-            {phase.key} · SEM {week}/{phase.weeks}
+            {isCurrentPhase
+              ? `${phase.key} · SEM ${week}/${phase.weeks}`
+              : `${phase.key} · ${phase.weeks} SEM`}
           </span>
         </div>
         <p className="mt-1.5 text-[12.5px] leading-[1.45] text-mid">
@@ -202,6 +210,27 @@ export function ProgramEditor({
       <SecondaryNav />
 
       <div className="min-h-0 flex-1 overflow-auto pb-6">
+        {/* Any phase is editable, not just the one being lived. */}
+        {phaseOptions.length > 1 ? (
+          <div className="flex flex-wrap gap-1.5 px-5 pt-3">
+            {phaseOptions.map((p) => (
+              <Link
+                key={p.key}
+                href={p.current ? "/editor" : `/editor?fase=${p.key}`}
+                aria-current={p.active ? "page" : undefined}
+                className={cn(
+                  "font-display flex h-9 items-center rounded-sm border px-3 text-[11px] leading-none font-semibold uppercase",
+                  p.active
+                    ? "border-transparent bg-strength text-on-strength"
+                    : "border-edge bg-soft text-mid",
+                )}
+              >
+                {p.key}
+                {p.current ? <span className="ml-1 opacity-70">· hoy</span> : null}
+              </Link>
+            ))}
+          </div>
+        ) : null}
         {error ? (
           <div className="mx-5 mt-3 rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[12.5px] leading-[1.5]">
             {error}
@@ -619,16 +648,25 @@ export function ProgramEditor({
           </p>
         )}
 
-        <div className="mt-3.5 px-5">
-          <AiPanel
-            hasApiKey={hasApiKey}
-            initialMessages={thread.messages.filter((m) => m.role !== "system")}
-            initialThreadId={thread.id}
-            initialProposal={pendingProposal}
-            lastApplied={lastApplied}
-            appliedTotal={appliedTotal}
-          />
-        </div>
+        {/* proposeChanges is pinned to today's phase server-side, so the
+            panel only appears there — a proposal drafted while looking at
+            F4 must not land on F2. */}
+        {isCurrentPhase ? (
+          <div className="mt-3.5 px-5">
+            <AiPanel
+              hasApiKey={hasApiKey}
+              initialMessages={thread.messages.filter((m) => m.role !== "system")}
+              initialThreadId={thread.id}
+              initialProposal={pendingProposal}
+              lastApplied={lastApplied}
+              appliedTotal={appliedTotal}
+            />
+          </div>
+        ) : (
+          <p className="px-5 pt-4 text-[12.5px] leading-[1.5] text-faint">
+            La IA propone solo sobre la fase en curso. Esta la editas a mano.
+          </p>
+        )}
 
         {/* The motor folded behind a line: it sets every weight on the
             screen above, and is read a tenth as often. */}
@@ -707,7 +745,7 @@ export function ProgramEditor({
                         type="button"
                         aria-label={`Bajar la semana ${i + 1} de la ola`}
                         disabled={pending}
-                        onClick={() => run(() => setWaveStep(i, -0.01))}
+                        onClick={() => run(() => setWaveStep(i, -0.01, phase.id))}
                         className="flex h-[30px] flex-1 items-center justify-center rounded-sm border border-edge bg-soft text-[15px] leading-none font-bold text-mid disabled:opacity-40"
                       >
                         −
@@ -716,7 +754,7 @@ export function ProgramEditor({
                         type="button"
                         aria-label={`Subir la semana ${i + 1} de la ola`}
                         disabled={pending}
-                        onClick={() => run(() => setWaveStep(i, 0.01))}
+                        onClick={() => run(() => setWaveStep(i, 0.01, phase.id))}
                         className="flex h-[30px] flex-1 items-center justify-center rounded-sm border border-edge bg-soft text-[15px] leading-none font-bold text-mid disabled:opacity-40"
                       >
                         +
