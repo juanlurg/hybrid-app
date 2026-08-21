@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { Chip, Row, RowStack, SessionRow } from "@/components/ui/kit";
@@ -19,6 +20,8 @@ export interface HistoryEntry {
   dateLabel: string;
   incomplete: boolean;
   details: Array<{ label: string; value: string }>;
+  /** The session's own screen, when it has one. */
+  href: string | null;
 }
 
 type Filter = "all" | "strength" | "run" | "incomplete";
@@ -110,6 +113,14 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
                         </span>
                       </div>
                     ))}
+                    {entry.href ? (
+                      <Link
+                        href={entry.href}
+                        className="pt-1 text-[13px] leading-none font-medium text-lime"
+                      >
+                        {entry.group === "run" ? "ver carrera ›" : "ver resumen ›"}
+                      </Link>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

@@ -120,6 +120,7 @@ on Programa, Historial, Editar and Ajustes.
 | `/progreso` | Per-lift chart, engine breakdown, Pa:HR |
 | `/programa` | RMs, calculadora de RM (Epley), regression rule, engine parameters |
 | `/carrera/[fecha]` | Run blocks, HR zones, mark done |
+| `/fuerza/[fecha]` | Strength day read-only, any date + within-week catch-up |
 | `/movilidad` | Guided / list mobility block |
 | `/historial` | Consistency grid, records, log, engine timeline |
 | `/editor` | Weekly template editor + AI refinement |

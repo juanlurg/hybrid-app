@@ -36,9 +36,8 @@ interface WeekSession {
 }
 
 /**
- * Where a row leads. Only real destinations get a link: a session that
- * exists goes to its own screen, everything else to the screen that owns
- * that kind of day.
+ * Where a row leads. A session that exists goes to its own screen; any
+ * other strength day — future, past, skipped — opens read-only by date.
  */
 function hrefFor(
   day: ResolvedDay,
@@ -52,7 +51,7 @@ function hrefFor(
     return `/sesion/${session.id}/resumen`;
   }
   if (session?.status === "in_progress") return `/sesion/${session.id}`;
-  return day.date === today ? "/" : undefined;
+  return day.date === today ? "/" : `/fuerza/${day.date}`;
 }
 
 /**
@@ -154,7 +153,14 @@ export default async function SemanaPage({
         eyebrow={`${program.name} · ${phase.key}`}
         title={`Semana ${week} de ${phase.weeks}`}
         subtitle={note}
-        right={<WeekNav absoluteWeek={absoluteWeek} seasonWeeks={seasonWeeks} />}
+        right={
+          <WeekNav
+            absoluteWeek={absoluteWeek}
+            seasonWeeks={seasonWeeks}
+            week={week}
+            phaseWeeks={phase.weeks}
+          />
+        }
       />
 
       <div className="flex-1 overflow-auto">
@@ -297,7 +303,13 @@ export default async function SemanaPage({
           </RowStack>
         )}
 
-        <SectionLabel>
+        <SectionLabel
+          right={
+            <span className="num">
+              SEM {absoluteWeek}/{lastWeek}
+            </span>
+          }
+        >
           TEMPORADA · {formatSeasonRange(seasonStart, seasonEnd).toUpperCase()}
         </SectionLabel>
 

@@ -6,10 +6,10 @@ import { useTransition } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * The − / value / + stepper next to the header eyebrow. It moves the
- * *absolute* season week, so the well spells that coordinate out — the
- * title next to it counts weeks inside the phase, which is a different
- * number.
+ * The − / value / + stepper next to the header eyebrow. Navigation moves
+ * the *absolute* season week through the URL, but the well counts weeks
+ * inside the phase — the same number the title and the engine speak. The
+ * absolute coordinate lives on the season strip below.
  *
  * Navigation is a URL change so the server re-resolves the plan for that
  * week — no client-side plan maths, ever.
@@ -17,9 +17,13 @@ import { cn } from "@/lib/cn";
 export function WeekNav({
   absoluteWeek,
   seasonWeeks,
+  week,
+  phaseWeeks,
 }: {
   absoluteWeek: number;
   seasonWeeks: number;
+  week: number;
+  phaseWeeks: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -53,8 +57,8 @@ export function WeekNav({
         aria-live="polite"
         className="num flex h-8 flex-none items-center justify-center rounded-sm border border-edge bg-surface px-2.5 text-[12px] leading-none font-semibold"
       >
-        <span className="sr-only">Semana de temporada </span>
-        {absoluteWeek}/{last}
+        <span className="sr-only">Semana de la fase </span>
+        {week}/{phaseWeeks}
       </div>
       <button
         type="button"

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
+import { formatDayShort, type IsoDate } from "@/lib/domain/calendar";
 import { resolveDay, type ResolvedExercise } from "@/lib/domain/plan";
 import { createClient } from "@/lib/supabase/server";
 import { formatWeight } from "@/lib/engine";
@@ -34,8 +35,12 @@ function shortLoad(e: ResolvedExercise): { label: string; muted: boolean } {
 
 export default async function HoyPage() {
   const athlete = await requireAthlete();
-  const { ctx, config, placement } = athlete;
+  const { ctx, config, placement, today } = athlete;
   const phase = ctx.phases.find((p) => p.id === placement.phase.id)!;
+  // Before the season, placeDate clamps to week 1 Monday: Hoy previews
+  // that day, and says so instead of wearing a future date in silence.
+  const preSeason =
+    placement.date !== today && today < (ctx.program.starts_on as IsoDate);
 
   const day = resolveDay(
     {
@@ -111,6 +116,17 @@ export default async function HoyPage() {
 
       <div className="flex-1 overflow-auto pt-4 pb-6">
         <SyncStatus />
+
+        {preSeason ? (
+          <div className="mb-3.5 px-5">
+            <Callout eyebrow="El plan aún no ha empezado">
+              Empieza el lunes{" "}
+              {formatDayShort(ctx.program.starts_on as IsoDate)}. Esto es un
+              adelanto de ese día: lo que entrenes antes se guarda en el
+              historial con su fecha real y no marca ningún día del plan.
+            </Callout>
+          </div>
+        ) : null}
 
         {primary ? (
           <div className="px-5">
