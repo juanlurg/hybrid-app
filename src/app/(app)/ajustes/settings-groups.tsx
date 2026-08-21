@@ -24,6 +24,13 @@ import {
   updateProfile,
 } from "@/lib/actions/profile";
 import { cn } from "@/lib/cn";
+import {
+  addDays,
+  dayIndexOf,
+  daysBetween,
+  formatDayShort,
+  type IsoDate,
+} from "@/lib/domain/calendar";
 import { formatWeight, round2 } from "@/lib/engine";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -158,9 +165,22 @@ export function SettingsGroups({
   const [error, setError] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [cleared, setCleared] = useState(false);
-  const [shiftDays, setShiftDays] = useState(7);
+  // The shift is picked as a destination date, not tapped out in ±1 days:
+  // "empezar el lunes X" is the sentence the athlete is actually saying.
+  const activeStartsOn =
+    (programs.find((p) => p.is_active)?.starts_on as IsoDate | null) ?? null;
+  const [shiftTarget, setShiftTarget] = useState<string>(() =>
+    activeStartsOn ? addDays(activeStartsOn, 7) : "",
+  );
   const [confirmShift, setConfirmShift] = useState(false);
   const [shifted, setShifted] = useState<number | null>(null);
+
+  const shiftValid = /^\d{4}-\d{2}-\d{2}$/.test(shiftTarget);
+  const shiftDelta =
+    activeStartsOn && shiftValid
+      ? daysBetween(activeStartsOn, shiftTarget as IsoDate)
+      : 0;
+  const shiftInRange = shiftDelta !== 0 && Math.abs(shiftDelta) <= 90;
 
   const plates = (profile.plates_kg ?? [])
     .map(Number)
@@ -260,15 +280,16 @@ export function SettingsGroups({
   }
 
   function doShift() {
+    if (!shiftInRange) return;
     setConfirmShift(false);
     setError(null);
     startTransition(async () => {
-      const res = await shiftProgram(shiftDays);
+      const res = await shiftProgram(shiftDelta);
       if (!res.ok) {
         setError(res.error ?? "No se ha podido desplazar el plan.");
         return;
       }
-      setShifted(shiftDays);
+      setShifted(shiftDelta);
       router.refresh();
     });
   }
@@ -362,20 +383,6 @@ export function SettingsGroups({
           />
         </SettingRow>
 
-        <SettingRow name="Altura" sub="Solo registro: no entra en ningún cálculo">
-          <Stepper
-            label="altura"
-            value={
-              profile.height_cm == null ? "—" : `${profile.height_cm} cm`
-            }
-            onDecrement={() =>
-              save({ height_cm: bump(profile.height_cm, -1, 175, 120, 230) })
-            }
-            onIncrement={() =>
-              save({ height_cm: bump(profile.height_cm, 1, 175, 120, 230) })
-            }
-          />
-        </SettingRow>
       </Group>
 
       {/* ── equipo ─────────────────────────────────────────────── */}
@@ -730,26 +737,6 @@ export function SettingsGroups({
         </SettingRow>
       </Group>
 
-      {/* ── cuenta ─────────────────────────────────────────────── */}
-      <SectionLabel>Cuenta</SectionLabel>
-      <Group>
-        <SettingRow name="Correo" sub="La cuenta con la que entras">
-          <span className="font-display text-[13.5px] leading-none font-semibold">
-            {email ?? "sin correo"}
-          </span>
-        </SettingRow>
-        <form action={signOut}>
-          <SettingRow
-            name="Cerrar sesión"
-            sub="Habrá que volver a entrar con la contraseña"
-          >
-            <button type="submit" className={ACTION}>
-              Salir
-            </button>
-          </SettingRow>
-        </form>
-      </Group>
-
       {/* ── datos ──────────────────────────────────────────────── */}
       <SectionLabel right={status()}>Datos</SectionLabel>
       <SyncStatus />
@@ -816,42 +803,112 @@ export function SettingsGroups({
           />
         ) : null}
 
+      </Group>
+
+      {/* ── cuenta y registro ──────────────────────────────────── */}
+      {/* The rows that do nothing to the plan live together, at the end:
+          a saturated screen cannot afford inert rows up top. */}
+      <SectionLabel right={status()}>Cuenta y registro</SectionLabel>
+      <Group>
+        <SettingRow name="Correo" sub="La cuenta con la que entras">
+          <span className="font-display text-[13.5px] leading-none font-semibold">
+            {email ?? "sin correo"}
+          </span>
+        </SettingRow>
+        <SettingRow name="Altura" sub="Solo registro: no entra en ningún cálculo">
+          <Stepper
+            label="altura"
+            value={
+              profile.height_cm == null ? "—" : `${profile.height_cm} cm`
+            }
+            onDecrement={() =>
+              save({ height_cm: bump(profile.height_cm, -1, 175, 120, 230) })
+            }
+            onIncrement={() =>
+              save({ height_cm: bump(profile.height_cm, 1, 175, 120, 230) })
+            }
+          />
+        </SettingRow>
+        <form action={signOut}>
+          <SettingRow
+            name="Cerrar sesión"
+            sub="Habrá que volver a entrar con la contraseña"
+          >
+            <button type="submit" className={ACTION}>
+              Salir
+            </button>
+          </SettingRow>
+        </form>
+      </Group>
+
+      {/* ── zona de peligro ────────────────────────────────────── */}
+      {/* Bulk moves and deletions do not sit beside the export button. */}
+      <SectionLabel right={status()}>
+        <span className="text-fail">Zona de peligro</span>
+      </SectionLabel>
+      <Group className="border-fail/40">
         <SettingRow
           name="Desplazar el plan"
           sub="El calendario manda: lo no hecho se pierde. Esto mueve todas las fases en bloque; lo ya registrado y la carrera no se mueven."
           below={
-            <div className="flex items-center gap-1.5">
-              {confirmShift ? (
-                <>
-                  <Chip active onClick={doShift}>
-                    Sí, {shiftDays > 0 ? "+" : ""}
-                    {shiftDays} días
-                  </Chip>
-                  <Chip onClick={() => setConfirmShift(false)}>Cancelar</Chip>
-                </>
-              ) : (
-                <Chip onClick={() => setConfirmShift(true)}>Desplazar…</Chip>
-              )}
-              {shifted != null ? (
-                <span className="text-[11px] leading-none text-mid">
-                  Plan desplazado {shifted > 0 ? "+" : ""}
-                  {shifted} días.
-                </span>
-              ) : null}
-            </div>
+            activeStartsOn ? (
+              <div className="flex flex-col gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <input
+                    type="date"
+                    value={shiftTarget}
+                    aria-label="Nueva fecha de inicio del plan"
+                    onChange={(e) => {
+                      setShiftTarget(e.target.value);
+                      setConfirmShift(false);
+                    }}
+                    className="num h-9 rounded-sm border border-edge bg-soft px-2 text-[13.5px] leading-none font-semibold"
+                  />
+                  <span className="num text-[11.5px] leading-none text-mid">
+                    {!shiftValid
+                      ? "elige una fecha"
+                      : shiftDelta === 0
+                        ? "sin cambio"
+                        : Math.abs(shiftDelta) > 90
+                          ? "máximo 90 días"
+                          : `${shiftDelta > 0 ? "+" : ""}${shiftDelta} días`}
+                  </span>
+                </div>
+                {shiftValid && dayIndexOf(shiftTarget as IsoDate) !== 0 ? (
+                  <div className="text-[11px] leading-[1.35] font-semibold text-warn">
+                    No es lunes: el plan cuenta semanas de lunes a domingo
+                  </div>
+                ) : null}
+                <div className="flex items-center gap-1.5">
+                  {confirmShift ? (
+                    <>
+                      <Chip active onClick={doShift}>
+                        Sí, empezar el {formatDayShort(shiftTarget as IsoDate)}
+                      </Chip>
+                      <Chip onClick={() => setConfirmShift(false)}>
+                        Cancelar
+                      </Chip>
+                    </>
+                  ) : shiftInRange ? (
+                    <Chip onClick={() => setConfirmShift(true)}>
+                      Desplazar…
+                    </Chip>
+                  ) : null}
+                  {shifted != null ? (
+                    <span className="text-[11px] leading-none text-mid">
+                      Plan desplazado {shifted > 0 ? "+" : ""}
+                      {shifted} días.
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <div className="text-[11px] leading-[1.35] text-faint">
+                Sin programa activo no hay nada que desplazar.
+              </div>
+            )
           }
-        >
-          <Stepper
-            label="días de desplazamiento"
-            value={`${shiftDays > 0 ? "+" : ""}${shiftDays} d`}
-            onDecrement={() =>
-              setShiftDays((d) => Math.max(-90, d - 1 === 0 ? -1 : d - 1))
-            }
-            onIncrement={() =>
-              setShiftDays((d) => Math.min(90, d + 1 === 0 ? 1 : d + 1))
-            }
-          />
-        </SettingRow>
+        />
 
         <SettingRow
           name={<span className="text-fail">Borrar historial</span>}
@@ -901,10 +958,18 @@ export function SettingsGroups({
 /* ── row scaffolding ──────────────────────────────────────────── */
 
 /** A group of settings: one card, a hairline between each. */
-function Group({ children }: { children: ReactNode }) {
+function Group({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <div className="mt-2 px-5">
-      <Card className="divide-y divide-line px-4 py-1">{children}</Card>
+      <Card className={cn("divide-y divide-line px-4 py-1", className)}>
+        {children}
+      </Card>
     </div>
   );
 }
