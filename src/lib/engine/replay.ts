@@ -152,10 +152,20 @@ export function replayEngine(input: ReplayInput): ReplayResult {
     // The hold is a cap that only some weeks reach: a clean deload (or
     // early-cycle week) never tested the held weight, so it must not
     // release it — "se repite cuando la ola lo alcance" has to stay
-    // true. Only a clean session where the cap actually bound clears
-    // the hold; a plain fail-count (no hold) clears on any clean one.
-    const tested = !lift.hold || workingWeight(lift, week, config).isHeld;
-    if (tested) {
+    // true. And prescription alone is not proof either: dropping the
+    // load with the runner's stepper and hitting the range never moved
+    // the held weight, so at least one clean set must have carried it.
+    // A null logged weight is a pre-stepper row, lifted at the
+    // prescription — which under a binding cap IS the held weight.
+    // A plain fail-count (no hold) clears on any clean session.
+    const heldTested =
+      !lift.hold ||
+      (workingWeight(lift, week, config).isHeld &&
+        primaryLogs.some(
+          (l) =>
+            (l.weightKg ?? lift.holdAtKg ?? 0) >= (lift.holdAtKg ?? 0) - 0.001,
+        ));
+    if (heldTested) {
       const next = registerCleanSession(lift);
       released = next !== lift;
       lift = next;

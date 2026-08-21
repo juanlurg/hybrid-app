@@ -133,7 +133,8 @@ on Programa, Historial, Editar and Ajustes.
    Never compute a load in a component. The athlete may still log a
    different one: the runner's stepper moves it with `nextLoadableWeight()`
    and the load travels with the set (`set_logs.weight_kg`), so the
-   regression holds at the weight actually missed.
+   regression holds at the weight actually missed — and only a clean
+   session at (or above) the held weight releases the hold.
 2. **Only the basic of the day moves the engine.** Accessories never trigger
    a regression — say so in the UI where it matters.
 3. **The AI proposes, the athlete disposes.** Changes are a diff to tick.
