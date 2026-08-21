@@ -14,6 +14,7 @@ import {
   DAY_LABELS,
   formatDayShort,
   formatSeasonRange,
+  phaseEnd,
   type IsoDate,
 } from "@/lib/domain/calendar";
 import { cycleOf, isDeloadWeek, waveFactor } from "@/lib/engine";
@@ -27,6 +28,7 @@ import { accentFor, STATUS_LABEL, statusTone } from "@/components/day-accents";
 import { SkipDayButton } from "@/components/session/start-session-button";
 import { cn } from "@/lib/cn";
 
+import { PhaseBar, type PhaseInfo } from "./phase-bar";
 import { WeekNav } from "./week-nav";
 
 /** The bit of a `sessions` row this screen needs. */
@@ -145,7 +147,50 @@ export default async function SemanaPage({
   const seasonEnd = (program.ends_on ??
     addDays(seasonStart, lastWeek * 7 - 1)) as IsoDate;
 
+  const barPhases: PhaseInfo[] = phases.map((p, i) => {
+    const firstAbsoluteWeek =
+      1 + phases.slice(0, i).reduce((n, q) => n + q.weeks, 0);
+    const startsOn = p.starts_on as IsoDate | null;
+    return {
+      id: p.id,
+      key: p.key,
+      name: p.name,
+      emphasis: p.emphasis,
+      notes: p.notes,
+      priority: p.priority,
+      weeks: p.weeks,
+      rangeLabel: startsOn
+        ? formatSeasonRange(
+            startsOn,
+            phaseEnd({
+              id: p.id,
+              key: p.key,
+              name: p.name,
+              position: p.position,
+              weeks: p.weeks,
+              startsOn,
+            }),
+          )
+        : null,
+      firstAbsoluteWeek,
+      current: p.id === phase.id,
+    };
+  });
+
   const planned = days.filter((d) => d.slot).length;
+
+  // The broken-week note only makes sense on the week being lived now.
+  const viewingCurrentWeek = absoluteWeek === athlete.placement.absoluteWeek;
+  const missedDays = viewingCurrentWeek
+    ? days.filter((d) => {
+        if (!d.slot || (d.group !== "strength" && d.group !== "run")) {
+          return false;
+        }
+        if (d.date >= today) return false;
+        const s = sessionFor(d);
+        return (s?.status ?? "planned") === "planned";
+      }).length
+    : 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -303,6 +348,13 @@ export default async function SemanaPage({
           </RowStack>
         )}
 
+        {missedDays > 0 && phase.priority ? (
+          <Footnote>
+            Con la semana rota, el orden de prioridad de {phase.key}:{" "}
+            {phase.priority}.
+          </Footnote>
+        ) : null}
+
         <SectionLabel
           right={
             <span className="num">
@@ -313,25 +365,7 @@ export default async function SemanaPage({
           TEMPORADA · {formatSeasonRange(seasonStart, seasonEnd).toUpperCase()}
         </SectionLabel>
 
-        <div className="mt-2.5 flex gap-1 px-5">
-          {phases.map((p) => {
-            const current = p.id === phase.id;
-            return (
-              <div
-                key={p.id}
-                style={{ flex: p.weeks }}
-                className={cn(
-                  "font-display flex h-[34px] min-w-0 items-center justify-center rounded-sm px-1 text-[11px] leading-none uppercase",
-                  current
-                    ? "bg-strength font-bold text-on-strength"
-                    : "border border-line bg-surface font-semibold text-faint",
-                )}
-              >
-                <span className="truncate">{p.key}</span>
-              </div>
-            );
-          })}
-        </div>
+        <PhaseBar phases={barPhases} />
 
         <div className="flex items-baseline gap-3 px-5 pt-2.5 pb-6">
           <span className="min-w-0 flex-1 truncate text-[13px] leading-[1.2] font-semibold">

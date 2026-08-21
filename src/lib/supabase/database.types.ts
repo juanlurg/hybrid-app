@@ -728,6 +728,7 @@ export type Database = {
           notes: string
           pct_of_rm: number | null
           position: number
+          priority: string
           program_id: string
           progression_mode: string
           starts_on: string | null
@@ -744,6 +745,7 @@ export type Database = {
           notes?: string
           pct_of_rm?: number | null
           position: number
+          priority?: string
           program_id: string
           progression_mode?: string
           starts_on?: string | null
@@ -760,6 +762,7 @@ export type Database = {
           notes?: string
           pct_of_rm?: number | null
           position?: number
+          priority?: string
           program_id?: string
           progression_mode?: string
           starts_on?: string | null
