@@ -19,10 +19,13 @@ import { SessionRunner } from "@/components/session/session-runner";
 
 export default async function SessionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ corregir?: string | string[] }>;
 }) {
   const { id } = await params;
+  const { corregir } = await searchParams;
   const athlete = await requireAthlete();
   const supabase = await createClient();
 
@@ -39,7 +42,12 @@ export default async function SessionPage({
   // Not in the database yet: a session started offline whose flush has
   // not landed. The device that opened it holds it in IndexedDB.
   if (!session) return <LocalSessionRunner sessionId={id} />;
-  if (session.status === "done" || session.status === "partial") {
+  // A closed session normally lives at its resumen; ?corregir reopens
+  // the runner on the same idempotent ops — finishing re-grades it.
+  if (
+    (session.status === "done" || session.status === "partial") &&
+    corregir == null
+  ) {
     redirect(`/sesion/${id}/resumen`);
   }
 
@@ -86,9 +94,19 @@ export default async function SessionPage({
       (e) =>
         (e.kind === "fail_hold" || e.kind === "fail_penalty") && e.dedup_key,
     );
+    // Clean releases rewind too — same rule as the sync route: without
+    // their `previous`, correcting a clean session would fold from the
+    // already-released state.
+    const rewindEvents = (events ?? []).filter(
+      (e) =>
+        (e.kind === "fail_hold" ||
+          e.kind === "fail_penalty" ||
+          e.kind === "clean_reset") &&
+        e.dedup_key,
+    );
     preLift = preSessionLiftState(
       liftStateFrom(liftRow),
-      failEvents.map((e) => ({
+      rewindEvents.map((e) => ({
         createdAt: e.created_at,
         previous: parsePreviousLiftState(
           (e.payload as { previous?: unknown } | null)?.previous,
