@@ -56,6 +56,13 @@ export const sessionEnvelopeSchema = z.object({
   undoneFailures: z
     .array(z.object({ position: z.number().int(), setIndex: z.number().int() }))
     .max(50),
+  // Optional-with-default so queues from clients built before the field
+  // existed still drain after a deploy — same protocolVersion.
+  unlogs: z
+    .array(z.object({ position: z.number().int(), setIndex: z.number().int() }))
+    .max(50)
+    .optional()
+    .default([]),
   finish: z
     .object({
       finishedAt: z.string(),

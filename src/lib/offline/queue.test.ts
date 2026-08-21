@@ -45,6 +45,13 @@ function set(setIndex: number, reps: number, loggedAt: string): QueueOp {
   };
 }
 
+const unlog = (setIndex: number): QueueOp => ({
+  kind: "set_unlog",
+  localSessionId: "loc-1",
+  position: 1,
+  setIndex,
+});
+
 describe("queue reducers", () => {
   it("re-logging the same set replaces the op — local last write wins", () => {
     let q = enqueue(EMPTY_QUEUE, set(0, 6, "t1"));
@@ -52,6 +59,25 @@ describe("queue reducers", () => {
     expect(pendingCount(q)).toBe(1);
     const op = q.ops[opKey(set(0, 0, ""))];
     expect(op.kind === "set_log" && op.reps).toBe(4);
+  });
+
+  it("an unlog replaces an unflushed log under the same key — the server never sees the set", () => {
+    let q = enqueue(EMPTY_QUEUE, set(0, 6, "t1"));
+    q = enqueue(q, unlog(0));
+    expect(pendingCount(q)).toBe(1);
+    expect(q.ops[opKey(unlog(0))].kind).toBe("set_unlog");
+    const { sessions } = buildEnvelopes(q);
+    expect(sessions[0].sets).toHaveLength(0);
+    expect(sessions[0].unlogs).toEqual([{ position: 1, setIndex: 0 }]);
+  });
+
+  it("a re-log replaces a queued unlog — one op per set, ever", () => {
+    let q = enqueue(EMPTY_QUEUE, unlog(0));
+    q = enqueue(q, set(0, 5, "t2"));
+    expect(pendingCount(q)).toBe(1);
+    const { sessions } = buildEnvelopes(q);
+    expect(sessions[0].unlogs).toHaveLength(0);
+    expect(sessions[0].sets).toHaveLength(1);
   });
 
   it("ack removes exactly what the server confirmed", () => {

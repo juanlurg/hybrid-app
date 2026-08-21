@@ -25,6 +25,7 @@ import { weightLabelFor, type ResolvedExercise } from "@/lib/domain/plan";
 import {
   createLocalSession,
   recordLocalSet,
+  removeLocalSet,
   undoLocalFailure,
   finishLocalSession,
   type LocalSessionState,
@@ -276,7 +277,14 @@ export function SessionRunner({
 
   const currentWeight = weightAt(exercise, editingIndex);
 
-  const doneForExercise = countDone(logs, exercise.id, exercise.sets);
+  // The next set to log is the first WITHOUT an entry, not "count done":
+  // deleting a set leaves a gap, and the gap is what gets filled next.
+  const nextFreeIndex = (() => {
+    for (let i = 0; i < exercise.sets; i++) {
+      if (!logs[keyOf(exercise.id, i)]) return i;
+    }
+    return exercise.sets;
+  })();
   const totalSets = exercises.reduce((acc, e) => acc + e.sets, 0);
   const totalDone = exercises.reduce(
     (acc, e) => acc + countDone(logs, e.id, e.sets),
@@ -340,7 +348,7 @@ export function SessionRunner({
     // superset jump, no advancing.
     const overwrite =
       atIndex != null && Boolean(logs[keyOf(exercise.id, atIndex)]);
-    const setIndex = atIndex ?? doneForExercise;
+    const setIndex = atIndex ?? nextFreeIndex;
     if (setIndex >= exercise.sets) {
       advance(exIndex);
       return;
@@ -485,6 +493,33 @@ export function SessionRunner({
     });
   }
 
+  /**
+   * Unmark a set: the mis-tap stops counting as done. The op shares the
+   * set_log key, so exactly one of {log, unlog} per set ever flushes;
+   * server-side the row is deleted and the replay heals the engine.
+   */
+  function unlogSet(setIndex: number) {
+    const k = keyOf(exercise.id, setIndex);
+    if (!logs[k]) return;
+    setLogs((prev) => {
+      const next = { ...prev };
+      delete next[k];
+      return next;
+    });
+    setRepsOpen(false);
+    setEditingIndex(null);
+    setPendingRir(null);
+    startTransition(async () => {
+      await withLocal((s) => removeLocalSet(s, exercise.position, setIndex));
+      await enqueueAndFlush({
+        kind: "set_unlog",
+        localSessionId: sessionId,
+        position: exercise.position,
+        setIndex,
+      });
+    });
+  }
+
   function undoFailure() {
     if (!lastLiveFailure) return;
     const target = lastLiveFailure;
@@ -516,7 +551,7 @@ export function SessionRunner({
     return out;
   }, [exercise.repMax, exercise.effort]);
 
-  const setNumber = Math.min(doneForExercise + 1, exercise.sets);
+  const setNumber = Math.min(nextFreeIndex + 1, exercise.sets);
   const eyebrow = exercise.isPrimary
     ? `Básico del día · serie ${setNumber}/${exercise.sets}`
     : exercise.supersetGroup != null
@@ -645,7 +680,7 @@ export function SessionRunner({
             const entry = logs[keyOf(exercise.id, i)];
             const bad = entry?.missed ?? false;
             const editing = editingIndex === i;
-            const current = !entry && i === doneForExercise;
+            const current = !entry && i === nextFreeIndex;
             return (
               <button
                 key={i}
@@ -810,6 +845,15 @@ export function SessionRunner({
                 ? "el motor reacciona: primero congela el peso, luego recorta la RM."
                 : "no pasa nada: los accesorios no tocan el motor."}
             </p>
+            {editingIndex != null && logs[keyOf(exercise.id, editingIndex)] ? (
+              <button
+                type="button"
+                onClick={() => unlogSet(editingIndex)}
+                className="mt-3 text-[12px] leading-none font-medium text-fail underline"
+              >
+                borrar serie {editingIndex + 1} — queda sin hacer
+              </button>
+            ) : null}
           </Card>
         ) : null}
 

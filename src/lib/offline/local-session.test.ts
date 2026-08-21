@@ -5,6 +5,7 @@ import {
   finishLocalSession,
   mergeServerLogs,
   recordLocalSet,
+  removeLocalSet,
   setLocalRest,
   undoLocalFailure,
 } from "./local-session";
@@ -23,6 +24,33 @@ const KEY: SessionKey = {
 const base = () => createLocalSession("loc-1", KEY, "2026-09-14T18:00:00Z");
 
 describe("local session reducers", () => {
+  it("removeLocalSet deletes exactly one entry and tolerates absence", () => {
+    let s = recordLocalSet(base(), {
+      position: 1,
+      setIndex: 0,
+      value: 6,
+      missed: false,
+      weightKg: 90,
+      rir: null,
+      timed: false,
+      loggedAt: "t1",
+    });
+    s = recordLocalSet(s, {
+      position: 1,
+      setIndex: 1,
+      value: 6,
+      missed: false,
+      weightKg: 90,
+      rir: null,
+      timed: false,
+      loggedAt: "t2",
+    });
+    const removed = removeLocalSet(s, 1, 0);
+    expect(Object.keys(removed.logs)).toEqual(["1:1"]);
+    // Removing a set that is not there is a no-op, not an error.
+    expect(removeLocalSet(removed, 1, 0)).toBe(removed);
+  });
+
   it("re-recording a set overwrites it", () => {
     let s = recordLocalSet(base(), {
       position: 1,

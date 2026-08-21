@@ -197,6 +197,21 @@ export async function POST(request: Request) {
         slotExercises = archivedRows ?? [];
       }
 
+      /* ── deletions first: an unmarked set stops existing ──── */
+      // The replay below re-folds from whatever rows survive, and the
+      // stale-event reverter cleans up any fail event whose source set
+      // is gone — the engine needs no unlog concept of its own.
+      if (env.unlogs.length) {
+        for (const u of env.unlogs) {
+          const { error } = await supabase.from("set_logs").delete().match({
+            session_id: sessionId,
+            position: u.position,
+            set_index: u.setIndex,
+          });
+          if (error) throw new Error(error.message);
+        }
+      }
+
       /* ── upsert the sets, missed_range recomputed here ────── */
       if (env.sets.length) {
         const rows = env.sets.map((s) => {

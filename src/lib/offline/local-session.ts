@@ -86,6 +86,19 @@ export function recordLocalSet(
   };
 }
 
+/** Delete one logged set — the mirror of `recordLocalSet`. */
+export function removeLocalSet(
+  state: LocalSessionState,
+  position: number,
+  setIndex: number,
+): LocalSessionState {
+  const k = setKey(position, setIndex);
+  if (!(k in state.logs)) return state;
+  const logs = { ...state.logs };
+  delete logs[k];
+  return { ...state, logs };
+}
+
 export function undoLocalFailure(
   state: LocalSessionState,
   position: number,
