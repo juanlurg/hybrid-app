@@ -129,6 +129,9 @@ export function ProgramEditor({
     return i === -1 ? 0 : i;
   });
   const [editing, setEditing] = useState(false);
+  // One exercise's controls at a time: five rows of steppers all at once
+  // were ~55 tap targets, and none of them the one being changed.
+  const [openExerciseId, setOpenExerciseId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -221,6 +224,7 @@ export function ProgramEditor({
                   setSelected(i);
                   setOrphanSlotId(null);
                   setEditing(false);
+                  setOpenExerciseId(null);
                   setAddOpen(false);
                 }}
                 className={cn(
@@ -366,37 +370,28 @@ export function ProgramEditor({
                           ) : null}
                         </span>
                         {editing ? (
-                          <div className="flex flex-none items-center gap-1">
-                            <button
-                              type="button"
-                              aria-label="Subir"
-                              disabled={i === 0 || pending}
-                              onClick={() => run(() => moveExercise(e.id, -1))}
-                              className={ICON_BUTTON}
+                          <button
+                            type="button"
+                            aria-expanded={openExerciseId === e.id}
+                            aria-label={`Ajustar ${e.name}`}
+                            onClick={() =>
+                              setOpenExerciseId((v) =>
+                                v === e.id ? null : e.id,
+                              )
+                            }
+                            className="font-display -my-2 flex h-11 flex-none items-center gap-1.5 text-[12px] leading-none text-mid"
+                          >
+                            {schemeOf(e)}
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "text-[13px] leading-none text-faint transition-transform",
+                                openExerciseId === e.id && "rotate-45",
+                              )}
                             >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Bajar"
-                              disabled={
-                                i === slotExercises.length - 1 || pending
-                              }
-                              onClick={() => run(() => moveExercise(e.id, 1))}
-                              className={ICON_BUTTON}
-                            >
-                              ↓
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Quitar ${e.name}`}
-                              disabled={e.isPrimary || pending}
-                              onClick={() => run(() => deleteExercise(e.id))}
-                              className={ICON_BUTTON}
-                            >
-                              ×
-                            </button>
-                          </div>
+                              ＋
+                            </span>
+                          </button>
                         ) : (
                           <span className="font-display flex-none text-[12px] leading-none text-mid">
                             {schemeOf(e)}
@@ -404,7 +399,7 @@ export function ProgramEditor({
                         )}
                       </div>
 
-                      {editing ? (
+                      {editing && openExerciseId === e.id ? (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <span className="font-display text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
                             Series
@@ -481,6 +476,37 @@ export function ProgramEditor({
                               )
                             }
                           />
+                          <div className="ml-auto flex flex-none items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label="Subir"
+                              disabled={i === 0 || pending}
+                              onClick={() => run(() => moveExercise(e.id, -1))}
+                              className={ICON_BUTTON}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Bajar"
+                              disabled={
+                                i === slotExercises.length - 1 || pending
+                              }
+                              onClick={() => run(() => moveExercise(e.id, 1))}
+                              className={ICON_BUTTON}
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Quitar ${e.name}`}
+                              disabled={e.isPrimary || pending}
+                              onClick={() => run(() => deleteExercise(e.id))}
+                              className={ICON_BUTTON}
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
                       ) : null}
 
