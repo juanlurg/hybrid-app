@@ -424,8 +424,17 @@ parte decisiones a re-examinar, y se marcan como tales.
 
 ## 8 · hoja de ruta recomendada
 
-Nada de esto se implementa en esta rama. Orden dentro de cada ola ≈ ratio
-valor/esfuerzo.
+Orden dentro de cada ola ≈ ratio valor/esfuerzo.
+
+Estado (2026-08-21, misma rama, tras las 4 decisiones de producto): ola 1
+completa; ERR-01 de raíz (decisión 1: fecha real, plan sin marcar), FLEX-01
+en su variante semanal (decisión 2: recuperar dentro de la semana desde
+`/fuerza/[fecha]`), ERR-08 (decisión 4: liberar un hold exige el peso
+retenido), ERR-02 (`set_unlog`), ERR-07 (peso persistido + entrada directa)
+y PWA-01/02 v1 (decisión 3: aviso de descanso con hora absoluta, capa
+persistente solo Android) implementados; DEN-04 parcial (zona de peligro y
+reorden hechos; faltan las anclas). Quedan: FLEX-03/04, NAV-03/07,
+DEN-03/05/06 y ERR-06.
 
 **ola 1 — victorias rápidas (E1)**
 1. DEN-01 + DEN-02 — reps objetivo y discos por lado a tamaño legible.
