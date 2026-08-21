@@ -109,8 +109,12 @@ export function useSessionNotification({
   enabled: boolean;
   vibration: boolean;
 }) {
-  /** What the live rest is about — for the expiry body. */
-  const restCtx = useRef<{ exercise: string; setNumber: number } | null>(null);
+  /** What the live rest is about — for the expiry and extend bodies. */
+  const restCtx = useRef<{
+    exercise: string;
+    setNumber: number;
+    totalSets: number;
+  } | null>(null);
 
   const showRest = useCallback(
     (
@@ -120,12 +124,30 @@ export function useSessionNotification({
       restSeconds: number,
     ) => {
       if (!enabled) return;
-      restCtx.current = { exercise, setNumber };
+      restCtx.current = { exercise, setNumber, totalSets };
       const hhmm = new Date(
         Date.now() + restSeconds * 1000,
       ).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
       void post(
         `${exercise} · serie ${setNumber}/${totalSets} · descanso hasta las ${hhmm}`,
+        { silent: true },
+      );
+    },
+    [enabled],
+  );
+
+  /** +30″ moves the deadline; the absolute time in the tray must follow
+      or the honesty anchor lies. */
+  const extendRest = useCallback(
+    (secondsLeftNow: number) => {
+      if (!enabled) return;
+      const c = restCtx.current;
+      if (!c) return;
+      const hhmm = new Date(
+        Date.now() + secondsLeftNow * 1000,
+      ).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+      void post(
+        `${c.exercise} · serie ${c.setNumber}/${c.totalSets} · descanso hasta las ${hhmm}`,
         { silent: true },
       );
     },
@@ -178,7 +200,14 @@ export function useSessionNotification({
 
   // Stable identity: consumers hang effects off this object.
   return useMemo(
-    () => ({ showRest, showExpired, showProgress, dismissRest, clear }),
-    [showRest, showExpired, showProgress, dismissRest, clear],
+    () => ({
+      showRest,
+      extendRest,
+      showExpired,
+      showProgress,
+      dismissRest,
+      clear,
+    }),
+    [showRest, extendRest, showExpired, showProgress, dismissRest, clear],
   );
 }

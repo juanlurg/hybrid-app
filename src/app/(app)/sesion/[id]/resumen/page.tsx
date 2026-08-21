@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { TONE } from "@/components/day-accents";
@@ -620,6 +621,21 @@ export default async function ResumenPage({
             </Callout>
           </div>
         ) : null}
+
+        {/* Runs have had «editar datos» all along; strength catches up.
+            The runner reopens on the same idempotent ops and the finish
+            re-grades the session. */}
+        <Link
+          href={`/sesion/${session.id}?corregir=1`}
+          className="mt-3.5 flex items-center gap-2.5 px-6 py-1"
+        >
+          <span className="flex-1 text-[13px] leading-[1.4] text-mid">
+            Corregir la sesión · series, pesos, reps
+          </span>
+          <span aria-hidden className="text-[13px] leading-none text-faint">
+            ›
+          </span>
+        </Link>
 
         <div className="min-h-5 flex-1" />
       </div>

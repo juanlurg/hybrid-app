@@ -21,10 +21,18 @@ export interface PhaseInfo {
 
 /**
  * The season bar, tappable: each phase opens its own card — what it is
- * for (emphasis), how it runs (notes) and what to keep when a week
- * breaks (priority). The data always existed; now the athlete sees it.
+ * for (emphasis), how it runs (notes), what to keep when a week breaks
+ * (priority), and a chip per week so any week of the season is two taps
+ * away instead of n presses of the stepper.
  */
-export function PhaseBar({ phases }: { phases: PhaseInfo[] }) {
+export function PhaseBar({
+  phases,
+  activeAbsoluteWeek,
+}: {
+  phases: PhaseInfo[];
+  /** The absolute week the screen is currently showing. */
+  activeAbsoluteWeek: number;
+}) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = phases.find((p) => p.id === openId) ?? null;
 
@@ -84,12 +92,28 @@ export function PhaseBar({ phases }: { phases: PhaseInfo[] }) {
               {open.priority}
             </p>
           ) : null}
-          <Link
-            href={`/semana?semana=${open.firstAbsoluteWeek}`}
-            className="mt-2 inline-block text-[12.5px] leading-none font-medium text-lime"
-          >
-            ver semana 1 de esta fase ›
-          </Link>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {Array.from({ length: open.weeks }, (_, i) => {
+              const absolute = open.firstAbsoluteWeek + i;
+              const active = absolute === activeAbsoluteWeek;
+              return (
+                <Link
+                  key={absolute}
+                  href={`/semana?semana=${absolute}`}
+                  aria-label={`Semana ${i + 1} de ${open.key}`}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "num flex h-8 w-8 items-center justify-center rounded-sm border text-[12px] leading-none font-semibold",
+                    active
+                      ? "border-transparent bg-strength text-on-strength"
+                      : "border-edge bg-surface text-mid",
+                  )}
+                >
+                  {i + 1}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       ) : null}
     </>

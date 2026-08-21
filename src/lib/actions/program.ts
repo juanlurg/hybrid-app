@@ -273,13 +273,20 @@ export async function shiftProgram(days: number): Promise<Result> {
  * wave; only phases riding the program default edit programs.wave.
  * Fixed-% phases have no wave to edit at all.
  */
-export async function setWaveStep(index: number, delta: number): Promise<Result> {
+export async function setWaveStep(
+  index: number,
+  delta: number,
+  phaseId?: string,
+): Promise<Result> {
   const athlete = await guard();
   if (!athlete) return { ok: false, error: "Sin sesión iniciada." };
 
+  // The editor can look at any phase now; the write follows the phase it
+  // shows. No id means today's phase, as always.
   const phase = athlete.ctx.phases.find(
-    (p) => p.id === athlete.placement.phase.id,
+    (p) => p.id === (phaseId ?? athlete.placement.phase.id),
   );
+  if (phaseId && !phase) return { ok: false, error: "Fase desconocida." };
   if (phase?.progression_mode === "fixed_pct") {
     return {
       ok: false,

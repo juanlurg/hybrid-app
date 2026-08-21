@@ -8,7 +8,6 @@ import { SecondaryNav } from "@/components/app-shell";
 import {
   Card,
   Chip,
-  Row,
   RowStack,
   RuleNote,
   SectionLabel,
@@ -16,7 +15,6 @@ import {
 } from "@/components/ui/kit";
 import { accentFor, TONE } from "@/components/day-accents";
 import { cn } from "@/lib/cn";
-import { formatWeight } from "@/lib/engine";
 import { DAY_INITIALS } from "@/lib/domain/calendar";
 import type { SessionGroup } from "@/lib/domain/plan";
 import {
@@ -71,12 +69,6 @@ export interface CatalogEntry {
   pattern: string | null;
 }
 
-const RULE_LABEL: Record<string, string> = {
-  conservative: "CONSERVADORA",
-  standard: "ESTÁNDAR",
-  aggressive: "AGRESIVA",
-};
-
 const ICON_BUTTON =
   "flex h-8 w-8 flex-none items-center justify-center rounded-sm border border-edge bg-soft text-[13px] leading-none font-semibold text-mid disabled:opacity-30";
 
@@ -91,14 +83,14 @@ function metaFor(day: DayView): string {
 
 export function ProgramEditor({
   phase,
+  phaseOptions,
+  isCurrentPhase,
   week,
   isDeload,
-  cycle,
   waveIndex,
   wave,
   waveScope,
   pctOfRm,
-  params,
   days,
   slots,
   exercises,
@@ -111,22 +103,18 @@ export function ProgramEditor({
   appliedTotal,
 }: {
   phase: { id: string; key: string; name: string; weeks: number };
+  /** Every phase of the season; `active` is the one on screen. */
+  phaseOptions: Array<{ key: string; active: boolean; current: boolean }>;
+  /** False when looking at a phase other than today's. */
+  isCurrentPhase: boolean;
   week: number;
   absoluteWeek: number;
   isDeload: boolean;
-  cycle: number;
   waveIndex: number;
   wave: number[];
   /** Which wave the steppers edit — or none at all in a fixed-% phase. */
   waveScope: "phase" | "program" | "fixed";
   pctOfRm: number | null;
-  params: {
-    incLowerKg: number;
-    incUpperKg: number;
-    roundingKg: number;
-    targetRir: string;
-    regressionRule: string;
-  };
   days: DayView[];
   slots: SlotView[];
   exercises: ExerciseView[];
@@ -147,6 +135,9 @@ export function ProgramEditor({
     return i === -1 ? 0 : i;
   });
   const [editing, setEditing] = useState(false);
+  // One exercise's controls at a time: five rows of steppers all at once
+  // were ~55 tap targets, and none of them the one being changed.
+  const [openExerciseId, setOpenExerciseId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -204,7 +195,9 @@ export function ProgramEditor({
             Plantilla semanal
           </h1>
           <span className="num flex-none text-[11px] leading-none text-faint">
-            {phase.key} · SEM {week}/{phase.weeks}
+            {isCurrentPhase
+              ? `${phase.key} · SEM ${week}/${phase.weeks}`
+              : `${phase.key} · ${phase.weeks} SEM`}
           </span>
         </div>
         <p className="mt-1.5 text-[12.5px] leading-[1.45] text-mid">
@@ -217,6 +210,27 @@ export function ProgramEditor({
       <SecondaryNav />
 
       <div className="min-h-0 flex-1 overflow-auto pb-6">
+        {/* Any phase is editable, not just the one being lived. */}
+        {phaseOptions.length > 1 ? (
+          <div className="flex flex-wrap gap-1.5 px-5 pt-3">
+            {phaseOptions.map((p) => (
+              <Link
+                key={p.key}
+                href={p.current ? "/editor" : `/editor?fase=${p.key}`}
+                aria-current={p.active ? "page" : undefined}
+                className={cn(
+                  "font-display flex h-9 items-center rounded-sm border px-3 text-[11px] leading-none font-semibold uppercase",
+                  p.active
+                    ? "border-transparent bg-strength text-on-strength"
+                    : "border-edge bg-soft text-mid",
+                )}
+              >
+                {p.key}
+                {p.current ? <span className="ml-1 opacity-70">· hoy</span> : null}
+              </Link>
+            ))}
+          </div>
+        ) : null}
         {error ? (
           <div className="mx-5 mt-3 rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[12.5px] leading-[1.5]">
             {error}
@@ -239,6 +253,7 @@ export function ProgramEditor({
                   setSelected(i);
                   setOrphanSlotId(null);
                   setEditing(false);
+                  setOpenExerciseId(null);
                   setAddOpen(false);
                 }}
                 className={cn(
@@ -384,37 +399,28 @@ export function ProgramEditor({
                           ) : null}
                         </span>
                         {editing ? (
-                          <div className="flex flex-none items-center gap-1">
-                            <button
-                              type="button"
-                              aria-label="Subir"
-                              disabled={i === 0 || pending}
-                              onClick={() => run(() => moveExercise(e.id, -1))}
-                              className={ICON_BUTTON}
+                          <button
+                            type="button"
+                            aria-expanded={openExerciseId === e.id}
+                            aria-label={`Ajustar ${e.name}`}
+                            onClick={() =>
+                              setOpenExerciseId((v) =>
+                                v === e.id ? null : e.id,
+                              )
+                            }
+                            className="font-display -my-2 flex h-11 flex-none items-center gap-1.5 text-[12px] leading-none text-mid"
+                          >
+                            {schemeOf(e)}
+                            <span
+                              aria-hidden
+                              className={cn(
+                                "text-[13px] leading-none text-faint transition-transform",
+                                openExerciseId === e.id && "rotate-45",
+                              )}
                             >
-                              ↑
-                            </button>
-                            <button
-                              type="button"
-                              aria-label="Bajar"
-                              disabled={
-                                i === slotExercises.length - 1 || pending
-                              }
-                              onClick={() => run(() => moveExercise(e.id, 1))}
-                              className={ICON_BUTTON}
-                            >
-                              ↓
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Quitar ${e.name}`}
-                              disabled={e.isPrimary || pending}
-                              onClick={() => run(() => deleteExercise(e.id))}
-                              className={ICON_BUTTON}
-                            >
-                              ×
-                            </button>
-                          </div>
+                              ＋
+                            </span>
+                          </button>
                         ) : (
                           <span className="font-display flex-none text-[12px] leading-none text-mid">
                             {schemeOf(e)}
@@ -422,7 +428,7 @@ export function ProgramEditor({
                         )}
                       </div>
 
-                      {editing ? (
+                      {editing && openExerciseId === e.id ? (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <span className="font-display text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
                             Series
@@ -499,6 +505,37 @@ export function ProgramEditor({
                               )
                             }
                           />
+                          <div className="ml-auto flex flex-none items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label="Subir"
+                              disabled={i === 0 || pending}
+                              onClick={() => run(() => moveExercise(e.id, -1))}
+                              className={ICON_BUTTON}
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              aria-label="Bajar"
+                              disabled={
+                                i === slotExercises.length - 1 || pending
+                              }
+                              onClick={() => run(() => moveExercise(e.id, 1))}
+                              className={ICON_BUTTON}
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Quitar ${e.name}`}
+                              disabled={e.isPrimary || pending}
+                              onClick={() => run(() => deleteExercise(e.id))}
+                              className={ICON_BUTTON}
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
                       ) : null}
 
@@ -611,16 +648,25 @@ export function ProgramEditor({
           </p>
         )}
 
-        <div className="mt-3.5 px-5">
-          <AiPanel
-            hasApiKey={hasApiKey}
-            initialMessages={thread.messages.filter((m) => m.role !== "system")}
-            initialThreadId={thread.id}
-            initialProposal={pendingProposal}
-            lastApplied={lastApplied}
-            appliedTotal={appliedTotal}
-          />
-        </div>
+        {/* proposeChanges is pinned to today's phase server-side, so the
+            panel only appears there — a proposal drafted while looking at
+            F4 must not land on F2. */}
+        {isCurrentPhase ? (
+          <div className="mt-3.5 px-5">
+            <AiPanel
+              hasApiKey={hasApiKey}
+              initialMessages={thread.messages.filter((m) => m.role !== "system")}
+              initialThreadId={thread.id}
+              initialProposal={pendingProposal}
+              lastApplied={lastApplied}
+              appliedTotal={appliedTotal}
+            />
+          </div>
+        ) : (
+          <p className="px-5 pt-4 text-[12.5px] leading-[1.5] text-faint">
+            La IA propone solo sobre la fase en curso. Esta la editas a mano.
+          </p>
+        )}
 
         {/* The motor folded behind a line: it sets every weight on the
             screen above, and is read a tenth as often. */}
@@ -699,7 +745,7 @@ export function ProgramEditor({
                         type="button"
                         aria-label={`Bajar la semana ${i + 1} de la ola`}
                         disabled={pending}
-                        onClick={() => run(() => setWaveStep(i, -0.01))}
+                        onClick={() => run(() => setWaveStep(i, -0.01, phase.id))}
                         className="flex h-[30px] flex-1 items-center justify-center rounded-sm border border-edge bg-soft text-[15px] leading-none font-bold text-mid disabled:opacity-40"
                       >
                         −
@@ -708,7 +754,7 @@ export function ProgramEditor({
                         type="button"
                         aria-label={`Subir la semana ${i + 1} de la ola`}
                         disabled={pending}
-                        onClick={() => run(() => setWaveStep(i, 0.01))}
+                        onClick={() => run(() => setWaveStep(i, 0.01, phase.id))}
                         className="flex h-[30px] flex-1 items-center justify-center rounded-sm border border-edge bg-soft text-[15px] leading-none font-bold text-mid disabled:opacity-40"
                       >
                         +
@@ -729,46 +775,20 @@ export function ProgramEditor({
             </>
           )}
 
-          <SectionLabel className="mt-2">Parámetros del motor</SectionLabel>
-          <RowStack className="mt-3">
-            <EngineRow
-              name="Ciclo actual"
-              sub={`Semana ${week} de ${phase.weeks} · ciclo ${cycle}`}
-              value={`${Math.round(
-                (waveScope === "fixed" ? (pctOfRm ?? 0.8) : wave[waveIndex]) *
-                  100,
-              )} %`}
-            />
-            <EngineRow
-              name="Incremento por ciclo · piernas"
-              sub="Sentadilla, hip thrust, RDL"
-              value={`+${formatWeight(params.incLowerKg)} kg`}
-            />
-            <EngineRow
-              name="Incremento por ciclo · torso"
-              sub="Banca, militar"
-              value={`+${formatWeight(params.incUpperKg)} kg`}
-            />
-            <EngineRow
-              name="Redondeo del peso"
-              sub="Según los discos que tengas"
-              value={`${formatWeight(params.roundingKg)} kg`}
-            />
-            <EngineRow
-              name="RIR objetivo del básico"
-              sub="Repeticiones en reserva"
-              value={params.targetRir}
-            />
-            <EngineRow
-              name="Regla de regresión"
-              sub="Qué pasa al fallar el rango"
-              value={RULE_LABEL[params.regressionRule] ?? params.regressionRule}
-            />
-          </RowStack>
-          <p className="px-5 pt-3.5 text-[12.5px] leading-[1.5] text-faint">
-            Estos parámetros se cambian en Ajustes. La IA no puede tocarlos:
-            propone cambios al programa, nunca al motor de pesos.
-          </p>
+          {/* One home for the engine parameters: Ajustes owns them, and
+              this screen keeps only what it can actually edit (the wave).
+              The AI cannot touch them either way. */}
+          <Link
+            href="/ajustes"
+            className="mt-2 flex items-center gap-2.5 px-6 py-2"
+          >
+            <span className="flex-1 text-[13px] leading-[1.4] text-mid">
+              Parámetros del motor · se cambian en ajustes
+            </span>
+            <span aria-hidden className="text-[13px] leading-none text-faint">
+              ›
+            </span>
+          </Link>
         </details>
 
         <Link
@@ -790,28 +810,6 @@ export function ProgramEditor({
         </Link>
       </div>
     </div>
-  );
-}
-
-function EngineRow({
-  name,
-  sub,
-  value,
-}: {
-  name: string;
-  sub: string;
-  value: string;
-}) {
-  return (
-    <Row className="flex items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] leading-[1.2] font-semibold">{name}</div>
-        <div className="mt-1 text-[11px] leading-[1.3] text-faint">{sub}</div>
-      </div>
-      <div className="num flex h-8 min-w-[58px] items-center justify-center rounded-sm border border-edge bg-soft px-1.5 text-[13px] leading-none font-semibold">
-        {value}
-      </div>
-    </Row>
   );
 }
 

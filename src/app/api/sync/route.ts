@@ -311,10 +311,18 @@ export async function POST(request: Request) {
             })),
           );
 
-          // Failures undone now or in any earlier flush stay undone.
+          // Failures the ATHLETE undid stay undone. A stale revert (the
+          // system healing after an unlog/correction) is not an undo: if
+          // the set comes back and misses again, the failure re-applies.
           const undone = [...env.undoneFailures];
           for (const e of failEvents) {
             if (!e.reverted_at || !e.dedup_key) continue;
+            if (
+              (e.payload as { stale_reverted?: unknown } | null)
+                ?.stale_reverted
+            ) {
+              continue;
+            }
             const m = e.dedup_key.match(/:fail:(\d+):(\d+)$/);
             if (m) undone.push({ position: +m[1], setIndex: +m[2] });
           }
@@ -340,6 +348,31 @@ export async function POST(request: Request) {
             week: session.week,
             config: phaseConfig,
           });
+
+          // A live failure whose stored event was stale-reverted earlier
+          // (unlogged, then re-logged missing again) earns its event back.
+          for (const ev of replay.events) {
+            if (ev.undone) continue;
+            const stored = failEvents.find((e) => e.dedup_key === ev.dedupKey);
+            if (
+              stored?.reverted_at &&
+              (stored.payload as { stale_reverted?: unknown } | null)
+                ?.stale_reverted
+            ) {
+              await supabase
+                .from("engine_events")
+                .update({
+                  reverted_at: null,
+                  payload: {
+                    previous: { ...ev.previous },
+                    missed_at_kg: ev.outcome.lift.holdAtKg,
+                    source: ev.sourceSet,
+                    forced_deload: ev.outcome.forcedDeload,
+                  },
+                })
+                .eq("dedup_key", ev.dedupKey);
+            }
+          }
 
           for (const ev of replay.events) {
             const { error: eventError } = await supabase.from("engine_events").upsert(
@@ -385,9 +418,17 @@ export async function POST(request: Request) {
           for (const e of failEvents) {
             if (!e.dedup_key || e.reverted_at) continue;
             if (currentKeys.has(e.dedup_key)) continue;
+            // Flagged as a SYSTEM revert, not an athlete undo, so a
+            // future flush can re-apply it if the miss comes back.
             await supabase
               .from("engine_events")
-              .update({ reverted_at: new Date().toISOString() })
+              .update({
+                reverted_at: new Date().toISOString(),
+                payload: {
+                  ...((e.payload as Record<string, unknown> | null) ?? {}),
+                  stale_reverted: true,
+                },
+              })
               .eq("dedup_key", e.dedup_key);
             staleReverted += 1;
           }
@@ -400,6 +441,12 @@ export async function POST(request: Request) {
           if (!replay.released) {
             for (const e of cleanEvents) {
               if (!e.dedup_key || e.reverted_at) continue;
+              // A pre-payload release cannot rewind, so no replay can
+              // ever re-earn it — leave that history alone.
+              const rewindable = parsePreviousLiftState(
+                (e.payload as { previous?: unknown } | null)?.previous,
+              );
+              if (!rewindable) continue;
               await supabase
                 .from("engine_events")
                 .update({ reverted_at: new Date().toISOString() })
@@ -489,8 +536,14 @@ export async function POST(request: Request) {
           .from("sessions")
           .update({
             status,
-            completed_at: env.finish.finishedAt,
-            duration_seconds: duration,
+            // A correction re-grades sets and totals, not time: the
+            // original completed_at and duration stand.
+            ...(alreadyClosed
+              ? {}
+              : {
+                  completed_at: env.finish.finishedAt,
+                  duration_seconds: duration,
+                }),
             tonnage_kg: tonnage(
               (fullLogs ?? []).map((l) => ({
                 weightKg: l.weight_kg == null ? null : Number(l.weight_kg),
@@ -505,17 +558,31 @@ export async function POST(request: Request) {
         // Double progression for accessories — deduped per exercise so
         // a repeated flush can never award the jump twice. Never on the
         // deload (topping a halved-volume session proves nothing) and
-        // never for an archived programme.
-        if (
-          !alreadyClosed &&
-          !archived &&
-          !isDeloadWeek(session.week, phaseConfig)
-        ) {
+        // never for an archived programme. Corrections re-grade: a bump
+        // whose sets were unlogged or corrected down is taken back, and
+        // an upward correction can still earn one.
+        if (!archived && !isDeloadWeek(session.week, phaseConfig)) {
+          const { data: bumpRows } = await supabase
+            .from("engine_events")
+            .select("dedup_key, reverted_at, payload")
+            .eq("session_id", sessionId)
+            .eq("kind", "accessory_bump");
+          const bumpByExercise = new Map(
+            (bumpRows ?? []).map((b) => [
+              String(
+                (b.payload as { program_exercise_id?: unknown } | null)
+                  ?.program_exercise_id ?? "",
+              ),
+              b,
+            ]),
+          );
+
           for (const e of slotExercises) {
             if (e.is_primary) continue;
             if (e.load_mode !== "fixed" && e.load_mode !== "weighted_bodyweight") {
               continue;
             }
+            const existing = bumpByExercise.get(e.id) ?? null;
             const rows = (fullLogs ?? []).filter(
               (l) => l.program_exercise_id === e.id,
             );
@@ -536,7 +603,41 @@ export async function POST(request: Request) {
               },
               phaseConfig,
             );
-            if (!outcome.advance || outcome.nextWeightKg == null) continue;
+
+            if (!outcome.advance || outcome.nextWeightKg == null) {
+              // The sets no longer earn the jump this session awarded:
+              // take the weight back and strike the event through.
+              if (existing && !existing.reverted_at && existing.dedup_key) {
+                const previousKg = (
+                  existing.payload as { previous_kg?: unknown } | null
+                )?.previous_kg;
+                await supabase
+                  .from("engine_events")
+                  .update({ reverted_at: new Date().toISOString() })
+                  .eq("dedup_key", existing.dedup_key);
+                if (previousKg != null) {
+                  await supabase
+                    .from("program_exercises")
+                    .update({ fixed_weight_kg: Number(previousKg) })
+                    .eq("id", e.id);
+                }
+              }
+              continue;
+            }
+
+            if (existing?.reverted_at && existing.dedup_key) {
+              // Re-earned after a correction took it back.
+              await supabase
+                .from("engine_events")
+                .update({ reverted_at: null })
+                .eq("dedup_key", existing.dedup_key);
+              await supabase
+                .from("program_exercises")
+                .update({ fixed_weight_kg: outcome.nextWeightKg })
+                .eq("id", e.id);
+              continue;
+            }
+            if (existing) continue; // already awarded and still earned
 
             const { data: bumpRow, error: bumpError } = await supabase
               .from("engine_events")

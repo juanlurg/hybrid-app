@@ -77,11 +77,11 @@ export default async function FuerzaPage({
   const primary = day.primary;
   const future = day.date > today;
 
-  // The catch-up window (decision D2): a day of the CURRENT week whose
-  // date has passed can still be trained — the late session fulfils its
-  // plan day; after Sunday it is lost, as the calendar rules say.
+  // The week is the athlete's to reorganise (decision D2, extended): any
+  // day of the CURRENT week can be trained early or late — the session
+  // fulfils its plan day either way; after Sunday a missed one is lost,
+  // as the calendar rules say.
   const startable =
-    day.date <= today &&
     sameWeek(day.date, today) &&
     (session?.status ?? "planned") === "planned";
 
@@ -217,7 +217,7 @@ export default async function FuerzaPage({
           existingSessionId={session?.id ?? null}
           existingStatus={session?.status ?? null}
           groupLabel={
-            day.date === today ? GROUP_LABEL[day.group] : "Entrenar esta"
+            day.date === today ? GROUP_LABEL[day.group] : "Entrenar esta hoy"
           }
         />
       ) : null}
