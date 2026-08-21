@@ -147,9 +147,9 @@ installed PWA.
    slug — it never invents a name.
 4. **Every engine action is undoable and logged** in `engine_events`.
 5. **The calendar rules.** The plan lives on dates; a missed day is lost
-   once its week ends — inside the current week it can still be trained
-   late from `/fuerza/[fecha]`, and the late session fulfils its plan day
-   (`scheduled_on`; the real timing lives in `started_at`/`completed_at`).
+   once its week ends — inside the current week any day can be trained
+   early or late from `/fuerza/[fecha]`, and the session fulfils its plan
+   day (`scheduled_on`; the real timing lives in `started_at`/`completed_at`).
    Training before the season starts files under the real date and marks
    no plan day. Moving the season is a bulk shift (`shift_program`,
    Ajustes → Zona de peligro): phases move together, logged sessions keep
