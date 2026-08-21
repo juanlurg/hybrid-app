@@ -249,6 +249,13 @@ export function SessionRunner({
             };
           }
         }
+        // Unlogged sets whose delete has not flushed yet: the server-
+        // seeded row must not resurrect them.
+        for (const k of local.removed ?? []) {
+          const [pos, idx] = k.split(":").map(Number);
+          const ex = exercises.find((e) => e.position === pos);
+          if (ex) delete next[keyOf(ex.id, idx)];
+        }
         return next;
       });
       if (local.undoneFailures.length) {
@@ -401,8 +408,10 @@ export function SessionRunner({
     // Local-first: the number lands instantly and survives a killed tab;
     // the queue takes it to the server whenever there is network.
     setLogs((prev) => ({ ...prev, [k]: { value, missed, weightKg } }));
-    // What you just moved is what the next set starts from.
-    if (weightKg != null) {
+    // What you just moved is what the next set starts from — but only a
+    // FRESH set: correcting an old set's reps must not resurrect that
+    // set's old weight as the next set's default.
+    if (!overwrite && weightKg != null) {
       setWeights((prev) => ({ ...prev, [exercise.id]: weightKg }));
     }
     setRepsOpen(false);

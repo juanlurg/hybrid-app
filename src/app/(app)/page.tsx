@@ -59,7 +59,11 @@ export default async function HoyPage() {
   );
 
   // The date a session started today files under — and is looked up by.
-  const effectiveOn = clamped ? today : day.date;
+  // Only strength files under the REAL date out of season: runs and
+  // mobility navigate to their own screens, which are plan-date
+  // addressed, so the clamped plan date keeps those links resolving.
+  const effectiveOn =
+    clamped && day.group === "strength" ? today : day.date;
 
   const supabase = await createClient();
   const [{ data: sessions }, { data: heldLifts }] = await Promise.all([

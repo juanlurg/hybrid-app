@@ -42,9 +42,11 @@ export function summarise(
   const loggedKg = kgs.length ? kgs[0] : null;
   // The athlete can change the load mid-exercise: say so instead of
   // reporting the first set's weight as if it held for all of them.
+  // Added load keeps its sign, so "+5–7,5 kg" cannot read as bar kilos.
+  const plus = loadMode === "weighted_bodyweight" ? "+" : "";
   const spread =
     kgs.length > 1 && Math.min(...kgs) !== Math.max(...kgs)
-      ? `${formatWeight(Math.min(...kgs))}–${formatWeight(Math.max(...kgs))} kg`
+      ? `${plus}${formatWeight(Math.min(...kgs))}–${formatWeight(Math.max(...kgs))} kg`
       : null;
   return {
     key,

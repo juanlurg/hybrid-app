@@ -38,6 +38,9 @@ export interface LocalSessionState {
       exercise goes on. Optional: states persisted before the field load
       fine, and the first logged set makes it redundant anyway. */
   weights?: Record<string, number>;
+  /** Tombstones ("position:setIndex") for unlogged sets whose delete may
+      not have flushed yet — server rows must not resurrect them. */
+  removed?: string[];
 }
 
 const setKey = (position: number, setIndex: number) =>
@@ -74,11 +77,12 @@ export function recordLocalSet(
     loggedAt: string;
   },
 ): LocalSessionState {
+  const k = setKey(input.position, input.setIndex);
   return {
     ...state,
     logs: {
       ...state.logs,
-      [setKey(input.position, input.setIndex)]: {
+      [k]: {
         value: input.value,
         missed: input.missed,
         weightKg: input.weightKg,
@@ -87,6 +91,8 @@ export function recordLocalSet(
         loggedAt: input.loggedAt,
       },
     },
+    // A re-log cancels the tombstone: the set exists again.
+    removed: state.removed?.filter((r) => r !== k),
   };
 }
 
@@ -103,7 +109,8 @@ export function setLocalWeight(
   };
 }
 
-/** Delete one logged set — the mirror of `recordLocalSet`. */
+/** Delete one logged set — the mirror of `recordLocalSet`. The key is
+    tombstoned so a server row cannot resurrect it before the flush. */
 export function removeLocalSet(
   state: LocalSessionState,
   position: number,
@@ -113,7 +120,12 @@ export function removeLocalSet(
   if (!(k in state.logs)) return state;
   const logs = { ...state.logs };
   delete logs[k];
-  return { ...state, logs };
+  const removed = state.removed ?? [];
+  return {
+    ...state,
+    logs,
+    removed: removed.includes(k) ? removed : [...removed, k],
+  };
 }
 
 export function undoLocalFailure(
@@ -174,6 +186,7 @@ export function mergeServerLogs(
   for (const l of serverLogs) {
     const k = setKey(l.position, l.setIndex);
     if (k in logs) continue; // local wins
+    if (state.removed?.includes(k)) continue; // unlogged here, delete pending
     const value = l.reps ?? l.seconds;
     if (value == null) continue;
     logs[k] = {

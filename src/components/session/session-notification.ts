@@ -21,7 +21,7 @@
  * and vibration keep working exactly as before.
  */
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 /** Device-local preference, like the theme: permission is per-device. */
 export const REST_NOTIFICATIONS_KEY = "bloques:rest-notifications";
@@ -176,5 +176,9 @@ export function useSessionNotification({
   // Leaving the runner takes the notification with it.
   useEffect(() => () => void clearAll(), []);
 
-  return { showRest, showExpired, showProgress, dismissRest, clear };
+  // Stable identity: consumers hang effects off this object.
+  return useMemo(
+    () => ({ showRest, showExpired, showProgress, dismissRest, clear }),
+    [showRest, showExpired, showProgress, dismissRest, clear],
+  );
 }

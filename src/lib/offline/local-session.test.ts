@@ -59,6 +59,33 @@ describe("local session reducers", () => {
     expect(Object.keys(removed.logs)).toEqual(["1:1"]);
     // Removing a set that is not there is a no-op, not an error.
     expect(removeLocalSet(removed, 1, 0)).toBe(removed);
+    // The tombstone blocks a server row from resurrecting the set…
+    expect(removed.removed).toEqual(["1:0"]);
+    const merged = mergeServerLogs(removed, [
+      {
+        position: 1,
+        setIndex: 0,
+        reps: 6,
+        seconds: null,
+        rir: null,
+        weightKg: 90,
+        missedRange: false,
+        loggedAt: "t1",
+      },
+    ]);
+    expect(merged.logs["1:0"]).toBeUndefined();
+    // …and a re-log cancels it.
+    const relogged = recordLocalSet(removed, {
+      position: 1,
+      setIndex: 0,
+      value: 5,
+      missed: false,
+      weightKg: 90,
+      rir: null,
+      timed: false,
+      loggedAt: "t3",
+    });
+    expect(relogged.removed).toEqual([]);
   });
 
   it("re-recording a set overwrites it", () => {
