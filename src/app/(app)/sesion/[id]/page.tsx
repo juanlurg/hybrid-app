@@ -115,6 +115,12 @@ export default async function SessionPage({
     );
     for (const e of failEvents) {
       if (!e.reverted_at || !e.dedup_key) continue;
+      // System stale-reverts are not athlete undos — same rule as sync.
+      if (
+        (e.payload as { stale_reverted?: unknown } | null)?.stale_reverted
+      ) {
+        continue;
+      }
       const m = e.dedup_key.match(/:fail:(\d+):(\d+)$/);
       if (m) initialUndone.push({ position: +m[1], setIndex: +m[2] });
     }
@@ -140,6 +146,7 @@ export default async function SessionPage({
         reps: l.reps,
         seconds: l.seconds,
         weightKg: l.weight_kg == null ? null : Number(l.weight_kg),
+        rir: l.rir == null ? null : Number(l.rir),
         missedRange: l.missed_range,
       }))}
       initialUndone={initialUndone}

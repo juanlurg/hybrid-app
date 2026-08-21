@@ -52,6 +52,7 @@ interface LoggedSet {
   reps: number | null;
   seconds: number | null;
   weightKg: number | null;
+  rir: number | null;
   missedRange: boolean;
 }
 
@@ -64,10 +65,16 @@ export interface ReplayContext {
 }
 
 /** `value` is reps or seconds, whichever the exercise's effort counts;
-    `weightKg` is the load actually moved, not necessarily the plan's. */
+    `weightKg` is the load actually moved, not necessarily the plan's.
+    `rir` rides along so a later weight edit cannot erase it. */
 type LogMap = Record<
   string,
-  { value: number; missed: boolean; weightKg: number | null }
+  {
+    value: number;
+    missed: boolean;
+    weightKg: number | null;
+    rir: number | null;
+  }
 >;
 
 const keyOf = (exerciseId: string, setIndex: number) =>
@@ -129,6 +136,7 @@ export function SessionRunner({
         value,
         missed: l.missedRange,
         weightKg: l.weightKg,
+        rir: l.rir,
       };
     }
     return map;
@@ -246,6 +254,7 @@ export function SessionRunner({
               value: entry.value,
               missed: entry.missed,
               weightKg: entry.weightKg,
+              rir: entry.rir,
             };
           }
         }
@@ -407,7 +416,7 @@ export function SessionRunner({
 
     // Local-first: the number lands instantly and survives a killed tab;
     // the queue takes it to the server whenever there is network.
-    setLogs((prev) => ({ ...prev, [k]: { value, missed, weightKg } }));
+    setLogs((prev) => ({ ...prev, [k]: { value, missed, weightKg, rir } }));
     // What you just moved is what the next set starts from — but only a
     // FRESH set: correcting an old set's reps must not resurrect that
     // set's old weight as the next set's default.
@@ -494,29 +503,34 @@ export function SessionRunner({
    */
   function applyWeight(next: number) {
     if (next === currentWeight) return;
-    setWeights((prev) => ({ ...prev, [exercise.id]: next }));
 
     const setIndex = editingIndex;
     const editing = setIndex == null ? null : logs[keyOf(exercise.id, setIndex)];
     if (!editing || setIndex == null) {
+      // A fresh-set change IS the next set's default, and persists so a
+      // killed tab before the first set still remembers it.
+      setWeights((prev) => ({ ...prev, [exercise.id]: next }));
       startTransition(async () => {
         await withLocal((s) => setLocalWeight(s, exercise.position, next));
       });
       return;
     }
 
+    // Editing an old set fixes THAT set: the next-set default stays put,
+    // same rule record() enforces for rep corrections.
     setLogs((prev) => ({
       ...prev,
       [keyOf(exercise.id, setIndex)]: { ...editing, weightKg: next },
     }));
     const timed = exercise.effort === "seconds";
     const loggedAt = new Date().toISOString();
+    // Only the load changes: the set's stored RIR travels untouched. It
+    // lives in the logs map (seeded from the server), so correcting an
+    // old session whose local mirror was pruned cannot erase it.
+    const rir = editing.rir;
     startTransition(async () => {
-      // Only the load changes: the RIR already stored for the set stays.
-      let rir: number | null = null;
-      await withLocal((s) => {
-        rir = s.logs[`${exercise.position}:${setIndex}`]?.rir ?? null;
-        return recordLocalSet(setLocalWeight(s, exercise.position, next), {
+      await withLocal((s) =>
+        recordLocalSet(s, {
           position: exercise.position,
           setIndex,
           value: editing.value,
@@ -525,8 +539,8 @@ export function SessionRunner({
           rir,
           timed,
           loggedAt,
-        });
-      });
+        }),
+      );
       await enqueueAndFlush({
         kind: "set_log",
         localSessionId: sessionId,
@@ -850,7 +864,10 @@ export function SessionRunner({
                 stop();
                 notif.dismissRest(exercise.name, totalDone, totalSets);
               }}
-              onExtend={() => extend(30)}
+              onExtend={() => {
+                extend(30);
+                notif.extendRest(rest.left + 30);
+              }}
             />
           </div>
         ) : null}

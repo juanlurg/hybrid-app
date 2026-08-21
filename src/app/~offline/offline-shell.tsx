@@ -154,14 +154,18 @@ export function OfflineShell() {
     if (!today?.slot) return;
     const localId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    // Out of season, placeDate clamps and `today.date` is a plan date in
-    // the future (or past): the session still happened on the real day,
-    // so that is the date it is filed under. The plan day stays unmarked.
+    // Out of season, placeDate clamps and `today.date` is a plan date the
+    // athlete is not living: the session files under the real day and the
+    // plan stays unmarked. IN season, the plan date stands even if this
+    // tab was mounted yesterday — starting the shown day late is the
+    // within-week catch-up, not a mis-filed session.
     const realToday = todayIso();
+    const nowPlacement = placeDate(phaseSpans(snapshot.ctx.phases), realToday);
+    const outOfSeason = !nowPlacement || nowPlacement.date !== realToday;
     const key = {
       phaseId: today.phaseId,
       slotId: today.slot.id,
-      scheduledOn: today.date === realToday ? today.date : realToday,
+      scheduledOn: outOfSeason ? realToday : today.date,
       week: today.week,
       dayIndex: today.dayIndex,
       sessionType: today.sessionType,
