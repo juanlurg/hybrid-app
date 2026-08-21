@@ -127,6 +127,11 @@ on Programa, Historial, Editar and Ajustes.
 | `/generar` | AI program builder — brief in, preview, explicit activation |
 | `/ajustes` | Every knob, grouped |
 
+Session notifications are client-side only: one tray card per session
+(`tag`), the rest line carries an absolute end time so a frozen tab still
+tells the truth; no push server, no background countdown, iOS only as an
+installed PWA.
+
 ## Non-negotiables
 
 1. **Only the engine invents weights.** UI reads `ResolvedExercise.weightKg`.

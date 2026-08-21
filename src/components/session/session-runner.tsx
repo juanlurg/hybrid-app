@@ -14,6 +14,10 @@ import {
 import { TONE } from "@/components/day-accents";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
 import {
+  restNotificationsEnabled,
+  useSessionNotification,
+} from "@/components/session/session-notification";
+import {
   formatWeight,
   loadableWeight,
   nextLoadableWeight,
@@ -209,11 +213,16 @@ export function SessionRunner({
   const [pendingRir, setPendingRir] = useState<number | null>(null);
   const exercise = exercises[Math.min(exIndex, exercises.length - 1)];
 
+  // Read once on mount: the toggle lives in Ajustes, a session apart.
+  const [notifEnabled] = useState(() => restNotificationsEnabled());
+  const notif = useSessionNotification({ enabled: notifEnabled, vibration });
+
   const { rest, flash, start, stop, extend, resume } = useRestTimer({
     sound,
     vibration,
     // Persist the deadline: a reload mid-rest keeps counting.
     onChange: (snapshot) => void withLocal((s) => ({ ...s, rest: snapshot })),
+    onExpire: () => notif.showExpired(),
   });
   useWakeLock(keepAwake);
 
@@ -307,6 +316,17 @@ export function SessionRunner({
     0,
   );
 
+  // The quiet between-rests card when the app goes to the background.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden" && !rest) {
+        notif.showProgress(exercise.name, totalDone, totalSets);
+      }
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [rest, exercise.name, totalDone, totalSets, notif]);
+
   /** The other members of this exercise's superset, in plan order. */
   const groupMembers = useMemo(
     () =>
@@ -317,6 +337,7 @@ export function SessionRunner({
   );
 
   function finish() {
+    notif.clear();
     startTransition(async () => {
       const finishedAt = new Date().toISOString();
       await withLocal((s) => finishLocalSession(s, finishedAt, totalSets));
@@ -403,6 +424,12 @@ export function SessionRunner({
         setExIndex(exercises.findIndex((e) => e.id === laggard.id));
       } else if (autoRest) {
         start(exercise.restSeconds, `${exercise.name} · serie ${setIndex + 1}`);
+        notif.showRest(
+          exercise.name,
+          setIndex + 1,
+          exercise.sets,
+          exercise.restSeconds,
+        );
       }
 
       // Done with the whole group (not just this row) → move past it.
@@ -808,7 +835,14 @@ export function SessionRunner({
 
         {rest ? (
           <div className="mt-5">
-            <RestBar rest={rest} onSkip={stop} onExtend={() => extend(30)} />
+            <RestBar
+              rest={rest}
+              onSkip={() => {
+                stop();
+                notif.dismissRest(exercise.name, totalDone, totalSets);
+              }}
+              onExtend={() => extend(30)}
+            />
           </div>
         ) : null}
 

@@ -1,9 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition, type ReactNode } from "react";
+import {
+  useState,
+  useSyncExternalStore,
+  useTransition,
+  type ReactNode,
+} from "react";
 
 import { TONE } from "@/components/day-accents";
+import {
+  isIOS,
+  isStandalone,
+  notificationsSupported,
+  REST_NOTIFICATIONS_KEY,
+} from "@/components/session/session-notification";
 import { SyncStatus } from "@/components/sync-status";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -682,6 +693,7 @@ export function SettingsGroups({
             onChange={(rest_vibration) => save({ rest_vibration })}
           />
         </SettingRow>
+        <RestNotificationsRow />
         <SettingRow
           name="Mantener la pantalla encendida"
           sub="Mientras la sesión esté abierta"
@@ -1006,6 +1018,82 @@ function SettingRow({
       </div>
       {below ? <div className="mt-2.5">{below}</div> : null}
     </div>
+  );
+}
+
+/* The notification preference lives in localStorage plus the browser's
+   own permission — an external store, read like the theme is. */
+const notifListeners = new Set<() => void>();
+
+function notifSubscribe(onChange: () => void) {
+  notifListeners.add(onChange);
+  return () => {
+    notifListeners.delete(onChange);
+  };
+}
+
+function notifEmit() {
+  notifListeners.forEach((l) => l());
+}
+
+function readNotifSnapshot(): string {
+  if (!notificationsSupported()) return "unsupported";
+  let flag = "off";
+  try {
+    flag = localStorage.getItem(REST_NOTIFICATIONS_KEY) === "on" ? "on" : "off";
+  } catch {
+    // Storage blocked: the toggle just reads off.
+  }
+  return `${flag}|${Notification.permission}`;
+}
+
+/**
+ * The rest-notification toggle. Device-local like the theme — the
+ * permission itself is per-device, so a profile column would sync an
+ * intent the browser may have denied. Hidden where Notification is
+ * absent (and on the server render, which reports unsupported).
+ */
+function RestNotificationsRow() {
+  const snap = useSyncExternalStore(
+    notifSubscribe,
+    readNotifSnapshot,
+    () => "unsupported",
+  );
+  if (snap === "unsupported") return null;
+
+  const [flag, permission] = snap.split("|");
+  const enabled = flag === "on" && permission === "granted";
+  const sub =
+    permission === "denied"
+      ? "Bloqueado por el navegador: actívalo en los ajustes del sitio"
+      : isIOS() && !isStandalone()
+        ? "En iPhone hace falta instalar la app en la pantalla de inicio"
+        : "La sesión y el fin del descanso, como notificación";
+
+  async function toggle(next: boolean) {
+    if (!next) {
+      try {
+        localStorage.setItem(REST_NOTIFICATIONS_KEY, "off");
+      } catch {}
+      notifEmit();
+      return;
+    }
+    // The permission prompt must ride the tap that asked for it.
+    const granted = (await Notification.requestPermission()) === "granted";
+    try {
+      localStorage.setItem(REST_NOTIFICATIONS_KEY, granted ? "on" : "off");
+    } catch {}
+    notifEmit();
+  }
+
+  return (
+    <SettingRow name="Avisos de sesión" sub={sub}>
+      <Toggle
+        label="Avisos de sesión"
+        checked={enabled}
+        onChange={(next) => void toggle(next)}
+      />
+    </SettingRow>
   );
 }
 
