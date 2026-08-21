@@ -140,10 +140,14 @@ on Programa, Historial, Editar and Ajustes.
    The AI never edits `lifts`. It picks exercises from the catalogue by
    slug — it never invents a name.
 4. **Every engine action is undoable and logged** in `engine_events`.
-5. **The calendar rules.** The plan lives on dates; a missed day is lost,
-   never re-queued. Moving the season is a bulk shift (`shift_program`,
-   Ajustes → Datos): phases move together, logged sessions keep their real
-   dates, the race does not move.
+5. **The calendar rules.** The plan lives on dates; a missed day is lost
+   once its week ends — inside the current week it can still be trained
+   late from `/fuerza/[fecha]`, and the late session fulfils its plan day
+   (`scheduled_on`; the real timing lives in `started_at`/`completed_at`).
+   Training before the season starts files under the real date and marks
+   no plan day. Moving the season is a bulk shift (`shift_program`,
+   Ajustes → Zona de peligro): phases move together, logged sessions keep
+   their real dates, the race does not move.
 6. **The engine speaks phase-local weeks.** Every phase starts at wave[0]
    with its own progression (`program_phases.progression_mode`): F2 waves,
    F3/F4 hold a fixed %RM. Never feed `absoluteWeek` to the engine.

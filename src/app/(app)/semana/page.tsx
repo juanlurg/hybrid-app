@@ -15,6 +15,7 @@ import {
   formatDayShort,
   formatSeasonRange,
   phaseEnd,
+  startOfWeek,
   type IsoDate,
 } from "@/lib/domain/calendar";
 import { cycleOf, isDeloadWeek, waveFactor } from "@/lib/engine";
@@ -307,11 +308,12 @@ export default async function SemanaPage({
 
               // "Hoy no entreno" is a decision, not an omission: a
               // deliberate skip closes the day as SALTADA instead of
-              // leaving it pending forever.
+              // leaving it pending forever. A missed day of the current
+              // week is still open — trainable late, or skippable.
               const skippable =
                 (day.group === "strength" || day.group === "run") &&
                 day.slot != null &&
-                day.date >= today &&
+                day.date >= startOfWeek(today) &&
                 status === "planned";
 
               return (

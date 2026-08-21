@@ -10,6 +10,7 @@ import {
   phaseEnd,
   placeAbsoluteWeek,
   placeDate,
+  sameWeek,
   startOfWeek,
   totalWeeks,
   weeksUntil,
@@ -43,6 +44,11 @@ describe("date maths", () => {
   it("snaps to the Monday of the week", () => {
     expect(startOfWeek("2026-07-30")).toBe("2026-07-27");
     expect(startOfWeek("2026-07-27")).toBe("2026-07-27");
+  });
+
+  it("knows when two dates share a Monday-to-Sunday week", () => {
+    expect(sameWeek("2026-07-27", "2026-08-02")).toBe(true); // Mon–Sun
+    expect(sameWeek("2026-08-02", "2026-08-03")).toBe(false); // Sun–Mon
   });
 
   it("survives a DST boundary", () => {

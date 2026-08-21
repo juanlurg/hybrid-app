@@ -71,6 +71,12 @@ export function startOfWeek(iso: IsoDate): IsoDate {
   return addDays(iso, -dayIndexOf(iso));
 }
 
+/** True when both dates fall inside one Monday-to-Sunday week — the
+    window in which a missed day can still be trained late. */
+export function sameWeek(a: IsoDate, b: IsoDate): boolean {
+  return startOfWeek(a) === startOfWeek(b);
+}
+
 export function todayIso(): IsoDate {
   return toIsoDate(new Date());
 }

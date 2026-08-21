@@ -12,8 +12,15 @@ import {
   Tag,
   TopBar,
 } from "@/components/ui/kit";
+import { GROUP_LABEL } from "@/components/day-accents";
+import { StartSessionButton } from "@/components/session/start-session-button";
 import { requireAthlete } from "@/lib/data/athlete";
-import { formatDayLong, placeDate, type IsoDate } from "@/lib/domain/calendar";
+import {
+  formatDayLong,
+  placeDate,
+  sameWeek,
+  type IsoDate,
+} from "@/lib/domain/calendar";
 import { phaseSpans, resolveDay } from "@/lib/domain/plan";
 import { formatWeight } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
@@ -69,6 +76,14 @@ export default async function FuerzaPage({
 
   const primary = day.primary;
   const future = day.date > today;
+
+  // The catch-up window (decision D2): a day of the CURRENT week whose
+  // date has passed can still be trained — the late session fulfils its
+  // plan day; after Sunday it is lost, as the calendar rules say.
+  const startable =
+    day.date <= today &&
+    sameWeek(day.date, today) &&
+    (session?.status ?? "planned") === "planned";
 
   const plates =
     primary && ctx.profile.show_plate_breakdown ? primary.plates : null;
@@ -187,6 +202,24 @@ export default async function FuerzaPage({
         <LinkBar href={`/sesion/${session.id}/resumen`} tone="ink">
           Ver resumen
         </LinkBar>
+      ) : startable ? (
+        <StartSessionButton
+          day={{
+            phaseId: phase.id,
+            slotId: slot.id,
+            scheduledOn: day.date,
+            week: placement.week,
+            dayIndex: day.dayIndex,
+            sessionType: day.sessionType,
+            title: day.title,
+            group: day.group,
+          }}
+          existingSessionId={session?.id ?? null}
+          existingStatus={session?.status ?? null}
+          groupLabel={
+            day.date === today ? GROUP_LABEL[day.group] : "Entrenar esta"
+          }
+        />
       ) : null}
     </div>
   );
