@@ -34,6 +34,10 @@ export interface LocalSessionState {
   logs: Record<string, LocalSetEntry>;
   undoneFailures: Array<{ position: number; setIndex: number }>;
   rest: LocalRestState | null;
+  /** Stepper overrides by exercise position — what the next set of each
+      exercise goes on. Optional: states persisted before the field load
+      fine, and the first logged set makes it redundant anyway. */
+  weights?: Record<string, number>;
 }
 
 const setKey = (position: number, setIndex: number) =>
@@ -83,6 +87,19 @@ export function recordLocalSet(
         loggedAt: input.loggedAt,
       },
     },
+  };
+}
+
+/** Remember the load the athlete moved the stepper to, per exercise, so
+    a killed tab before the first set does not forget the change. */
+export function setLocalWeight(
+  state: LocalSessionState,
+  position: number,
+  weightKg: number,
+): LocalSessionState {
+  return {
+    ...state,
+    weights: { ...(state.weights ?? {}), [String(position)]: weightKg },
   };
 }
 

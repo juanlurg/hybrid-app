@@ -15,6 +15,7 @@ import { TONE } from "@/components/day-accents";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
 import {
   formatWeight,
+  loadableWeight,
   nextLoadableWeight,
   plateBreakdown,
   type EngineConfig,
@@ -26,6 +27,7 @@ import {
   createLocalSession,
   recordLocalSet,
   removeLocalSet,
+  setLocalWeight,
   undoLocalFailure,
   finishLocalSession,
   type LocalSessionState,
@@ -131,6 +133,9 @@ export function SessionRunner({
   /** Load the athlete moved to with the stepper, per exercise: what the
       next set of it goes on until another set says otherwise. */
   const [weights, setWeights] = useState<Record<string, number>>({});
+  /** Direct weight entry: tap the stepper value, type the number. */
+  const [weightEditing, setWeightEditing] = useState(false);
+  const [weightDraft, setWeightDraft] = useState("");
 
   /** The persisted mirror of this session — survives a killed tab. */
   const localRef = useRef<LocalSessionState | null>(null);
@@ -246,6 +251,17 @@ export function SessionRunner({
               (u) => !seen.has(`${u.position}:${u.setIndex}`),
             ),
           ];
+        });
+      }
+      if (local.weights) {
+        // Stepper overrides made before any set — position → exercise.
+        setWeights((prev) => {
+          const next = { ...prev };
+          for (const [pos, kg] of Object.entries(local.weights ?? {})) {
+            const ex = exercises.find((e) => e.position === Number(pos));
+            if (ex && !(ex.id in next)) next[ex.id] = kg;
+          }
+          return next;
         });
       }
       if (local.rest && local.rest.deadlineEpochMs > Date.now()) {
@@ -437,22 +453,21 @@ export function SessionRunner({
   /**
    * Change the load. On a set already logged it rewrites that set in
    * place — same reps, same op key, so it flows through the idempotent
-   * path a first write does; otherwise it sets what the next set uses.
+   * path a first write does; otherwise it sets what the next set uses,
+   * persisted so a killed tab before the first set still remembers it.
    */
-  function nudgeWeight(direction: 1 | -1) {
-    if (currentWeight == null) return;
-    const next = nextLoadableWeight(
-      currentWeight,
-      direction,
-      exercise.equipment,
-      replayCtx.config,
-    );
+  function applyWeight(next: number) {
     if (next === currentWeight) return;
     setWeights((prev) => ({ ...prev, [exercise.id]: next }));
 
     const setIndex = editingIndex;
     const editing = setIndex == null ? null : logs[keyOf(exercise.id, setIndex)];
-    if (!editing || setIndex == null) return;
+    if (!editing || setIndex == null) {
+      startTransition(async () => {
+        await withLocal((s) => setLocalWeight(s, exercise.position, next));
+      });
+      return;
+    }
 
     setLogs((prev) => ({
       ...prev,
@@ -465,7 +480,7 @@ export function SessionRunner({
       let rir: number | null = null;
       await withLocal((s) => {
         rir = s.logs[`${exercise.position}:${setIndex}`]?.rir ?? null;
-        return recordLocalSet(s, {
+        return recordLocalSet(setLocalWeight(s, exercise.position, next), {
           position: exercise.position,
           setIndex,
           value: editing.value,
@@ -491,6 +506,28 @@ export function SessionRunner({
         loggedAt,
       });
     });
+  }
+
+  function nudgeWeight(direction: 1 | -1) {
+    if (currentWeight == null) return;
+    applyWeight(
+      nextLoadableWeight(
+        currentWeight,
+        direction,
+        exercise.equipment,
+        replayCtx.config,
+      ),
+    );
+  }
+
+  /** Direct entry: the athlete proposes a number, `loadableWeight`
+      disposes — the engine stays the only load authority. */
+  function commitWeightDraft() {
+    setWeightEditing(false);
+    const parsed = Number.parseFloat(weightDraft.trim().replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    const snapped = loadableWeight(parsed, exercise.equipment, replayCtx.config);
+    if (snapped > 0) applyWeight(snapped);
   }
 
   /**
@@ -661,7 +698,38 @@ export function SessionRunner({
             </span>
             <Stepper
               label="peso"
-              value={weightLabelFor(exercise.loadMode, currentWeight)}
+              value={
+                weightEditing ? (
+                  <input
+                    autoFocus
+                    inputMode="decimal"
+                    value={weightDraft}
+                    aria-label="Peso en kg"
+                    onChange={(e) => setWeightDraft(e.target.value)}
+                    onBlur={commitWeightDraft}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        setWeightDraft("");
+                        setWeightEditing(false);
+                      }
+                    }}
+                    className="num w-[52px] bg-transparent text-center text-[14px] leading-none font-semibold outline-none"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    aria-label="Escribir el peso"
+                    onClick={() => {
+                      setWeightDraft(formatWeight(currentWeight));
+                      setWeightEditing(true);
+                    }}
+                    className="num text-[14px] leading-none font-semibold"
+                  >
+                    {weightLabelFor(exercise.loadMode, currentWeight)}
+                  </button>
+                )
+              }
               onDecrement={() => nudgeWeight(-1)}
               onIncrement={() => nudgeWeight(1)}
             />

@@ -7,6 +7,7 @@ import {
   recordLocalSet,
   removeLocalSet,
   setLocalRest,
+  setLocalWeight,
   undoLocalFailure,
 } from "./local-session";
 import type { SessionKey } from "./queue";
@@ -24,6 +25,15 @@ const KEY: SessionKey = {
 const base = () => createLocalSession("loc-1", KEY, "2026-09-14T18:00:00Z");
 
 describe("local session reducers", () => {
+  it("setLocalWeight survives round-trips and absence of the field", () => {
+    // A state persisted before the field existed has no `weights`.
+    const legacy = base();
+    expect(legacy.weights).toBeUndefined();
+    const s = setLocalWeight(setLocalWeight(legacy, 1, 45), 3, 20);
+    expect(s.weights).toEqual({ "1": 45, "3": 20 });
+    expect(setLocalWeight(s, 1, 47.5).weights?.["1"]).toBe(47.5);
+  });
+
   it("removeLocalSet deletes exactly one entry and tolerates absence", () => {
     let s = recordLocalSet(base(), {
       position: 1,
