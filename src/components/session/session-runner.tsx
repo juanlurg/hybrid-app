@@ -974,9 +974,27 @@ export function SessionRunner({
           </p>
         ) : null}
 
-        <div className="font-display mt-6 text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
-          Después
-        </div>
+        {/* Mid-set the screen is the set: the whole-session list and the
+            exit fold behind one line, open once every set is logged. */}
+        <details
+          className="group mt-6"
+          open={totalDone >= totalSets || undefined}
+        >
+          <summary className="flex min-h-11 list-none items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-3 [&::-webkit-details-marker]:hidden">
+            <span className="font-display min-w-0 flex-1 text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
+              Toda la sesión
+            </span>
+            <span className="num flex-none text-[12px] leading-none text-faint">
+              {totalDone}/{totalSets} series
+            </span>
+            <span
+              aria-hidden
+              className="font-display flex-none text-[13px] leading-none text-faint transition-transform group-open:rotate-45"
+            >
+              ＋
+            </span>
+          </summary>
+
         <div className="mt-2.5 flex flex-col gap-1.5">
           {exercises.map((e, i) => {
             const done = countDone(logs, e.id, e.sets);
@@ -1004,9 +1022,25 @@ export function SessionRunner({
           })}
         </div>
 
-        {/* Explicit exit: the gym closes, the shoulder hurts — a session
-            can close as partial without inventing sets. A complete one
-            confirms too: the last set never registers the day by itself. */}
+          {/* Explicit exit: the gym closes, the shoulder hurts — a session
+              can close as partial without inventing sets. A complete one
+              confirms too: the last set never registers the day by itself. */}
+          {!confirmFinish ? (
+            <button
+              type="button"
+              onClick={() => setConfirmFinish(true)}
+              className="mt-2.5 flex w-full items-center justify-between rounded-xl border border-dashed border-hairline px-4 py-3.5 text-left"
+            >
+              <span className="font-display text-[12px] leading-none font-semibold tracking-[0.06em] uppercase">
+                Terminar sesión
+              </span>
+              <span className="num text-[12px] leading-none text-mid">
+                {totalDone}/{totalSets} series
+              </span>
+            </button>
+          ) : null}
+        </details>
+
         {confirmFinish ? (
           <div ref={finishRef}>
             <Card
@@ -1058,20 +1092,7 @@ export function SessionRunner({
               />
             </Card>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmFinish(true)}
-            className="mt-4 flex w-full items-center justify-between rounded-xl border border-dashed border-hairline px-4 py-3.5 text-left"
-          >
-            <span className="font-display text-[12px] leading-none font-semibold tracking-[0.06em] uppercase">
-              Terminar sesión
-            </span>
-            <span className="num text-[12px] leading-none text-mid">
-              {totalDone}/{totalSets} series
-            </span>
-          </button>
-        )}
+        ) : null}
       </div>
 
       {/* AppShell already pays `--safe-bottom` on the runner branch. */}
