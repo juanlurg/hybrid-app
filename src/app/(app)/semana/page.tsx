@@ -367,7 +367,7 @@ export default async function SemanaPage({
           TEMPORADA · {formatSeasonRange(seasonStart, seasonEnd).toUpperCase()}
         </SectionLabel>
 
-        <PhaseBar phases={barPhases} />
+        <PhaseBar phases={barPhases} activeAbsoluteWeek={absoluteWeek} />
 
         <div className="flex items-baseline gap-3 px-5 pt-2.5 pb-6">
           <span className="min-w-0 flex-1 truncate text-[13px] leading-[1.2] font-semibold">
