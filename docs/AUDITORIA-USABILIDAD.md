@@ -218,9 +218,11 @@ pero es la misma enfermedad: cada pantalla resuelve lo suyo a su manera.
   4. la identidad de la sesión es `unique (user_id, scheduled_on, slot_id)`
      (`supabase/migrations/20260729000300_training.sql:50`);
   5. `/api/sync` inserta y al terminar cierra esa fila
-     (`src/app/api/sync/route.ts:143-162`, `:410-425`);
+     (`src/app/api/sync/route.ts:143-162`, `:410-455`);
   6. `/semana` busca por `(scheduled_on, slot_id)` y pinta el lunes futuro
-     como hecho. Nada en el esquema registra el día real del entrenamiento.
+     como hecho. Ninguna columna de *fecha* registra el día real:
+     `scheduled_on` es la del plan, y `started_at`/`completed_at` son
+     instantes que ninguna pantalla usa para colocar la sesión.
 - mecanismo: el clamp de `placeDate` es intencionado (colocación de
   *pantalla*, fijado por test); el bug es aguas abajo — permitir empezar y
   cerrar una sesión bajo esa fecha clampada sin avisar. La única defensa que
@@ -261,20 +263,22 @@ pero es la misma enfermedad: cada pantalla resuelve lo suyo a su manera.
 **ERR-04 · destructivo junto a cotidiano en ajustes — S3 · E1 · densidad**
 - evidencia: «Desplazar el plan» (irreversible en bloque) y «Borrar
   historial» conviven en la misma tarjeta «Datos» que «Exportar copia»
-  (`settings-groups.tsx:819-854`).
+  (`settings-groups.tsx:754-885`).
 - recomendación: zona de peligro separada al final, con espacio y color
   propios.
 
 **ERR-05 · desplazar el plan a golpe de ±1 día — S3 · E1 · densidad**
-- evidencia: mover el plan es un stepper de ±1 día (−90…+90): dos semanas son
-  14 pulsaciones más confirmación (`settings-groups.tsx`).
+- evidencia: mover el plan es un stepper de ±1 día por toque (−90…+90,
+  saltando el 0 y partiendo de +7; `settings-groups.tsx:844-853`): cada
+  semana extra son 7 pulsaciones, más confirmación.
 - recomendación: entrada directa o selector de fecha destino («empezar el
   lunes X»), manteniendo la confirmación.
 
 **ERR-06 · la carrera se puede corregir a posteriori; la fuerza no — S3 · E2 · capacidad ausente**
 - evidencia: una carrera registrada ofrece «editar datos»
-  (`src/app/(app)/carrera/[fecha]/log-run-form.tsx:280-293` — «los datos del
-  reloj llegan en casa»); una sesión de fuerza `done` no tiene ninguna vía de
+  (`src/app/(app)/carrera/[fecha]/log-run-form.tsx:280-293`; el comentario en
+  `:171-173` explica el porqué — los datos del reloj llegan en casa, después
+  de marcar «hecha»); una sesión de fuerza `done` no tiene ninguna vía de
   reapertura (la barra de hoy queda inerte, `start-session-button.tsx:49-54`).
 - recomendación: «corregir sesión» desde el resumen, reutilizando el mismo
   camino idempotente de `set_log` (y `set_unlog` cuando exista).
@@ -292,8 +296,8 @@ pero es la misma enfermedad: cada pantalla resuelve lo suyo a su manera.
   servidor: el peso real ya viaja por serie) y permitir entrada directa.
 
 **ERR-08 · el motor libera un hold que nunca llegaste a mover — S2 · E3 · bug**
-- evidencia: `clean` se calcula solo con repeticiones
-  (`src/lib/engine/replay.ts:143-148`) y la comprobación de «¿se puso a
+- evidencia: `clean` se calcula solo con repeticiones (o segundos) y número
+  de series (`src/lib/engine/replay.ts:143-148`) y la comprobación de «¿se puso a
   prueba el peso retenido?» lee la prescripción, no el peso registrado:
   `tested = !lift.hold || workingWeight(lift, week, config).isHeld`
   (`replay.ts:151-163`); en ningún punto se compara `log.weightKg` con
