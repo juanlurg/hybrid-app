@@ -17,8 +17,8 @@ evidencia (`fichero:línea` en `462d567`), mecanismo y recomendación.
 - Tipo: bug · capacidad ausente · descubribilidad · densidad · decisión de
   producto.
 
-La sección 8 (heurísticas) no añade hallazgos: es la lente transversal. La
-sección 9 es la hoja de ruta; nada de esto se implementa en esta rama.
+La sección 7 (heurísticas) no añade hallazgos: es la lente transversal. La
+sección 8 es la hoja de ruta; nada de esto se implementa en esta rama.
 
 ## 1 · lo que reportaste
 
@@ -235,7 +235,7 @@ pero es la misma enfermedad: cada pantalla resuelve lo suyo a su manera.
   empieza el lunes X» — y confirmación explícita antes de empezar una sesión
   cuya fecha no es hoy; (E2, de raíz) separar «qué día del plan» de «cuándo
   ocurrió»: `scheduledOn: today` manteniendo fase/slot/semana, o una columna
-  `performed_on`. Las dos variantes exigen decidir la semántica (sección 9).
+  `performed_on`. Las dos variantes exigen decidir la semántica (sección 8).
 
 **ERR-02 · ninguna serie se puede borrar — S2 · E2 · capacidad ausente**
 - evidencia: `QueueOp` tiene exactamente 6 tipos y ninguno elimina
@@ -313,12 +313,12 @@ pero es la misma enfermedad: cada pantalla resuelve lo suyo a su manera.
 - recomendación: exigir además `log.weightKg >= holdAtKg` (con tolerancia de
   redondeo) para liberar el hold. Toca el núcleo determinista que corre
   idéntico en cliente y servidor: cambio pequeño, pero con `replay.test.ts` y
-  `engine.test.ts` detrás. Decisión de producto en la sección 9.
+  `engine.test.ts` detrás. Decisión de producto en la sección 8.
 
 ## 5 · flexibilidad frente a rigidez deliberada
 
 Qué es decisión y qué es bug: «la app funciona así a propósito»
-(`PROGRAMA-maria.md:172`) cubre *no recuperar días perdidos*. No cubre fechar
+(`docs/PROGRAMA-maria.md:172`) cubre *no recuperar días perdidos*. No cubre fechar
 sesiones en el futuro sin avisar (ERR-01), ni impide ofrecer movimientos de
 día *hacia delante* dentro de la semana. Los hallazgos de esta sección son en
 parte decisiones a re-examinar, y se marcan como tales.
@@ -362,9 +362,12 @@ parte decisiones a re-examinar, y se marcan como tales.
   `resolveWeek` sirve cualquier fase/semana).
 
 **FLEX-04 · no existe «entrenar la sesión de otro día» — S3 · E3 · decisión de producto**
-- evidencia: los dos únicos puntos de arranque calculan ellos mismos el
-  objetivo desde `placeDate` — hoy (`page.tsx:283-298`) y el shell offline —
-  y `StartSessionButton` recibe un día fijo. No hay selector.
+- evidencia: los dos únicos puntos de arranque parten de la colocación de
+  `placeDate` — hoy consume `athlete.placement`
+  (`src/lib/data/athlete.ts:82`) y pasa un día fijo a `StartSessionButton`
+  (`page.tsx:283-298`); el shell offline hace el mismo cálculo
+  (`src/app/~offline/offline-shell.tsx:72`, arranque en `:228`). No hay
+  selector.
 - mecanismo: si hoy no toca (o toca otra cosa), la única puerta es esperar o
   saltar.
 - recomendación: si se quiere, un «entrenar esta» en la vista de día futuro
@@ -390,14 +393,14 @@ parte decisiones a re-examinar, y se marcan como tales.
 - recomendación: por fases — 1) notificación al terminar el descanso (un
   push local al expirar, útil con la pantalla apagada); 2) notificación
   persistente con serie/descanso en Android; 3) evaluar Media Session como
-  «widget» de pantalla de bloqueo. Requiere decidir alcance (sección 9).
+  «widget» de pantalla de bloqueo. Requiere decidir alcance (sección 8).
 
-**PWA-02 · el temporizador de descanso solo existe en primer plano — S3**
+**PWA-02 · el temporizador de descanso solo existe en primer plano — S3 · capacidad ausente**
 - evidencia: interval de 250 ms con fecha límite de reloj
-  (`src/components/session/rest-timer.tsx`); el vencimiento avisa con flash
-  en página, vibración y pitido WebAudio — todo exige la página viva. El
-  wake lock (si «mantener pantalla encendida» está activo) lo mitiga
-  manteniendo la pantalla despierta.
+  (`src/components/session/rest-timer.tsx:135-155`); el vencimiento avisa con
+  flash en página, vibración y pitido WebAudio — todo exige la página viva.
+  El wake lock (`:212-254`, si «mantener la pantalla encendida» está activo)
+  lo mitiga manteniendo la pantalla despierta.
 - mecanismo: con la pantalla apagada o en otra app, el final del descanso
   pasa en silencio; al volver, el número es correcto (fecha límite de reloj),
   pero el aviso ya no llegó.
@@ -411,7 +414,7 @@ parte decisiones a re-examinar, y se marcan como tales.
 | visibilidad del estado | ERR-01, PWA-02, DEN-04 | hoy no dice que el plan no ha empezado; el descanso termina en silencio; «GUARDANDO…» se repite porque no se ve |
 | sistema ↔ mundo real | NAV-02, ERR-01 | dos «semana 6» distintas; una fecha futura como eyebrow sin explicación |
 | control y libertad | ERR-02, ERR-03, ERR-06, FLEX-01, FLEX-04 | sin borrar serie, cierre automático, fuerza incorregible, días inamovibles |
-| consistencia y estándares | NAV-07, ERR-06, kit | tres etiquetados para seis parámetros; carrera editable y fuerza no; `Segmented` sin usar |
+| consistencia y estándares | NAV-07, ERR-06 | tres etiquetados para seis parámetros; carrera editable y fuerza no; `Segmented` sin usar |
 | prevención de errores | ERR-01, ERR-03, ERR-04 | empezar una sesión futura sin fricción; terminar sin confirmar; borrar junto a exportar |
 | reconocimiento > recuerdo | NAV-06, FLEX-02 | el porqué de cada fase y la prioridad de una semana rota hay que sabérselos |
 | flexibilidad y eficiencia | ERR-05, NAV-03, FLEX-03 | ±1 día × 14; «+» × 18; el editor solo edita hoy |
@@ -436,6 +439,8 @@ valor/esfuerzo.
 7. FLEX-02 — enseñar la prioridad de la semana rota al saltar un día.
 8. ERR-04 + ERR-05 + DEN-07 — zona de peligro, selector de fecha para
    desplazar, filas inertes al fondo.
+9. NAV-02 + NAV-08 — una sola numeración de semana visible; enlace a
+   `/generar` desde `/programa`.
 
 **ola 2 — estructural (E2)**
 1. ERR-02 — op `set_unlog` de punta a punta (deshacer serie).
@@ -447,8 +452,8 @@ valor/esfuerzo.
 5. NAV-07 — una sola casa para los parámetros del motor.
 6. NAV-03 — selector de semana/fase en `/semana`.
 7. ERR-06 — corregir una sesión de fuerza registrada.
-8. DEN-03 + DEN-06 — modo enfoque del runner; edición por ejercicio en el
-   editor.
+8. DEN-03 + DEN-05 + DEN-06 — modo enfoque del runner; pliegues en
+   historial; edición por ejercicio en el editor.
 
 **ola 3 — profundo (E3)**
 1. FLEX-01 — mover días (la salida que elija la decisión 2).
