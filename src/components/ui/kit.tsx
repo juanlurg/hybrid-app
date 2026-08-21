@@ -167,6 +167,7 @@ export function HeroNumber({
 }: {
   value: ReactNode;
   unit: string;
+  /** A quiet caption beside the number — never data the set depends on. */
   lines?: ReactNode;
   size?: "lg" | "md";
 }) {
@@ -490,7 +491,7 @@ export function Stepper({
       </button>
       <div
         className={cn(
-          "num flex h-8 items-center justify-center rounded-sm border border-edge bg-surface px-2.5 text-[12px] leading-none font-semibold",
+          "num flex h-8 items-center justify-center rounded-sm border border-edge bg-surface px-2.5 text-[14px] leading-none font-semibold",
           compact ? "min-w-8" : "min-w-[58px]",
         )}
       >
@@ -666,5 +667,5 @@ export function Footnote({ children }: { children: ReactNode }) {
 
 /*
  * The plate breakdown is no longer a component: Hoy renders it as a `Tag`
- * and the runner folds it into the hero's right-hand lines.
+ * and the runner gives it its own labelled row under the hero.
  */
