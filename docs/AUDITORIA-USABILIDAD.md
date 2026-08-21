@@ -57,8 +57,9 @@ Mapa actual (móvil): 4 pestañas — **hoy · semana · progreso · programa** 
 cuelgan de programa como píldoras (`SecondaryNav`, `app-shell.tsx:127`), a 2
 toques. `/generar` está a 4 interacciones (único enlace: el pie de `/editor`).
 El runner suprime la barra de pestañas; su única salida es la flecha del
-`TopBar`. Los únicos enlaces contextuales entre pantallas de toda la app son:
-hoy→movilidad, programa→ajustes (nota de 11 px), editor→generar y los backs.
+`TopBar`. Fuera de las filas de `/semana` — el único índice navegable de la
+app — los únicos enlaces contextuales entre pantallas son: hoy→movilidad,
+programa→ajustes (nota de 11 px), editor→generar y los backs.
 
 **NAV-01 · los días de fuerza futuros son invisibles — S2 · E1 · capacidad ausente**
 - evidencia: `src/app/(app)/semana/page.tsx:43-56` (`hrefFor`) devuelve
@@ -76,7 +77,8 @@ hoy→movilidad, programa→ajustes (nota de 11 px), editor→generar y los back
 **NAV-02 · dos numeraciones de semana en la misma línea — S3 · E1 · descubribilidad**
 - evidencia: el título dice «Semana 3 de 8» (semana local de fase) y el
   stepper de al lado muestra `{semanaAbsoluta}/{semanasTemporada}`
-  (`src/app/(app)/semana/week-nav.tsx:9-13`, docstring que lo reconoce).
+  (`src/app/(app)/semana/week-nav.tsx:57`; el docstring en `:9-13` reconoce
+  la discrepancia).
 - mecanismo: dos «semana 6» distintas conviven sin etiqueta que las distinga.
 - recomendación: una sola numeración visible (la de fase, que es la que habla
   el motor) y la absoluta como subtítulo, o etiquetar ambas.
@@ -105,7 +107,7 @@ hoy→movilidad, programa→ajustes (nota de 11 px), editor→generar y los back
 - evidencia: `program_phases.emphasis` y `notes` existen, se siembran en cada
   plantilla y solo los lee el prompt de la IA (`src/lib/ai/prompt.ts:129`).
   La barra de fases de `/semana` es presentacional: tocar una fase no hace
-  nada (`semana/page.tsx:304-334`).
+  nada (`semana/page.tsx:304-322`).
 - mecanismo: «qué se hace en cada fase» está en la base de datos y no lo ve
   nadie más que el modelo.
 - recomendación: barra de fases tocable → nombre, énfasis, notas, semanas y
@@ -176,7 +178,7 @@ que más se leen en mitad de una serie son los más pequeños de la pantalla.
   borrar) en su propia pantalla.
 
 **DEN-05 · historial: ~90 datos de una vez — S3 · densidad**
-- evidencia: 4 KPI + rejilla de constancia + leyenda de 7 colores + récords +
+- evidencia: 4 KPI + rejilla de constancia + leyenda de 7 entradas + récords +
   registro filtrable de 30 filas expandibles + línea de tiempo del motor de
   hasta 40 eventos, en un scroll (`src/app/(app)/historial/page.tsx`, 721
   líneas).
