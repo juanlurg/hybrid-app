@@ -28,6 +28,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/cn";
 
 import { HistoryLog, type HistoryEntry } from "./history-log";
+import { HistoryTabs } from "./history-tabs";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -55,7 +56,8 @@ const LEGEND: Array<{ label: string; colour?: string }> = [
   { label: "por venir" },
 ];
 
-const dayKey = (date: string, slotId: string | null) => `${date}|${slotId ?? ""}`;
+const dayKey = (date: string, slotId: string | null) =>
+  `${date}|${slotId ?? ""}`;
 
 /** "52′", "1 h 05′". Never a bare number of seconds. */
 function formatMinutes(seconds: number | null): string {
@@ -110,12 +112,19 @@ async function bestSetPerLift(
       ] as const;
     }),
   );
-  return new Map(rows.filter((row): row is NonNullable<typeof row> => row !== null));
+  return new Map(
+    rows.filter((row): row is NonNullable<typeof row> => row !== null),
+  );
 }
 
 interface LiftRecord {
   lift: LiftRow;
-  best: { weightKg: number; reps: number; date: IsoDate; epleyKg: number } | null;
+  best: {
+    weightKg: number;
+    reps: number;
+    date: IsoDate;
+    epleyKg: number;
+  } | null;
 }
 
 export default async function HistorialPage() {
@@ -211,7 +220,9 @@ export default async function HistorialPage() {
   const sessionByKey = new Map(
     sessions.map((s) => [dayKey(s.scheduled_on, s.slot_id), s] as const),
   );
-  const runBySession = new Map((runRows ?? []).map((r) => [r.session_id, r] as const));
+  const runBySession = new Map(
+    (runRows ?? []).map((r) => [r.session_id, r] as const),
+  );
   const mobilityBySession = new Map(
     (mobilityRows ?? [])
       .filter((m) => m.session_id)
@@ -272,13 +283,17 @@ export default async function HistorialPage() {
     (s) => s.status === "done" || s.status === "partial",
   ).length;
 
-  const totalTonnage = sessions.reduce((acc, s) => acc + Number(s.tonnage_kg ?? 0), 0);
+  const totalTonnage = sessions.reduce(
+    (acc, s) => acc + Number(s.tonnage_kg ?? 0),
+    0,
+  );
 
   let runSeconds = 0;
   for (const s of sessions) {
     if (groupOf(s.session_type) !== "run") continue;
     if (s.status !== "done" && s.status !== "partial") continue;
-    const logged = s.duration_seconds ?? runBySession.get(s.id)?.duration_seconds ?? null;
+    const logged =
+      s.duration_seconds ?? runBySession.get(s.id)?.duration_seconds ?? null;
     if (logged && logged > 0) {
       runSeconds += logged;
       continue;
@@ -333,7 +348,8 @@ export default async function HistorialPage() {
       .filter((l) => l.session_id === s.id)
       .sort((a, b) => a.position - b.position || a.set_index - b.set_index);
     const runLog = runBySession.get(s.id) ?? null;
-    const loggedSeconds = s.duration_seconds ?? runLog?.duration_seconds ?? null;
+    const loggedSeconds =
+      s.duration_seconds ?? runLog?.duration_seconds ?? null;
 
     const details: Array<{ label: string; value: string }> = [];
     let subtitle = day?.subtitle ?? "";
@@ -343,7 +359,8 @@ export default async function HistorialPage() {
       const primary = day?.primary ?? null;
       const planned = day?.totalSets ?? 0;
       const tonnageKg = Number(s.tonnage_kg ?? 0);
-      headline = tonnageKg > 0 ? formatTonnage(tonnageKg) : `${logs.length} ser.`;
+      headline =
+        tonnageKg > 0 ? formatTonnage(tonnageKg) : `${logs.length} ser.`;
 
       // The basic as it was actually lifted that day. Never the weight the
       // engine would prescribe for it today — the RM has moved since.
@@ -355,7 +372,9 @@ export default async function HistorialPage() {
           )
         : logs.filter((l) => l.position === logs[0]?.position);
       const basicName = primary?.name ?? primaryLogs[0]?.exercise_name ?? null;
-      const basicWeight = primaryLogs.find((l) => l.weight_kg != null)?.weight_kg;
+      const basicWeight = primaryLogs.find(
+        (l) => l.weight_kg != null,
+      )?.weight_kg;
       const basicReps = primaryLogs.map((l) => l.reps ?? 0).join("·");
       const basic =
         primaryLogs.length === 0
@@ -420,7 +439,9 @@ export default async function HistorialPage() {
       );
     } else {
       const mob =
-        mobilityBySession.get(s.id) ?? mobilityByDate.get(s.scheduled_on) ?? null;
+        mobilityBySession.get(s.id) ??
+        mobilityByDate.get(s.scheduled_on) ??
+        null;
       const total = mob?.total_items ?? 0;
       const done = mob?.completed_slugs.length ?? 0;
       subtitle = subtitle || "Movilidad y correctivos";
@@ -525,198 +546,216 @@ export default async function HistorialPage() {
           ))}
         </div>
 
-        {/* ── consistency ─────────────────────────────────────── */}
+        <HistoryTabs
+          constancia={
+            <>
+              <SectionLabel
+                className="pt-4"
+                right={<span className="text-[11px]">L M X J V S D</span>}
+              >
+                constancia · {phase.weeks} semanas
+              </SectionLabel>
 
-        <SectionLabel
-          className="pt-4"
-          right={<span className="text-[11px]">L M X J V S D</span>}
-        >
-          constancia · {phase.weeks} semanas
-        </SectionLabel>
-
-        <div className="mt-2.5 flex flex-col gap-[5px] pb-1">
-          {gridWeeks.map((row) => {
-            // Weeks the athlete has not reached yet read as a plan, not a score.
-            const ahead = row.week > placement.week;
-            return (
-              <div key={row.week} className="flex items-center gap-2 px-5">
-                <span
-                  className={cn(
-                    "font-display w-[26px] flex-none text-[10px] leading-none font-semibold",
-                    ahead ? "text-faint" : "text-mid",
-                  )}
-                >
-                  {row.label}
-                </span>
-                <div className="flex flex-1 gap-1">
-                  {row.days.map((d) => {
-                    const colour = cellColour(
-                      d.group,
-                      statusForDay(d),
-                      d.date > today,
-                    );
-                    return (
-                      <div
-                        key={d.date}
-                        title={`${d.dateLabel} · ${d.title}`}
-                        className={cn(
-                          "h-4 flex-1 rounded-[4px] border",
-                          // No fill is how `cellColour` says "still ahead".
-                          colour.background === "transparent" &&
-                            "border-dashed",
-                        )}
-                        style={{
-                          background: colour.background,
-                          borderColor: colour.border,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-                <span
-                  className={cn(
-                    "num w-[34px] flex-none text-right text-[10px] leading-none font-semibold",
-                    ahead ? "text-faint" : "text-mid",
-                  )}
-                >
-                  {row.pct == null ? "—" : `${row.pct}%`}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 pt-2.5">
-          {LEGEND.map((l) => (
-            <span key={l.label} className="flex items-center gap-1.5">
-              {l.colour ? (
-                /* The hairline outline is what makes the palest fills —
-                   "sin registrar" against the page — visible at 9px. */
-                <span
-                  className="h-[9px] w-[9px] flex-none rounded-[3px] border border-hairline"
-                  style={{ background: l.colour }}
-                />
-              ) : (
-                <span className="h-[9px] w-[9px] flex-none rounded-[3px] border border-dashed border-hairline" />
-              )}
-              <span className="text-[10px] leading-none text-faint uppercase">
-                {l.label}
-              </span>
-            </span>
-          ))}
-        </div>
-
-        {/* ── records ─────────────────────────────────────────── */}
-
-        <SectionLabel className="pt-4">récords · mejor serie</SectionLabel>
-
-        <RowStack className="mt-2.5">
-          {records.length === 0 ? (
-            <Row>
-              <p className="text-[12px] leading-[1.55] text-faint">
-                Este programa no tiene básicos con RM asociada, así que no hay
-                récords que seguir.
-              </p>
-            </Row>
-          ) : (
-            records.map(({ lift, best }) => (
-              <Row key={lift.id} className="flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] leading-[1.2] font-medium">
-                    {lift.name}
-                  </div>
-                  <div className="mt-0.5 truncate text-[11px] leading-[1.35] text-faint">
-                    {best ? `${formatDayShort(best.date)} · ` : ""}RM est.{" "}
-                    {formatWeight(Number(lift.e1rm_kg))} kg
-                  </div>
-                </div>
-                {best ? (
-                  <>
-                    <span className="num flex-none text-[14px] leading-none font-semibold">
-                      {formatWeight(best.weightKg)} × {best.reps}
-                    </span>
-                    <span className="num min-w-[74px] flex-none text-right text-[14px] leading-none font-bold text-lime">
-                      {formatWeight(best.epleyKg)}{" "}
-                      <span className="text-[10px] font-semibold text-lime-dim uppercase">
-                        epley
-                      </span>
-                    </span>
-                  </>
-                ) : (
-                  <span className="flex-none text-[11px] leading-none text-faint">
-                    sin series
-                  </span>
-                )}
-              </Row>
-            ))
-          )}
-        </RowStack>
-
-        {/* ── log ─────────────────────────────────────────────── */}
-
-        <SectionLabel
-          className="pt-4"
-          right={
-            entries.length > 0 ? (
-              <span className="text-[11px]">{entries.length} sesiones</span>
-            ) : undefined
-          }
-        >
-          registro
-        </SectionLabel>
-        <HistoryLog entries={entries} />
-
-        {/* ── engine timeline ─────────────────────────────────── */}
-
-        <SectionLabel className="pt-4">línea de tiempo del motor</SectionLabel>
-
-        <RowStack className="mt-2.5">
-          {(eventRows ?? []).length === 0 ? (
-            <Row>
-              <p className="text-[12px] leading-[1.55] text-faint">
-                El motor no ha tocado nada todavía. Cada ajuste — congelar un
-                peso, recortar una RM, sumar un ciclo — queda aquí con su semana
-                y su detalle.
-              </p>
-            </Row>
-          ) : (
-            (eventRows ?? []).map((e) => {
-              const reverted = Boolean(e.reverted_at);
-              return (
-                <Row key={e.id}>
-                  <div
-                    className="rounded-r-sm border-l-[4px] py-0.5 pl-3"
-                    style={{ borderColor: EVENT_TONE[e.kind] ?? TONE.ink }}
-                  >
-                    <div className="flex items-baseline gap-2">
-                      <span className="num text-[10px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
-                        sem {e.week ?? "—"}
-                      </span>
-                      {reverted ? (
-                        <span className="font-display text-[10px] leading-none font-semibold tracking-[0.1em] text-ghost uppercase">
-                          deshecho
-                        </span>
-                      ) : null}
-                    </div>
+              <div className="mt-2.5 flex flex-col gap-[5px] pb-1">
+                {gridWeeks.map((row) => {
+                  // Weeks the athlete has not reached yet read as a plan, not a score.
+                  const ahead = row.week > placement.week;
+                  return (
                     <div
-                      className={cn(
-                        "mt-1.5 text-[13px] leading-[1.25] font-semibold",
-                        reverted && "text-ghost line-through",
-                      )}
+                      key={row.week}
+                      className="flex items-center gap-2 px-5"
                     >
-                      {e.title}
-                    </div>
-                    {e.detail ? (
-                      <div className="mt-1.5 text-[12px] leading-[1.5] text-mid">
-                        {e.detail}
+                      <span
+                        className={cn(
+                          "font-display w-[26px] flex-none text-[10px] leading-none font-semibold",
+                          ahead ? "text-faint" : "text-mid",
+                        )}
+                      >
+                        {row.label}
+                      </span>
+                      <div className="flex flex-1 gap-1">
+                        {row.days.map((d) => {
+                          const colour = cellColour(
+                            d.group,
+                            statusForDay(d),
+                            d.date > today,
+                          );
+                          return (
+                            <div
+                              key={d.date}
+                              title={`${d.dateLabel} · ${d.title}`}
+                              className={cn(
+                                "h-4 flex-1 rounded-[4px] border",
+                                // No fill is how `cellColour` says "still ahead".
+                                colour.background === "transparent" &&
+                                  "border-dashed",
+                              )}
+                              style={{
+                                background: colour.background,
+                                borderColor: colour.border,
+                              }}
+                            />
+                          );
+                        })}
                       </div>
-                    ) : null}
-                  </div>
-                </Row>
-              );
-            })
-          )}
-        </RowStack>
+                      <span
+                        className={cn(
+                          "num w-[34px] flex-none text-right text-[10px] leading-none font-semibold",
+                          ahead ? "text-faint" : "text-mid",
+                        )}
+                      >
+                        {row.pct == null ? "—" : `${row.pct}%`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 px-5 pt-2.5">
+                {LEGEND.map((l) => (
+                  <span key={l.label} className="flex items-center gap-1.5">
+                    {l.colour ? (
+                      /* The hairline outline is what makes the palest fills —
+                   "sin registrar" against the page — visible at 9px. */
+                      <span
+                        className="h-[9px] w-[9px] flex-none rounded-[3px] border border-hairline"
+                        style={{ background: l.colour }}
+                      />
+                    ) : (
+                      <span className="h-[9px] w-[9px] flex-none rounded-[3px] border border-dashed border-hairline" />
+                    )}
+                    <span className="text-[10px] leading-none text-faint uppercase">
+                      {l.label}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </>
+          }
+          records={
+            <>
+              <SectionLabel className="pt-4">
+                récords · mejor serie
+              </SectionLabel>
+
+              <RowStack className="mt-2.5">
+                {records.length === 0 ? (
+                  <Row>
+                    <p className="text-[12px] leading-[1.55] text-faint">
+                      Este programa no tiene básicos con RM asociada, así que no
+                      hay récords que seguir.
+                    </p>
+                  </Row>
+                ) : (
+                  records.map(({ lift, best }) => (
+                    <Row key={lift.id} className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[14px] leading-[1.2] font-medium">
+                          {lift.name}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] leading-[1.35] text-faint">
+                          {best ? `${formatDayShort(best.date)} · ` : ""}RM est.{" "}
+                          {formatWeight(Number(lift.e1rm_kg))} kg
+                        </div>
+                      </div>
+                      {best ? (
+                        <>
+                          <span className="num flex-none text-[14px] leading-none font-semibold">
+                            {formatWeight(best.weightKg)} × {best.reps}
+                          </span>
+                          <span className="num min-w-[74px] flex-none text-right text-[14px] leading-none font-bold text-lime">
+                            {formatWeight(best.epleyKg)}{" "}
+                            <span className="text-[10px] font-semibold text-lime-dim uppercase">
+                              epley
+                            </span>
+                          </span>
+                        </>
+                      ) : (
+                        <span className="flex-none text-[11px] leading-none text-faint">
+                          sin series
+                        </span>
+                      )}
+                    </Row>
+                  ))
+                )}
+              </RowStack>
+            </>
+          }
+          registro={
+            <>
+              <SectionLabel
+                className="pt-4"
+                right={
+                  entries.length > 0 ? (
+                    <span className="text-[11px]">
+                      {entries.length} sesiones
+                    </span>
+                  ) : undefined
+                }
+              >
+                registro
+              </SectionLabel>
+              <HistoryLog entries={entries} />
+            </>
+          }
+          motor={
+            <>
+              <SectionLabel className="pt-4">
+                línea de tiempo del motor
+              </SectionLabel>
+
+              <RowStack className="mt-2.5">
+                {(eventRows ?? []).length === 0 ? (
+                  <Row>
+                    <p className="text-[12px] leading-[1.55] text-faint">
+                      El motor no ha tocado nada todavía. Cada ajuste — congelar
+                      un peso, recortar una RM, sumar un ciclo — queda aquí con
+                      su semana y su detalle.
+                    </p>
+                  </Row>
+                ) : (
+                  (eventRows ?? []).map((e) => {
+                    const reverted = Boolean(e.reverted_at);
+                    return (
+                      <Row key={e.id}>
+                        <div
+                          className="rounded-r-sm border-l-[4px] py-0.5 pl-3"
+                          style={{
+                            borderColor: EVENT_TONE[e.kind] ?? TONE.ink,
+                          }}
+                        >
+                          <div className="flex items-baseline gap-2">
+                            <span className="num text-[10px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                              sem {e.week ?? "—"}
+                            </span>
+                            {reverted ? (
+                              <span className="font-display text-[10px] leading-none font-semibold tracking-[0.1em] text-ghost uppercase">
+                                deshecho
+                              </span>
+                            ) : null}
+                          </div>
+                          <div
+                            className={cn(
+                              "mt-1.5 text-[13px] leading-[1.25] font-semibold",
+                              reverted && "text-ghost line-through",
+                            )}
+                          >
+                            {e.title}
+                          </div>
+                          {e.detail ? (
+                            <div className="mt-1.5 text-[12px] leading-[1.5] text-mid">
+                              {e.detail}
+                            </div>
+                          ) : null}
+                        </div>
+                      </Row>
+                    );
+                  })
+                )}
+              </RowStack>
+            </>
+          }
+        />
 
         <Footnote>
           La adherencia cuenta los días de fuerza y carrera ya pasados; el día
