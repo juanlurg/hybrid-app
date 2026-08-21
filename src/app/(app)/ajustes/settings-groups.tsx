@@ -155,6 +155,19 @@ export interface SettingsProgram {
 const ACTION =
   "font-display flex h-11 items-center rounded-md border border-edge bg-soft px-3.5 text-[11px] leading-none font-semibold tracking-[0.08em] uppercase disabled:opacity-40";
 
+/** The section index: ~29 rows is far more than a screen, so every
+    section is one tap from the top instead of a blind scroll. */
+const SECTIONS: Array<{ id: string; label: string }> = [
+  { id: "ajustes-atleta", label: "Atleta" },
+  { id: "ajustes-equipo", label: "Equipo" },
+  { id: "ajustes-motor", label: "Motor" },
+  { id: "ajustes-sesion", label: "Sesión" },
+  { id: "ajustes-carrera", label: "Carrera" },
+  { id: "ajustes-datos", label: "Datos" },
+  { id: "ajustes-cuenta", label: "Cuenta" },
+  { id: "ajustes-peligro", label: "Peligro" },
+];
+
 export function SettingsGroups({
   profile: initialProfile,
   lifts,
@@ -344,7 +357,24 @@ export function SettingsGroups({
         </div>
       ) : null}
 
+      <div className="flex flex-wrap gap-1.5 px-5 pt-3">
+        {SECTIONS.map((s) => (
+          <Chip
+            key={s.id}
+            onClick={() =>
+              document
+                .getElementById(s.id)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className={s.id === "ajustes-peligro" ? "text-fail" : undefined}
+          >
+            {s.label}
+          </Chip>
+        ))}
+      </div>
+
       {/* ── atleta ─────────────────────────────────────────────── */}
+      <div id="ajustes-atleta" className="scroll-mt-2" />
       <SectionLabel right={status()}>Atleta</SectionLabel>
       <Group>
         <SettingRow name="Nombre" sub="Cómo te llama la app">
@@ -397,6 +427,7 @@ export function SettingsGroups({
       </Group>
 
       {/* ── equipo ─────────────────────────────────────────────── */}
+      <div id="ajustes-equipo" className="scroll-mt-2" />
       <SectionLabel right={status("GIMNASIO DE CASA")}>Equipo</SectionLabel>
       <Group>
         <SettingRow name="Barra" sub="La barra con la que levantas en casa">
@@ -544,6 +575,7 @@ export function SettingsGroups({
       </Group>
 
       {/* ── motor de pesos ─────────────────────────────────────── */}
+      <div id="ajustes-motor" className="scroll-mt-2" />
       <SectionLabel right={status("AFECTA A LOS CÁLCULOS")}>
         Motor de pesos
       </SectionLabel>
@@ -667,6 +699,7 @@ export function SettingsGroups({
       </Group>
 
       {/* ── sesión ─────────────────────────────────────────────── */}
+      <div id="ajustes-sesion" className="scroll-mt-2" />
       <SectionLabel right={status()}>Sesión</SectionLabel>
       <Group>
         <SettingRow
@@ -721,6 +754,7 @@ export function SettingsGroups({
       </Group>
 
       {/* ── carrera ────────────────────────────────────────────── */}
+      <div id="ajustes-carrera" className="scroll-mt-2" />
       <SectionLabel right={status("ZONAS Y DATOS")}>Carrera</SectionLabel>
       <Group>
         <SettingRow
@@ -750,6 +784,7 @@ export function SettingsGroups({
       </Group>
 
       {/* ── datos ──────────────────────────────────────────────── */}
+      <div id="ajustes-datos" className="scroll-mt-2" />
       <SectionLabel right={status()}>Datos</SectionLabel>
       <SyncStatus />
       <Group>
@@ -820,6 +855,7 @@ export function SettingsGroups({
       {/* ── cuenta y registro ──────────────────────────────────── */}
       {/* The rows that do nothing to the plan live together, at the end:
           a saturated screen cannot afford inert rows up top. */}
+      <div id="ajustes-cuenta" className="scroll-mt-2" />
       <SectionLabel right={status()}>Cuenta y registro</SectionLabel>
       <Group>
         <SettingRow name="Correo" sub="La cuenta con la que entras">
@@ -855,6 +891,7 @@ export function SettingsGroups({
 
       {/* ── zona de peligro ────────────────────────────────────── */}
       {/* Bulk moves and deletions do not sit beside the export button. */}
+      <div id="ajustes-peligro" className="scroll-mt-2" />
       <SectionLabel right={status()}>
         <span className="text-fail">Zona de peligro</span>
       </SectionLabel>
