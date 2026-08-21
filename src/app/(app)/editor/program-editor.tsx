@@ -8,7 +8,6 @@ import { SecondaryNav } from "@/components/app-shell";
 import {
   Card,
   Chip,
-  Row,
   RowStack,
   RuleNote,
   SectionLabel,
@@ -16,7 +15,6 @@ import {
 } from "@/components/ui/kit";
 import { accentFor, TONE } from "@/components/day-accents";
 import { cn } from "@/lib/cn";
-import { formatWeight } from "@/lib/engine";
 import { DAY_INITIALS } from "@/lib/domain/calendar";
 import type { SessionGroup } from "@/lib/domain/plan";
 import {
@@ -71,12 +69,6 @@ export interface CatalogEntry {
   pattern: string | null;
 }
 
-const RULE_LABEL: Record<string, string> = {
-  conservative: "CONSERVADORA",
-  standard: "ESTÁNDAR",
-  aggressive: "AGRESIVA",
-};
-
 const ICON_BUTTON =
   "flex h-8 w-8 flex-none items-center justify-center rounded-sm border border-edge bg-soft text-[13px] leading-none font-semibold text-mid disabled:opacity-30";
 
@@ -93,12 +85,10 @@ export function ProgramEditor({
   phase,
   week,
   isDeload,
-  cycle,
   waveIndex,
   wave,
   waveScope,
   pctOfRm,
-  params,
   days,
   slots,
   exercises,
@@ -114,19 +104,11 @@ export function ProgramEditor({
   week: number;
   absoluteWeek: number;
   isDeload: boolean;
-  cycle: number;
   waveIndex: number;
   wave: number[];
   /** Which wave the steppers edit — or none at all in a fixed-% phase. */
   waveScope: "phase" | "program" | "fixed";
   pctOfRm: number | null;
-  params: {
-    incLowerKg: number;
-    incUpperKg: number;
-    roundingKg: number;
-    targetRir: string;
-    regressionRule: string;
-  };
   days: DayView[];
   slots: SlotView[];
   exercises: ExerciseView[];
@@ -729,46 +711,20 @@ export function ProgramEditor({
             </>
           )}
 
-          <SectionLabel className="mt-2">Parámetros del motor</SectionLabel>
-          <RowStack className="mt-3">
-            <EngineRow
-              name="Ciclo actual"
-              sub={`Semana ${week} de ${phase.weeks} · ciclo ${cycle}`}
-              value={`${Math.round(
-                (waveScope === "fixed" ? (pctOfRm ?? 0.8) : wave[waveIndex]) *
-                  100,
-              )} %`}
-            />
-            <EngineRow
-              name="Incremento por ciclo · piernas"
-              sub="Sentadilla, hip thrust, RDL"
-              value={`+${formatWeight(params.incLowerKg)} kg`}
-            />
-            <EngineRow
-              name="Incremento por ciclo · torso"
-              sub="Banca, militar"
-              value={`+${formatWeight(params.incUpperKg)} kg`}
-            />
-            <EngineRow
-              name="Redondeo del peso"
-              sub="Según los discos que tengas"
-              value={`${formatWeight(params.roundingKg)} kg`}
-            />
-            <EngineRow
-              name="RIR objetivo del básico"
-              sub="Repeticiones en reserva"
-              value={params.targetRir}
-            />
-            <EngineRow
-              name="Regla de regresión"
-              sub="Qué pasa al fallar el rango"
-              value={RULE_LABEL[params.regressionRule] ?? params.regressionRule}
-            />
-          </RowStack>
-          <p className="px-5 pt-3.5 text-[12.5px] leading-[1.5] text-faint">
-            Estos parámetros se cambian en Ajustes. La IA no puede tocarlos:
-            propone cambios al programa, nunca al motor de pesos.
-          </p>
+          {/* One home for the engine parameters: Ajustes owns them, and
+              this screen keeps only what it can actually edit (the wave).
+              The AI cannot touch them either way. */}
+          <Link
+            href="/ajustes"
+            className="mt-2 flex items-center gap-2.5 px-6 py-2"
+          >
+            <span className="flex-1 text-[13px] leading-[1.4] text-mid">
+              Parámetros del motor · se cambian en ajustes
+            </span>
+            <span aria-hidden className="text-[13px] leading-none text-faint">
+              ›
+            </span>
+          </Link>
         </details>
 
         <Link
@@ -790,28 +746,6 @@ export function ProgramEditor({
         </Link>
       </div>
     </div>
-  );
-}
-
-function EngineRow({
-  name,
-  sub,
-  value,
-}: {
-  name: string;
-  sub: string;
-  value: string;
-}) {
-  return (
-    <Row className="flex items-center gap-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-[13.5px] leading-[1.2] font-semibold">{name}</div>
-        <div className="mt-1 text-[11px] leading-[1.3] text-faint">{sub}</div>
-      </div>
-      <div className="num flex h-8 min-w-[58px] items-center justify-center rounded-sm border border-edge bg-soft px-1.5 text-[13px] leading-none font-semibold">
-        {value}
-      </div>
-    </Row>
   );
 }
 

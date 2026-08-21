@@ -14,7 +14,6 @@ import {
 } from "@/lib/domain/calendar";
 import {
   cycleOf,
-  formatWeight,
   regressionLadder,
   roundToStep,
 } from "@/lib/engine";
@@ -129,7 +128,7 @@ function Fold({
 export default async function ProgramaPage() {
   const athlete = await requireAthlete();
   const { ctx, config, placement, seasonWeeks } = athlete;
-  const { profile, program } = ctx;
+  const { program } = ctx;
   const phase = ctx.phases.find((p) => p.id === placement.phase.id)!;
 
   const startsOn = program.starts_on as IsoDate;
@@ -186,15 +185,6 @@ export default async function ProgramaPage() {
     e1rmKg: Number(l.e1rm_kg),
     lastSet: lastSetByLift.get(l.key) ?? null,
   }));
-
-  const params: Array<{ label: string; value: string }> = [
-    { label: "RIR", value: profile.target_rir },
-    { label: "Redondeo", value: `${formatWeight(config.roundingKg)} kg` },
-    { label: "Barra", value: `${formatWeight(config.barKg)} kg` },
-    { label: "Incr. pierna", value: `+${formatWeight(config.incLowerKg)} kg` },
-    { label: "Incr. torso", value: `+${formatWeight(config.incUpperKg)} kg` },
-    { label: "LTHR", value: profile.lthr ? `${profile.lthr} ppm` : "sin test" },
-  ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -307,27 +297,18 @@ export default async function ProgramaPage() {
           </p>
         </Fold>
 
-        <div className="mt-3.5 grid grid-cols-3 gap-1.5 px-5">
-          {params.map((p) => (
-            <div
-              key={p.label}
-              className="rounded-md border border-line bg-surface px-3 py-2.5"
-            >
-              <div className="text-[10px] leading-none tracking-[0.08em] text-faint uppercase">
-                {p.label}
-              </div>
-              <div className="num mt-1 text-[14px] leading-none font-bold">
-                {p.value}
-              </div>
-            </div>
-          ))}
-        </div>
-
+        {/* One home for the engine parameters: Ajustes owns them. This
+            screen links there instead of keeping a third read-only copy. */}
         <Link
           href="/ajustes"
-          className="flex min-h-11 items-center justify-end px-5 text-[11px] leading-none text-faint"
+          className="mt-3.5 flex items-center gap-2.5 px-6 py-1"
         >
-          se cambian en Ajustes ›
+          <span className="flex-1 text-[13px] leading-[1.4] text-mid">
+            Parámetros del motor · se cambian en ajustes
+          </span>
+          <span aria-hidden className="text-[13px] leading-none text-faint">
+            ›
+          </span>
         </Link>
       </div>
     </div>

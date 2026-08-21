@@ -9,7 +9,7 @@ import {
 } from "@/lib/domain/plan";
 import { planWarnings } from "@/lib/domain/plan-rules";
 import { DAY_LABELS } from "@/lib/domain/calendar";
-import { cycleOf, isDeloadWeek, weekInCycle } from "@/lib/engine";
+import { isDeloadWeek, weekInCycle } from "@/lib/engine";
 import { changeOpSchema, type ChangeOp } from "@/lib/ai/schema";
 
 import { ProgramEditor } from "./program-editor";
@@ -127,7 +127,6 @@ export default async function EditorPage() {
       week={placement.week}
       absoluteWeek={placement.absoluteWeek}
       isDeload={isDeloadWeek(placement.week, phaseConfig)}
-      cycle={cycleOf(placement.week, phaseConfig.cycleWeeks)}
       waveIndex={weekInCycle(placement.week, phaseConfig.cycleWeeks)}
       wave={[...phaseConfig.wave]}
       waveScope={
@@ -138,13 +137,6 @@ export default async function EditorPage() {
             : "program"
       }
       pctOfRm={phaseConfig.pctOfRm}
-      params={{
-        incLowerKg: config.incLowerKg,
-        incUpperKg: config.incUpperKg,
-        roundingKg: config.roundingKg,
-        targetRir: ctx.profile.target_rir,
-        regressionRule: config.regressionRule,
-      }}
       catalog={catalog}
       days={week.map((d) => ({
         dayIndex: d.dayIndex,

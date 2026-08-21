@@ -118,7 +118,7 @@ on Programa, Historial, Editar and Ajustes.
 | `/sesion/[id]/resumen` | Summary — KPIs and what the engine changed |
 | `/semana` | The 7 days + season phase bar |
 | `/progreso` | Per-lift chart, engine breakdown, Pa:HR |
-| `/programa` | RMs, calculadora de RM (Epley), regression rule, engine parameters |
+| `/programa` | RMs, calculadora de RM (Epley), regression rule |
 | `/carrera/[fecha]` | Run blocks, HR zones, mark done |
 | `/fuerza/[fecha]` | Strength day read-only, any date + within-week catch-up |
 | `/movilidad` | Guided / list mobility block |
