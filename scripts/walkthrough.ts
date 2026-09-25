@@ -8,6 +8,8 @@
  */
 
 import { chromium, type ConsoleMessage, type Page } from "playwright";
+
+import { addDays, startOfWeek, todayIso } from "../src/lib/domain/calendar";
 import { mkdirSync } from "node:fs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -31,6 +33,62 @@ loadEnv();
 
 const problems: string[] = [];
 let visited = 0;
+
+/**
+ * The density budget, phone only: what a screen may put in front of the
+ * athlete before they scroll or tap anything — visible controls and words
+ * inside the first viewport. The last usability round found every screen
+ * had grown by accretion; a fix that adds a control has to take one away
+ * or raise the number here on purpose, in the diff where a reviewer sees it.
+ */
+const BUDGET: Record<string, { taps: number; words: number }> = {
+  "/": { taps: 10, words: 165 },
+  "/semana": { taps: 16, words: 190 },
+  "/progreso": { taps: 10, words: 110 },
+  "/programa": { taps: 12, words: 160 },
+  "/motor": { taps: 10, words: 190 },
+  "/editor": { taps: 18, words: 165 },
+  "/ajustes": { taps: 28, words: 135 },
+  "/movilidad": { taps: 8, words: 60 },
+};
+
+/** Controls and words inside the first viewport, as the thumb meets them. */
+async function firstViewport(page: Page) {
+  return page.evaluate(() => {
+    const inView = (el: Element) => {
+      // A closed fold still lays out its body; only its summary is seen.
+      if (el.closest("details:not([open])") && !el.closest("summary")) {
+        return false;
+      }
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return (
+        r.width > 0 &&
+        r.height > 0 &&
+        r.top < window.innerHeight &&
+        r.bottom > 0 &&
+        s.visibility !== "hidden" &&
+        s.display !== "none"
+      );
+    };
+    const taps = Array.from(
+      document.querySelectorAll(
+        "main a[href], main button, main input, main select, main textarea, main summary",
+      ),
+    ).filter(inView).length;
+    let words = 0;
+    const walker = document.createTreeWalker(
+      document.querySelector("main") ?? document.body,
+      NodeFilter.SHOW_TEXT,
+    );
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement;
+      if (!el || !inView(el)) continue;
+      words += (n.textContent ?? "").split(/\s+/).filter(Boolean).length;
+    }
+    return { taps, words };
+  });
+}
 
 /** Noise that is not a defect: dev-only warnings and favicon 404s. */
 const IGNORE = [
@@ -193,6 +251,19 @@ async function visit(page: Page, path: string, viewport: string) {
       problems.push(`[${label}] invisible text: ${hit}`);
     }
 
+    const budget = viewport === "phone" ? BUDGET[path] : undefined;
+    if (budget) {
+      const seen = await firstViewport(page);
+      if (seen.taps > budget.taps || seen.words > budget.words) {
+        problems.push(
+          `[${label}] over its density budget: ${seen.taps} controls / ` +
+            `${seen.words} words in the first screen ` +
+            `(budget ${budget.taps} / ${budget.words})`,
+        );
+      }
+      console.log(`       ${seen.taps} controls · ${seen.words} words`);
+    }
+
     if (SHOTS) {
       mkdirSync(SHOT_DIR, { recursive: true });
       const name = `${viewport}${path.replace(/\//g, "_") || "_home"}.png`;
@@ -243,9 +314,16 @@ async function main() {
   stopSignup();
   console.log("  ok   redirected to /onboarding");
 
+  // The season starts on this week's Monday, whatever today is: the first
+  // phase of every template trains strength on its Monday, so there is
+  // always a strength day this week to read, and to train from its screen.
+  const monday = startOfWeek(todayIso());
+  const strengthDay = `/fuerza/${monday}`;
+  const runDay = `/carrera/${addDays(monday, 1)}`;
+
   console.log("\nOnboarding");
   const stopOnboard = watch(page, "phone /onboarding");
-  await page.fill('input[name="starts_on"]', "2026-09-14");
+  await page.fill('input[name="starts_on"]', monday);
   await page.fill('input[name="lthr"]', "168");
   await page.fill('input[name="body_weight_kg"]', "80");
   await Promise.all([
@@ -255,25 +333,28 @@ async function main() {
   stopOnboard();
   console.log("  ok   landed on Hoy");
 
-  // Proof the engine reached the screen: F2 week 1, hip thrust basic.
-  const hoyText = await page.locator("body").innerText();
-  const weightMatch = hoyText.match(/(\d+[,.]?\d*)\s*\n?\s*KG/i);
+  // Proof the engine reached the screen: the week's first strength day
+  // shows its basic's working weight.
+  await page.goto(`${BASE}${strengthDay}`, { waitUntil: "networkidle" });
+  const dayText = await page.locator("body").innerText();
+  const weightMatch = dayText.match(/(\d+[,.]?\d*)\s*\n?\s*KG/i);
   console.log(
-    `  ok   Hoy shows a working weight: ${weightMatch?.[1] ?? "(none found)"}`,
+    `  ok   ${strengthDay} shows a working weight: ${weightMatch?.[1] ?? "(none found)"}`,
   );
-  if (!weightMatch) problems.push("[phone /] no working weight rendered");
+  if (!weightMatch) problems.push(`[phone ${strengthDay}] no working weight rendered`);
 
   const ROUTES = [
     "/",
     "/semana",
     "/progreso",
     "/programa",
-    "/historial",
+    "/motor",
     "/editor",
     "/ajustes",
     "/movilidad",
     "/generar",
-    "/carrera/2026-09-15",
+    runDay,
+    strengthDay,
   ];
 
   console.log("\nPhone 412×892");
@@ -286,8 +367,12 @@ async function main() {
   console.log("\nSession runner");
   await page.setViewportSize({ width: 412, height: 892 });
   const stopRunner = watch(page, "phone session");
-  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
-  const startButton = page.getByRole("button", { name: /empezar sesión/i });
+  // Train it from its own screen: "empezar sesión" on the day itself,
+  // "entrenar esta hoy" on any other day of the week.
+  await page.goto(`${BASE}${strengthDay}`, { waitUntil: "networkidle" });
+  const startButton = page.getByRole("button", {
+    name: /empezar sesión|entrenar esta hoy/i,
+  });
   if ((await startButton.count()) > 0) {
     await Promise.all([
       page.waitForURL(/\/sesion\//, { timeout: 45_000 }),
@@ -317,7 +402,7 @@ async function main() {
     }
     visited += 1;
   } else {
-    problems.push("[phone /] no start button on Hoy");
+    problems.push(`[phone ${strengthDay}] no start button`);
   }
   stopRunner();
 

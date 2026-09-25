@@ -88,26 +88,28 @@ export function TopBar({
   onBack?: () => void;
 }) {
   const arrow = (
-    <span aria-hidden className="text-[17px] leading-none text-mid">
+    <span aria-hidden className="text-[19px] leading-none text-mid">
       ←
     </span>
   );
+  // The glyph is 19px; the target around it is a thumb.
+  const hit = "-m-3 flex h-11 w-11 flex-none items-center justify-center";
   return (
     <div className="flex flex-none items-center gap-3 px-5 pt-6 pb-2">
       {href ? (
-        <Link href={href} aria-label="Volver" className="cursor-pointer">
+        <Link href={href} aria-label="Volver" className={cn(hit, "cursor-pointer")}>
           {arrow}
         </Link>
       ) : (
-        <button type="button" aria-label="Volver" onClick={onBack}>
+        <button type="button" aria-label="Volver" onClick={onBack} className={hit}>
           {arrow}
         </button>
       )}
-      <span className="font-display flex-1 text-[13px] leading-none font-bold tracking-[0.1em] uppercase">
+      <span className="font-display min-w-0 flex-1 truncate text-[13px] leading-none font-bold tracking-[0.1em] uppercase">
         {title}
       </span>
       {right ? (
-        <span className="font-display text-[12px] leading-none text-faint">
+        <span className="font-display flex-none text-[12px] leading-none text-mid">
           {right}
         </span>
       ) : null}
@@ -153,6 +155,51 @@ export function Framed({
     >
       {children}
     </div>
+  );
+}
+
+/**
+ * A reference block folded behind its own summary. `details` keeps the body
+ * mounted, so anything stateful inside survives an open/close.
+ */
+export function Fold({
+  title,
+  summary,
+  children,
+  className,
+}: {
+  title: string;
+  summary: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <details
+      className={cn(
+        "group mx-5 rounded-xl border border-edge bg-surface",
+        className,
+      )}
+    >
+      <summary className="flex min-h-12 list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          <span className="font-display block text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
+            {title}
+          </span>
+          <span className="mt-1 block text-[12.5px] leading-[1.35] text-mid">
+            {summary}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className="font-display flex-none text-[14px] leading-none text-mid transition-transform group-open:rotate-45"
+        >
+          ＋
+        </span>
+      </summary>
+      <div className="rounded-b-xl border-t border-line bg-sunk px-4 pt-3.5 pb-4">
+        {children}
+      </div>
+    </details>
   );
 }
 
@@ -231,7 +278,7 @@ export function StatGrid({
               </span>
             ) : null}
           </div>
-          <div className="font-display mt-2 text-[10px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
+          <div className="font-display mt-2 text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
             {item.label}
           </div>
         </div>
@@ -314,7 +361,7 @@ export function SessionRow({
           {status ? (
             <span
               className={cn(
-                "font-display flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em]",
+                "font-display flex-none text-[11px] leading-none font-semibold tracking-[0.1em]",
                 statusTone,
               )}
             >
@@ -623,7 +670,7 @@ export function Callout({
         </span>
         {action ? <span className="ml-auto">{action}</span> : null}
       </div>
-      <div className="mt-2 text-[12.5px] leading-[1.5] opacity-75">
+      <div className="mt-2 text-[13px] leading-[1.5] opacity-85">
         {children}
       </div>
     </div>

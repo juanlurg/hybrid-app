@@ -65,8 +65,8 @@ export function PhaseBar({
             <span className="min-w-0 flex-1 truncate text-[13.5px] leading-[1.2] font-semibold">
               {open.name}
             </span>
-            <span className="font-display flex-none text-[10px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
-              {open.key} · <span className="num">{open.weeks}</span> sem
+            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+              <span className="num">{open.weeks}</span> semanas
             </span>
           </div>
           {open.rangeLabel ? (
@@ -86,7 +86,7 @@ export function PhaseBar({
           ) : null}
           {open.priority ? (
             <p className="mt-1.5 text-[12px] leading-[1.5] text-mid">
-              <span className="font-display text-[10px] font-semibold tracking-[0.1em] text-faint uppercase">
+              <span className="font-display text-[11px] font-semibold tracking-[0.1em] text-faint uppercase">
                 si falta un día ·{" "}
               </span>
               {open.priority}

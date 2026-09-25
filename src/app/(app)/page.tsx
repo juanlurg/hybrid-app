@@ -2,39 +2,54 @@ import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
 import {
+  DAY_INITIALS,
   formatDayLong,
   formatDayShort,
   type IsoDate,
 } from "@/lib/domain/calendar";
-import { resolveDay, type ResolvedExercise } from "@/lib/domain/plan";
+import {
+  priorityRank,
+  resolveDay,
+  resolveWeek,
+  type ResolvedDay,
+  type SessionStatus,
+} from "@/lib/domain/plan";
 import { createClient } from "@/lib/supabase/server";
 import { formatWeight } from "@/lib/engine";
 import { cn } from "@/lib/cn";
+import { Callout, Card, ScreenHeader } from "@/components/ui/kit";
 import {
-  Callout,
-  Card,
-  HeroNumber,
-  Row,
-  RowStack,
-  ScreenHeader,
-  SectionLabel,
-  Tag,
-} from "@/components/ui/kit";
-import { StartSessionButton } from "@/components/session/start-session-button";
+  SkipDayButton,
+  StartSessionButton,
+} from "@/components/session/start-session-button";
+import { StrengthDay } from "@/components/strength-day";
 import { SyncStatus } from "@/components/sync-status";
-import { accentFor, GROUP_LABEL } from "@/components/day-accents";
+import { accentFor, GROUP_LABEL, TONE } from "@/components/day-accents";
 
-/** The accessory column: short enough to line up, never a computed load. */
-function shortLoad(e: ResolvedExercise): { label: string; muted: boolean } {
-  if (e.loadMode === "bodyweight") return { label: "corp.", muted: true };
-  if (e.loadMode === "rpe") return { label: "progr.", muted: true };
-  if (e.weightKg == null) return { label: "—", muted: true };
-  if (e.loadMode === "weighted_bodyweight") {
-    return e.weightKg > 0
-      ? { label: `+${formatWeight(e.weightKg)}`, muted: false }
-      : { label: "corp.", muted: true };
-  }
-  return { label: formatWeight(e.weightKg), muted: false };
+const WEEKDAY = [
+  "el lunes",
+  "el martes",
+  "el miércoles",
+  "el jueves",
+  "el viernes",
+  "el sábado",
+  "el domingo",
+];
+
+/** Where a day of the week strip leads: its own screen, like in Semana. */
+function dayHref(day: ResolvedDay): string {
+  if (day.group === "run") return `/carrera/${day.date}`;
+  if (day.group === "strength") return `/fuerza/${day.date}`;
+  return "/semana";
+}
+
+/** An LTHR test is a prescription in the plan, never a fixed week. */
+function isTest(day: ResolvedDay): boolean {
+  return (
+    day.sessionType === "run_test" ||
+    day.runBlocks.some((b) => b.title === "Test de umbral") ||
+    /lthr/i.test(day.prescription)
+  );
 }
 
 export default async function HoyPage() {
@@ -47,16 +62,16 @@ export default async function HoyPage() {
   const clamped = placement.date !== today;
   const preSeason = clamped && today < (ctx.program.starts_on as IsoDate);
 
-  const day = resolveDay(
-    {
-      ctx,
-      config,
-      phase,
-      week: placement.week,
-      absoluteWeek: placement.absoluteWeek,
-    },
-    placement.dayIndex,
-  );
+  const opts = {
+    ctx,
+    config,
+    phase,
+    week: placement.week,
+    absoluteWeek: placement.absoluteWeek,
+  };
+  const day = resolveDay(opts, placement.dayIndex);
+  // The week around today — only meaningful inside the season.
+  const week = clamped ? [] : resolveWeek(opts);
 
   // The date a session started today files under — and is looked up by.
   // Only strength files under the REAL date out of season: runs and
@@ -66,41 +81,71 @@ export default async function HoyPage() {
     clamped && day.group === "strength" ? today : day.date;
 
   const supabase = await createClient();
-  const [{ data: sessions }, { data: heldLifts }] = await Promise.all([
-    supabase
-      .from("sessions")
-      .select("id, slot_id, status")
-      .eq("user_id", athlete.userId)
-      .eq("scheduled_on", effectiveOn),
-    supabase
-      .from("lifts")
-      .select("id, key, name, hold, hold_at_kg, fail_count, penalty")
-      .eq("user_id", athlete.userId)
-      .or("hold.eq.true,fail_count.gt.0"),
-  ]);
+  const [{ data: sessions }, { data: heldLifts }, { count: loggedEver }] =
+    await Promise.all([
+      supabase
+        .from("sessions")
+        .select("id, slot_id, status, scheduled_on")
+        .eq("user_id", athlete.userId)
+        .in(
+          "scheduled_on",
+          week.length > 0 ? week.map((d) => d.date) : [effectiveOn],
+        ),
+      supabase
+        .from("lifts")
+        .select("id, key, name, hold, hold_at_kg, fail_count, penalty")
+        .eq("user_id", athlete.userId)
+        .or("hold.eq.true,fail_count.gt.0"),
+      supabase
+        .from("sessions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", athlete.userId)
+        .in("status", ["done", "partial"]),
+    ]);
 
-  const todaySession = (sessions ?? []).find((s) => s.slot_id === day.slot?.id);
+  const statusOf = (d: ResolvedDay): SessionStatus | null => {
+    if (!d.slot) return null;
+    return (
+      (sessions ?? []).find(
+        (s) => s.scheduled_on === d.date && s.slot_id === d.slot?.id,
+      )?.status ?? "planned"
+    );
+  };
+
+  const todaySession = (sessions ?? []).find(
+    (s) => s.scheduled_on === effectiveOn && s.slot_id === day.slot?.id,
+  );
   const accent = accentFor(day.group);
   const held = (heldLifts ?? []).filter((l) => l.hold && l.hold_at_kg);
 
-  const primary = day.group === "strength" ? day.primary : null;
-  const accessories = day.exercises.filter((e) => !e.isPrimary);
-  const accessorySets = accessories.reduce((n, e) => n + e.sets, 0);
-  const primaryIndex = day.exercises.findIndex((e) => e.isPrimary) + 1;
+  /* ── the week around today ───────────────────────────────────── */
 
-  const plates =
-    primary && ctx.profile.show_plate_breakdown ? primary.plates : null;
-  const perSide =
-    plates && !plates.barOnly && plates.perSide.length > 0
-      ? plates.perSide.map((p) => formatWeight(p)).join("+")
-      : null;
+  const trains = (d: ResolvedDay) =>
+    d.slot != null && (d.group === "strength" || d.group === "run");
+  const missed = week.filter(
+    (d) => trains(d) && d.date < today && statusOf(d) === "planned",
+  );
+  // The plan's own order for a broken week decides what to recover: only
+  // suggest a missed day when it outranks what today already holds.
+  const rank = (d: ResolvedDay) =>
+    phase.priority ? priorityRank(phase.priority, d) : Number.MAX_SAFE_INTEGER;
+  const recover = [...missed].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+  const todayRank =
+    trains(day) && statusOf(day) === "planned"
+      ? rank(day)
+      : Number.MAX_SAFE_INTEGER;
+  const suggestRecover =
+    recover != null && phase.priority !== "" && rank(recover) < todayRank;
+  const test = week.find(
+    (d) => d.group === "run" && isTest(d) && d.date >= today &&
+      statusOf(d) === "planned",
+  );
+
+  /* ── the header ──────────────────────────────────────────────── */
 
   const heading =
     day.group === "mobility"
-      ? {
-          title: "Movilidad y correctivos",
-          subtitle: "20′ · diaria · innegociable",
-        }
+      ? { title: "Movilidad y correctivos", subtitle: "20′ · diaria" }
       : day.group === "rest"
         ? { title: "Hoy no toca", subtitle: day.subtitle }
         : { title: day.title, subtitle: day.subtitle };
@@ -116,96 +161,115 @@ export default async function HoyPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        eyebrow={clamped ? formatDayLong(today) : day.dateLabel}
-        right={
-          <span className="font-display text-[12px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
-            {phase.key} · sem {placement.week}/{phase.weeks}
-          </span>
-        }
+        eyebrow={formatDayLong(today)}
         title={heading.title}
         subtitle={heading.subtitle}
       />
 
-      <div className="flex-1 overflow-auto pt-4 pb-6">
+      <div className="flex-1 overflow-auto pt-3 pb-6">
         <SyncStatus />
+
+        {week.length > 0 ? (
+          <Link href="/semana" className="mb-3.5 block px-5">
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 truncate text-[12.5px] leading-none text-mid">
+                {phase.name} · semana {placement.week} de {phase.weeks}
+              </span>
+              <span aria-hidden className="text-[13px] leading-none text-mid">
+                ›
+              </span>
+            </div>
+            <div className="mt-2 flex gap-1">
+              {week.map((d) => {
+                const status = statusOf(d);
+                const isToday = d.date === today;
+                const done = status === "done" || status === "partial";
+                const lost =
+                  trains(d) &&
+                  !isToday &&
+                  d.date < today &&
+                  (status === "planned" || status === "skipped");
+                return (
+                  <div
+                    key={d.date}
+                    aria-label={`${d.dayLabel} · ${d.title}`}
+                    className={cn(
+                      "flex h-9 flex-1 flex-col items-center justify-center gap-[3px] rounded-md border",
+                      isToday
+                        ? "border-[1.5px] border-lime-line bg-sunk"
+                        : trains(d)
+                          ? "border-line bg-surface"
+                          : "border-dashed border-hairline",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "font-display text-[11px] leading-none font-semibold",
+                        isToday ? "text-lime" : "text-mid",
+                      )}
+                    >
+                      {DAY_INITIALS[d.dayIndex]}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="h-[4px] w-3 rounded-full"
+                      style={{
+                        background: done
+                          ? accentFor(d.group)
+                          : lost
+                            ? TONE.warn
+                            : "transparent",
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </Link>
+        ) : null}
 
         {preSeason ? (
           <div className="mb-3.5 px-5">
             <Callout eyebrow="El plan aún no ha empezado">
               Empieza el lunes{" "}
               {formatDayShort(ctx.program.starts_on as IsoDate)}. Esto es un
-              adelanto de ese día: lo que entrenes antes se guarda en el
-              historial con su fecha real y no marca ningún día del plan.
+              adelanto de ese día: lo que entrenes antes se guarda en tu
+              progreso con su fecha real y no marca ningún día del plan.
             </Callout>
           </div>
         ) : null}
 
-        {primary ? (
-          <div className="px-5">
-            <Card>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
-                  Básico del día
-                </span>
-                <span className="num ml-auto text-[11px] leading-none text-faint">
-                  {primaryIndex}/{day.exercises.length}
-                </span>
-              </div>
-
-              <div className="mt-2 text-[17.5px] leading-[1.25] font-semibold">
-                {primary.name}
-              </div>
-
-              <HeroNumber
-                value={
-                  primary.weightKg == null
-                    ? "—"
-                    : formatWeight(primary.weightKg)
-                }
-                unit="kg"
-              />
-
-              <div className="mt-3.5 flex flex-wrap gap-2">
-                <Tag>{primary.schemeLabel}</Tag>
-                <Tag>RIR {ctx.profile.target_rir}</Tag>
-                <Tag>{primary.restLabel}</Tag>
-                {perSide ? <Tag>por lado {perSide}</Tag> : null}
-                {plates?.remainderKg ? (
-                  <Tag className="text-fail">
-                    +{formatWeight(plates.remainderKg)} sin disco
-                  </Tag>
-                ) : null}
-              </div>
-
-              {primary.breakdown ? (
-                <details className="group mt-4 border-t border-edge pt-3">
-                  <summary className="flex list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-                    <span className="text-[13px] leading-[1.4] font-medium text-mid">
-                      Motor · RM {formatWeight(primary.breakdown.e1rmKg)} × ola{" "}
-                      {Math.round(primary.breakdown.waveFactor * 100)} %
-                      {primary.breakdown.isHeld ? " · en espera" : ""}
-                    </span>
-                    <span
-                      aria-hidden
-                      className="font-display flex-none text-[13px] leading-none text-faint transition-transform group-open:rotate-45"
-                    >
-                      ＋
-                    </span>
-                  </summary>
-                  <div className="mt-2.5 text-[12.5px] leading-[1.5] text-mid">
-                    ciclo {primary.breakdown.cycle} ·{" "}
-                    {primary.breakdown.cycleBumpKg > 0
-                      ? `+${formatWeight(primary.breakdown.cycleBumpKg)} kg acumulados`
-                      : "sin acumulado"}
-                    {primary.breakdown.penalty > 0
-                      ? ` · penalización ${Math.round(primary.breakdown.penalty * 100)} %`
-                      : ""}
-                    {primary.breakdown.isDeload ? " · paso de descarga" : ""}
-                  </div>
-                </details>
-              ) : null}
-            </Card>
+        {suggestRecover && recover ? (
+          <div className="mb-3.5 px-5">
+            <Callout
+              eyebrow={
+                missed.length === 1
+                  ? "Te falta una sesión"
+                  : `Te faltan ${missed.length} sesiones`
+              }
+              action={
+                <Link
+                  href={dayHref(recover)}
+                  className="font-display -my-2 py-2 text-[12px] leading-none font-semibold tracking-[0.08em] text-lime uppercase"
+                >
+                  ver ›
+                </Link>
+              }
+            >
+              {recover.title} ({WEEKDAY[recover.dayIndex]}) va antes que{" "}
+              {trains(day) ? day.title : "el resto"}. Si hoy solo entrenas una,
+              que sea esa.
+            </Callout>
           </div>
+        ) : null}
+
+        {day.group === "strength" ? (
+          <StrengthDay
+            day={day}
+            eyebrow="Básico del día"
+            targetRir={ctx.profile.target_rir}
+            showPlates={ctx.profile.show_plate_breakdown}
+          />
         ) : (
           <div className="px-5">
             <Card className="flex gap-4">
@@ -220,13 +284,13 @@ export default async function HoyPage() {
                     {day.label}
                   </span>
                   {day.group === "run" && day.estimatedMinutes ? (
-                    <span className="num ml-auto text-[11px] leading-none text-faint">
+                    <span className="num ml-auto text-[12px] leading-none text-mid">
                       {day.estimatedMinutes}′ aprox
                     </span>
                   ) : null}
                 </div>
                 {quiet ? null : (
-                  <div className="mt-2 text-[17.5px] leading-[1.25] font-semibold">
+                  <div className="mt-2 text-[18px] leading-[1.25] font-semibold">
                     {day.prescription || day.title}
                   </div>
                 )}
@@ -240,44 +304,11 @@ export default async function HoyPage() {
           </div>
         )}
 
-        {accessories.length > 0 ? (
-          <>
-            <SectionLabel right={`${accessorySets} series`}>
-              Después
-            </SectionLabel>
-            <RowStack className="mt-2.5">
-              {accessories.map((e) => {
-                const load = shortLoad(e);
-                return (
-                  <Row key={e.id} className="flex items-center gap-3">
-                    <span className="min-w-0 flex-1 truncate text-[14.5px] leading-[1.25] font-medium">
-                      {e.name}
-                    </span>
-                    <span className="flex-none text-[12.5px] leading-none text-mid">
-                      {e.schemeLabel}
-                    </span>
-                    <span
-                      className={cn(
-                        "num min-w-[62px] flex-none text-right leading-none",
-                        load.muted
-                          ? "text-[13px] font-medium text-mid"
-                          : "text-[14px] font-semibold",
-                      )}
-                    >
-                      {load.label}
-                    </span>
-                  </Row>
-                );
-              })}
-            </RowStack>
-          </>
-        ) : null}
-
         {day.isDeload ? (
           <div className="mt-3.5 px-5">
             <Callout eyebrow="Semana de descarga">
-              Mitad de series, mismos pesos. La carrera baja un 40 %. Llegar
-              fresco a la semana que viene es el objetivo de esta.
+              Mitad de series y pesos más bajos, a propósito. La carrera también
+              baja. El objetivo es llegar fresco a la semana que viene.
             </Callout>
           </div>
         ) : null}
@@ -285,28 +316,71 @@ export default async function HoyPage() {
         {held.map((lift) => (
           <div key={lift.id} className="mt-3.5 px-5">
             <Callout
-              eyebrow={`${lift.name} en espera · ${formatWeight(Number(lift.hold_at_kg))} kg`}
+              eyebrow={`${lift.name} · peso congelado en ${formatWeight(Number(lift.hold_at_kg))} kg`}
             >
-              Fallaste el mínimo del rango la última vez: la ola no pasa de ese
-              peso hasta una sesión limpia. Si toca descarga, manda la descarga.
-              Otro fallo y la RM baja.
+              La última vez no llegaste al mínimo del rango, así que el peso no
+              sube hasta una sesión limpia. Otro fallo y la RM baja.
             </Callout>
           </div>
         ))}
 
-        <Link
-          href="/movilidad"
-          className="mt-3.5 flex items-center gap-2.5 px-6 py-1"
-        >
-          <span aria-hidden className="h-2 w-2 flex-none rounded-full bg-run" />
-          <span className="flex-1 text-[13px] leading-[1.4] text-mid">
-            Movilidad 20′ · diaria · innegociable
-          </span>
-          <span aria-hidden className="text-[13px] leading-none text-faint">
-            ›
-          </span>
-        </Link>
+        {test && test.date !== day.date ? (
+          <div className="mt-3.5 px-5">
+            <Callout eyebrow="Esta semana hay test" eyebrowTone="text-run">
+              Test de umbral {WEEKDAY[test.dayIndex]}: de él salen tus zonas de
+              pulso. Llega descansado.
+            </Callout>
+          </div>
+        ) : null}
+
+        {loggedEver === 0 && !preSeason ? (
+          <div className="mt-3.5 px-5">
+            <Callout eyebrow="Cómo funciona" eyebrowTone="text-lime">
+              El motor calcula cada peso a partir de tus RM; tú solo marcas lo
+              que haces. Si una serie del básico se queda por debajo del
+              rango, el peso se congela en vez de subir. Los accesorios suben
+              solos cuando haces el tope del rango en todas las series.
+            </Callout>
+          </div>
+        ) : null}
+
+        {day.group !== "mobility" ? (
+          <Link
+            href="/movilidad"
+            className="mt-3.5 flex items-center gap-2.5 px-6 py-2"
+          >
+            <span
+              aria-hidden
+              className="h-2 w-2 flex-none rounded-full"
+              style={{ background: accentFor("mobility") }}
+            />
+            <span className="flex-1 text-[13px] leading-[1.4] text-mid">
+              Movilidad 20′ · diaria
+            </span>
+            <span aria-hidden className="text-[13px] leading-none text-mid">
+              ›
+            </span>
+          </Link>
+        ) : null}
       </div>
+
+      {day.slot && !clamped && trains(day) && statusOf(day) === "planned" ? (
+        <div className="flex flex-none justify-center">
+          <SkipDayButton
+            day={{
+              phaseId: phase.id,
+              slotId: day.slot.id,
+              scheduledOn: day.date,
+              week: placement.week,
+              dayIndex: day.dayIndex,
+              sessionType: day.sessionType,
+              title: day.title,
+              group: day.group,
+            }}
+            label="Hoy no entreno · saltar"
+          />
+        </div>
+      ) : null}
 
       {day.slot ? (
         <StartSessionButton

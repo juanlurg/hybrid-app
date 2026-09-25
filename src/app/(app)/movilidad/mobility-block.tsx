@@ -30,7 +30,7 @@ type Mode = "guided" | "list";
 
 /* The mode chips ride inside the top bar, so they run a size below the kit's
    default and the inactive one recedes into the surface. */
-const modeChip = "px-3 py-2.5 text-[10.5px] font-bold uppercase";
+const modeChip = "px-3 py-2.5 text-[11px] font-bold uppercase";
 const inactiveChip = "bg-surface font-semibold text-mid";
 
 export function MobilityBlock({
@@ -130,8 +130,8 @@ export function MobilityBlock({
 
       {items.length === 0 ? (
         <Footnote>
-          No hay ejercicios en el bloque de movilidad. Añádelos desde ajustes
-          para que aparezcan aquí cada día.
+          No hay ejercicios de movilidad cargados, así que el bloque de hoy
+          está vacío.
         </Footnote>
       ) : mode === "guided" ? (
         <>

@@ -1,4 +1,4 @@
-import { SecondaryNav } from "@/components/app-shell";
+import { TopBar } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
 import { createClient } from "@/lib/supabase/server";
 import { daysBetween, todayIso } from "@/lib/domain/calendar";
@@ -50,18 +50,7 @@ export default async function AjustesPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex-none px-5 pt-6">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="font-display flex-1 text-[22px] leading-none font-bold">
-            Ajustes
-          </h1>
-          {/* The status is the one knob nothing else on the app surfaces. */}
-          <span className="font-display flex-none text-[11px] leading-none text-faint uppercase">
-            {p.lthr == null ? "LTHR sin test" : `LTHR ${p.lthr} ppm`}
-          </span>
-        </div>
-      </header>
-      <SecondaryNav />
+      <TopBar title="Ajustes" href="/programa" />
       <div className="flex-1 overflow-auto">
         <SettingsGroups
           profile={profile}

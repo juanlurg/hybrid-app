@@ -3,14 +3,21 @@ import { redirect } from "next/navigation";
 import { accentFor, TONE } from "@/components/day-accents";
 import {
   Card,
+  Fold,
   Framed,
   Row,
   RowStack,
   SectionLabel,
   TopBar,
 } from "@/components/ui/kit";
+import { SkipDayButton } from "@/components/session/start-session-button";
 import { requireAthlete } from "@/lib/data/athlete";
-import { formatDayLong, placeDate, type IsoDate } from "@/lib/domain/calendar";
+import {
+  formatDayLong,
+  placeDate,
+  sameWeek,
+  type IsoDate,
+} from "@/lib/domain/calendar";
 import { phaseSpans, resolveDay } from "@/lib/domain/plan";
 import {
   hrZones,
@@ -49,7 +56,8 @@ function bpmRange(z: Zone): string {
 
 /** Where an LTHR test sits in the season. Read from the plan, never assumed. */
 interface TestPoint {
-  key: string;
+  /** The phase's name, as the athlete knows it. */
+  name: string;
   position: number;
   week: number;
 }
@@ -61,7 +69,7 @@ export default async function CarreraPage({
 }) {
   const { fecha } = await params;
   const athlete = await requireAthlete();
-  const { ctx, config } = athlete;
+  const { ctx, config, today } = athlete;
 
   if (!ISO_DATE.test(fecha)) redirect("/semana");
 
@@ -138,7 +146,7 @@ export default async function CarreraPage({
       : /lthr/i.test(row.prescription ?? "");
     if (!isTest) continue;
     const p = orderedPhases.find((x) => x.id === row.phase_id);
-    if (p) tests.push({ key: p.key, position: p.position, week: row.week });
+    if (p) tests.push({ name: p.name, position: p.position, week: row.week });
   }
   tests.sort((a, b) => a.position - b.position || a.week - b.week);
   const nextTest =
@@ -151,17 +159,18 @@ export default async function CarreraPage({
   const zonesFloorPct = Math.round((zoneBy("Z1")?.toPct ?? 0) * 100);
   const zonesTopPct = Math.round((zoneBy("Z5")?.fromPct ?? 1) * 100);
 
-  const testHint = nextTest ? (
-    <>
-      test {nextTest.key} sem <span className="num">{nextTest.week}</span>
-    </>
-  ) : (
-    "test: 30′ a tope"
-  );
+  const testHint = nextTest
+    ? `próximo test: ${nextTest.name}, semana ${nextTest.week}`
+    : "test: 30′ a tope";
+
+  // Inside the current week a run can still be skipped deliberately; a
+  // logged one cannot.
+  const skippable =
+    sameWeek(day.date, today) && (session?.status ?? "planned") === "planned";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TopBar title="CARRERA" href="/semana" right={formatDayLong(day.date)} />
+      <TopBar title={day.title} href="/semana" right={formatDayLong(day.date)} />
 
       {/* The action bar sticks to the bottom of this scrollport, so the
           form has to live inside it. */}
@@ -169,7 +178,7 @@ export default async function CarreraPage({
         <div className="px-5 pt-2">
           <Card>
             <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
-              {day.label} · {phase.key} SEM{" "}
+              {phase.name} · semana{" "}
               <span className="num">{placement.week}</span>
             </div>
             <h1 className="mt-2 text-[19px] leading-[1.3] font-semibold">
@@ -185,9 +194,9 @@ export default async function CarreraPage({
                 </span>
               </div>
             ) : null}
-            <p className="mt-3.5 border-t border-edge pt-3 text-[12.5px] leading-[1.55] text-mid">
-              {day.subtitle ? `${day.subtitle}. ` : ""}El detalle queda en el
-              reloj: aquí solo se marca si se ha hecho.
+            <p className="mt-3.5 border-t border-edge pt-3 text-[13px] leading-[1.55] text-mid">
+              Basta con marcarla hecha. Los datos del reloj son opcionales:
+              sirven para seguir el desacople y los kilómetros.
             </p>
           </Card>
         </div>
@@ -219,15 +228,15 @@ export default async function CarreraPage({
                         <span className="min-w-0 flex-1 text-[13.5px] leading-[1.2] font-semibold">
                           {block.title}
                         </span>
-                        <span className="font-display flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+                        <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
                           {block.zone}
                         </span>
                       </div>
-                      <div className="num mt-1 text-[11px] leading-[1.35] text-mid">
+                      <div className="num mt-1 text-[12.5px] leading-[1.35] text-mid">
                         {block.duration} · {block.hr}
                       </div>
                       {block.note ? (
-                        <p className="mt-1.5 text-[11px] leading-[1.45] text-faint">
+                        <p className="mt-1.5 text-[12.5px] leading-[1.45] text-mid">
                           {block.note}
                         </p>
                       ) : null}
@@ -249,43 +258,34 @@ export default async function CarreraPage({
           </div>
         ) : null}
 
-        <div className="px-5 pt-4">
-          {lthr == null ? (
+        {lthr == null ? (
+          <div className="px-5 pt-4">
             <Card className="px-4 py-4">
-              <div className="flex items-baseline gap-3">
-                <span className="font-display flex-1 text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-                  Zonas · sin LTHR
-                </span>
-                <span className="flex-none text-[11px] leading-none text-faint uppercase">
-                  {testHint}
-                </span>
+              <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+                Zonas · sin test todavía
               </div>
-              <p className="mt-2.5 text-[12px] leading-[1.55] text-mid">
+              <p className="mt-2.5 text-[13px] leading-[1.55] text-mid">
                 Todavía no tienes LTHR, así que no hay zonas reales que
                 enseñarte.{" "}
                 {nextTest
-                  ? `El test cae en ${nextTest.key} semana ${nextTest.week}: `
+                  ? `El test cae en ${nextTest.name}, semana ${nextTest.week}: `
                   : "El test son "}
                 30′ a tope en llano y la FC media de los últimos 20 minutos es tu
-                LTHR. Hasta entonces las pulsaciones de los bloques salen de una
-                estimación y valen como referencia, no como objetivo.
+                LTHR. Hasta entonces las pulsaciones de los bloques son una
+                referencia, no un objetivo.
               </p>
             </Card>
-          ) : (
-            <Card className="divide-y divide-line px-4 py-1">
-              <div className="flex items-baseline gap-3 py-[11px]">
-                <span className="font-display flex-1 text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-                  Zonas · LTHR <span className="num">{lthr}</span>
-                </span>
-                {nextTest ? (
-                  <span className="flex-none text-[11px] leading-none text-faint uppercase">
-                    {testHint}
-                  </span>
-                ) : null}
-              </div>
+          </div>
+        ) : (
+          <Fold
+            className="mt-4"
+            title={`Tus zonas · LTHR ${lthr}`}
+            summary={testHint}
+          >
+            <div className="flex flex-col divide-y divide-line">
               {zones.map((z) => (
-                <div key={z.key} className="flex items-center gap-3 py-[11px]">
-                  <span className="font-display w-[22px] flex-none text-[11px] leading-none font-semibold">
+                <div key={z.key} className="flex items-center gap-3 py-[10px]">
+                  <span className="font-display w-[22px] flex-none text-[12px] leading-none font-semibold">
                     {z.key}
                   </span>
                   <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-soft">
@@ -297,19 +297,36 @@ export default async function CarreraPage({
                       }}
                     />
                   </span>
-                  <span className="num w-[74px] flex-none text-right text-[12px] leading-none font-semibold">
+                  <span className="num w-[74px] flex-none text-right text-[12.5px] leading-none font-semibold">
                     {bpmRange(z)}
                   </span>
                 </div>
               ))}
-              <p className="py-[11px] text-[11.5px] leading-[1.45] text-faint">
-                Cifras en ppm sobre el LTHR, no sobre la FC máxima. Z1 por debajo
-                del <span className="num">{zonesFloorPct}</span> % y Z5 a partir
-                del <span className="num">{zonesTopPct}</span> %.
-              </p>
-            </Card>
-          )}
-        </div>
+            </div>
+            <p className="pt-2.5 text-[12.5px] leading-[1.45] text-mid">
+              Pulsaciones sobre tu umbral (LTHR), no sobre la FC máxima. Z1 por
+              debajo del <span className="num">{zonesFloorPct}</span> % y Z5 a
+              partir del <span className="num">{zonesTopPct}</span> %.
+            </p>
+          </Fold>
+        )}
+
+        {skippable ? (
+          <div className="flex justify-center pt-3">
+            <SkipDayButton
+              day={{
+                phaseId: phase.id,
+                slotId: slot.id,
+                scheduledOn: day.date,
+                week: placement.week,
+                dayIndex: day.dayIndex,
+                sessionType: day.sessionType,
+                title: day.title,
+                group: day.group,
+              }}
+            />
+          </div>
+        ) : null}
 
         <LogRunForm
           day={{

@@ -157,12 +157,19 @@ const ACTION =
 
 /** The section index: ~29 rows is far more than a screen, so every
     section is one tap from the top instead of a blind scroll. */
+/** The regression rule as a word, for the folded Motor summary. */
+const RULE_WORD: Record<SettingsProfile["regression_rule"], string> = {
+  conservative: "suave",
+  standard: "normal",
+  aggressive: "dura",
+};
+
 const SECTIONS: Array<{ id: string; label: string }> = [
   { id: "ajustes-atleta", label: "Atleta" },
-  { id: "ajustes-equipo", label: "Equipo" },
-  { id: "ajustes-motor", label: "Motor" },
   { id: "ajustes-sesion", label: "Sesión" },
+  { id: "ajustes-equipo", label: "Equipo" },
   { id: "ajustes-carrera", label: "Carrera" },
+  { id: "ajustes-motor", label: "Motor" },
   { id: "ajustes-datos", label: "Datos" },
   { id: "ajustes-cuenta", label: "Cuenta" },
   { id: "ajustes-peligro", label: "Peligro" },
@@ -426,6 +433,61 @@ export function SettingsGroups({
 
       </Group>
 
+      {/* ── sesión ─────────────────────────────────────────────── */}
+      <div id="ajustes-sesion" className="scroll-mt-2" />
+      <SectionLabel right={status()}>Sesión</SectionLabel>
+      <Group>
+        <SettingRow
+          name="Cronómetro automático"
+          sub="Arranca el descanso al registrar cada serie"
+        >
+          <Toggle
+            label="Cronómetro automático"
+            checked={profile.auto_rest_timer}
+            onChange={(auto_rest_timer) => save({ auto_rest_timer })}
+          />
+        </SettingRow>
+        <SettingRow name="Aviso sonoro" sub="Un pitido al terminar el descanso">
+          <Toggle
+            label="Aviso sonoro"
+            checked={profile.rest_sound}
+            onChange={(rest_sound) => save({ rest_sound })}
+          />
+        </SettingRow>
+        <SettingRow name="Vibración" sub="El móvil vibra al terminar el descanso">
+          <Toggle
+            label="Vibración"
+            checked={profile.rest_vibration}
+            onChange={(rest_vibration) => save({ rest_vibration })}
+          />
+        </SettingRow>
+        <RestNotificationsRow />
+        <SettingRow
+          name="Mantener la pantalla encendida"
+          sub="Mientras la sesión esté abierta"
+        >
+          <Toggle
+            label="Mantener la pantalla encendida"
+            checked={profile.keep_screen_awake}
+            onChange={(keep_screen_awake) => save({ keep_screen_awake })}
+          />
+        </SettingRow>
+        <SettingRow
+          name="Mostrar discos por lado"
+          sub="El desglose de discos bajo el peso del día"
+        >
+          <Toggle
+            label="Mostrar discos por lado"
+            checked={profile.show_plate_breakdown}
+            onChange={(show_plate_breakdown) => save({ show_plate_breakdown })}
+          />
+        </SettingRow>
+        {/* Device preference, not profile: it lives in localStorage. */}
+        <SettingRow name="Tema" sub="Claro, oscuro, o lo que diga el sistema">
+          <ThemeToggle />
+        </SettingRow>
+      </Group>
+
       {/* ── equipo ─────────────────────────────────────────────── */}
       <div id="ajustes-equipo" className="scroll-mt-2" />
       <SectionLabel right={status("GIMNASIO DE CASA")}>Equipo</SectionLabel>
@@ -574,11 +636,60 @@ export function SettingsGroups({
         />
       </Group>
 
+      {/* ── carrera ────────────────────────────────────────────── */}
+      <div id="ajustes-carrera" className="scroll-mt-2" />
+      <SectionLabel right={status("ZONAS Y DATOS")}>Carrera</SectionLabel>
+      <Group>
+        <SettingRow
+          name="LTHR"
+          sub={
+            profile.lthr == null ? (
+              <>
+                Sin test: las zonas de carrera van con{" "}
+                <span className="num">{LTHR_FALLBACK}</span> ppm
+              </>
+            ) : (
+              "Pulso umbral: de aquí salen las cinco zonas"
+            )
+          }
+        >
+          <Stepper
+            label="LTHR"
+            value={profile.lthr == null ? "—" : `${profile.lthr} ppm`}
+            onDecrement={() =>
+              save({ lthr: bump(profile.lthr, -1, LTHR_FALLBACK, 100, 230) })
+            }
+            onIncrement={() =>
+              save({ lthr: bump(profile.lthr, 1, LTHR_FALLBACK, 100, 230) })
+            }
+          />
+        </SettingRow>
+      </Group>
+
       {/* ── motor de pesos ─────────────────────────────────────── */}
       <div id="ajustes-motor" className="scroll-mt-2" />
-      <SectionLabel right={status("AFECTA A LOS CÁLCULOS")}>
-        Motor de pesos
-      </SectionLabel>
+      <SectionLabel right={status()}>Motor de pesos</SectionLabel>
+      {/* Folded: these move every future load and are set once, not
+          weekly. The summary says what is set without opening it. */}
+      <details className="group/motor mt-2">
+        <summary className="mx-5 flex min-h-12 list-none items-center gap-3 rounded-2xl border border-edge bg-surface px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13.5px] leading-[1.25]">
+              Cómo calcula los pesos
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-[1.35] text-mid">
+              Regla {RULE_WORD[profile.regression_rule]} · redondeo{" "}
+              {formatWeight(profile.rounding_kg)} kg · RIR{" "}
+              {profile.target_rir}
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className="font-display flex-none text-[14px] leading-none text-mid transition-transform group-open/motor:rotate-45"
+          >
+            ＋
+          </span>
+        </summary>
       <Group>
         <SettingRow
           name="Regla de regresión"
@@ -587,9 +698,9 @@ export function SettingsGroups({
           <ChipRow
             value={profile.regression_rule}
             options={[
-              { value: "conservative", label: "CONS." },
-              { value: "standard", label: "EST." },
-              { value: "aggressive", label: "AGR." },
+              { value: "conservative", label: "Suave" },
+              { value: "standard", label: "Normal" },
+              { value: "aggressive", label: "Dura" },
             ]}
             onChange={(regression_rule) => save({ regression_rule })}
           />
@@ -697,91 +808,7 @@ export function SettingsGroups({
           />
         </SettingRow>
       </Group>
-
-      {/* ── sesión ─────────────────────────────────────────────── */}
-      <div id="ajustes-sesion" className="scroll-mt-2" />
-      <SectionLabel right={status()}>Sesión</SectionLabel>
-      <Group>
-        <SettingRow
-          name="Cronómetro automático"
-          sub="Arranca el descanso al registrar cada serie"
-        >
-          <Toggle
-            label="Cronómetro automático"
-            checked={profile.auto_rest_timer}
-            onChange={(auto_rest_timer) => save({ auto_rest_timer })}
-          />
-        </SettingRow>
-        <SettingRow name="Aviso sonoro" sub="Un pitido al terminar el descanso">
-          <Toggle
-            label="Aviso sonoro"
-            checked={profile.rest_sound}
-            onChange={(rest_sound) => save({ rest_sound })}
-          />
-        </SettingRow>
-        <SettingRow name="Vibración" sub="El móvil vibra al terminar el descanso">
-          <Toggle
-            label="Vibración"
-            checked={profile.rest_vibration}
-            onChange={(rest_vibration) => save({ rest_vibration })}
-          />
-        </SettingRow>
-        <RestNotificationsRow />
-        <SettingRow
-          name="Mantener la pantalla encendida"
-          sub="Mientras la sesión esté abierta"
-        >
-          <Toggle
-            label="Mantener la pantalla encendida"
-            checked={profile.keep_screen_awake}
-            onChange={(keep_screen_awake) => save({ keep_screen_awake })}
-          />
-        </SettingRow>
-        <SettingRow
-          name="Mostrar discos por lado"
-          sub="El desglose de discos bajo el peso del día"
-        >
-          <Toggle
-            label="Mostrar discos por lado"
-            checked={profile.show_plate_breakdown}
-            onChange={(show_plate_breakdown) => save({ show_plate_breakdown })}
-          />
-        </SettingRow>
-        {/* Device preference, not profile: it lives in localStorage. */}
-        <SettingRow name="Tema" sub="Claro, oscuro, o lo que diga el sistema">
-          <ThemeToggle />
-        </SettingRow>
-      </Group>
-
-      {/* ── carrera ────────────────────────────────────────────── */}
-      <div id="ajustes-carrera" className="scroll-mt-2" />
-      <SectionLabel right={status("ZONAS Y DATOS")}>Carrera</SectionLabel>
-      <Group>
-        <SettingRow
-          name="LTHR"
-          sub={
-            profile.lthr == null ? (
-              <>
-                Sin test: las zonas de carrera van con{" "}
-                <span className="num">{LTHR_FALLBACK}</span> ppm
-              </>
-            ) : (
-              "Pulso umbral: de aquí salen las cinco zonas"
-            )
-          }
-        >
-          <Stepper
-            label="LTHR"
-            value={profile.lthr == null ? "—" : `${profile.lthr} ppm`}
-            onDecrement={() =>
-              save({ lthr: bump(profile.lthr, -1, LTHR_FALLBACK, 100, 230) })
-            }
-            onIncrement={() =>
-              save({ lthr: bump(profile.lthr, 1, LTHR_FALLBACK, 100, 230) })
-            }
-          />
-        </SettingRow>
-      </Group>
+      </details>
 
       {/* ── datos ──────────────────────────────────────────────── */}
       <div id="ajustes-datos" className="scroll-mt-2" />
@@ -818,7 +845,7 @@ export function SettingsGroups({
                       </span>
                     ) : null}
                     {p.is_active ? (
-                      <span className="font-display flex-none rounded-full border border-lime-edge bg-lime-soft px-2 py-1 text-[9.5px] leading-none font-semibold tracking-[0.1em] text-lime uppercase">
+                      <span className="font-display flex-none rounded-full border border-lime-edge bg-lime-soft px-2 py-1 text-[11px] leading-none font-semibold tracking-[0.1em] text-lime uppercase">
                         Activo
                       </span>
                     ) : (
@@ -838,7 +865,7 @@ export function SettingsGroups({
                             router.refresh();
                           });
                         }}
-                        className="font-display flex-none rounded-sm border border-edge bg-soft px-2 py-1.5 text-[9.5px] leading-none font-semibold tracking-[0.1em] uppercase disabled:opacity-40"
+                        className="font-display flex-none rounded-sm border border-edge bg-soft px-2 py-1.5 text-[11px] leading-none font-semibold tracking-[0.1em] uppercase disabled:opacity-40"
                       >
                         Activar
                       </button>
@@ -991,14 +1018,14 @@ export function SettingsGroups({
 
         {cleared ? (
           <div className="py-[11px] text-[11.5px] leading-[1.45] text-mid">
-            Historial borrado. Las RM, la ola y el programa siguen intactos.
+            Historial borrado. Las RM y el programa siguen intactos.
           </div>
         ) : null}
       </Group>
 
       <Footnote>
-        Las RM, la ola y la regla de regresión son el motor: cambiarlas
-        recalcula los pesos de las próximas sesiones, nunca las ya registradas.
+        Cambiar el motor recalcula los pesos de las próximas sesiones, nunca
+        los ya registrados.
       </Footnote>
     </div>
   );
@@ -1042,9 +1069,9 @@ function SettingRow({
     <div className="py-[11px]">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-[13.5px] leading-[1.25]">{name}</div>
+          <div className="text-[14px] leading-[1.25]">{name}</div>
           {sub ? (
-            <div className="mt-0.5 text-[11px] leading-[1.35] text-faint">
+            <div className="mt-0.5 text-[12px] leading-[1.35] text-mid">
               {sub}
             </div>
           ) : null}

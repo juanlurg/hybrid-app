@@ -1,19 +1,12 @@
 import { redirect } from "next/navigation";
 
-import {
-  Callout,
-  Card,
-  Footnote,
-  HeroNumber,
-  LinkBar,
-  Row,
-  RowStack,
-  SectionLabel,
-  Tag,
-  TopBar,
-} from "@/components/ui/kit";
+import { Callout, Footnote, LinkBar, TopBar } from "@/components/ui/kit";
 import { GROUP_LABEL } from "@/components/day-accents";
-import { StartSessionButton } from "@/components/session/start-session-button";
+import {
+  SkipDayButton,
+  StartSessionButton,
+} from "@/components/session/start-session-button";
+import { StrengthDay } from "@/components/strength-day";
 import { requireAthlete } from "@/lib/data/athlete";
 import {
   formatDayLong,
@@ -22,7 +15,6 @@ import {
   type IsoDate,
 } from "@/lib/domain/calendar";
 import { phaseSpans, resolveDay } from "@/lib/domain/plan";
-import { formatWeight } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,7 +66,6 @@ export default async function FuerzaPage({
     .eq("slot_id", slot.id)
     .maybeSingle();
 
-  const primary = day.primary;
   const future = day.date > today;
 
   // The week is the athlete's to reorganise (decision D2, extended): any
@@ -85,107 +76,31 @@ export default async function FuerzaPage({
     sameWeek(day.date, today) &&
     (session?.status ?? "planned") === "planned";
 
-  const plates =
-    primary && ctx.profile.show_plate_breakdown ? primary.plates : null;
-  const perSide =
-    plates && !plates.barOnly && plates.perSide.length > 0
-      ? plates.perSide.map((p) => formatWeight(p)).join("+")
-      : null;
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TopBar title="FUERZA" href="/semana" right={formatDayLong(day.date)} />
+      <TopBar title={day.title} href="/semana" right={formatDayLong(day.date)} />
 
-      <div className="flex-1 overflow-auto pb-4">
-        <div className="px-5 pt-2">
-          <Card>
-            <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
-              {day.label} · {phase.key} SEM{" "}
-              <span className="num">{placement.week}</span>
-            </div>
-            {primary ? (
-              <>
-                <div className="mt-2 text-[17.5px] leading-[1.25] font-semibold">
-                  {primary.name}
-                </div>
-                <HeroNumber
-                  size="md"
-                  value={
-                    primary.weightKg == null
-                      ? "—"
-                      : formatWeight(primary.weightKg)
-                  }
-                  unit="kg"
-                />
-                <div className="mt-3.5 flex flex-wrap gap-2">
-                  <Tag>{primary.schemeLabel}</Tag>
-                  <Tag>RIR {ctx.profile.target_rir}</Tag>
-                  <Tag>{primary.restLabel}</Tag>
-                  {perSide ? <Tag>por lado {perSide}</Tag> : null}
-                  {plates?.remainderKg ? (
-                    <Tag className="text-fail">
-                      +{formatWeight(plates.remainderKg)} sin disco
-                    </Tag>
-                  ) : null}
-                </div>
-              </>
-            ) : (
-              <div className="mt-2 text-[17.5px] leading-[1.25] font-semibold">
-                {day.title}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <SectionLabel
-          right={
-            <span className="num">
-              {day.totalSets} {day.totalSets === 1 ? "serie" : "series"}
-            </span>
-          }
-        >
-          La sesión
-        </SectionLabel>
-        <RowStack className="mt-2.5">
-          {day.exercises.map((e) => (
-            <Row key={e.id}>
-              <div className="flex w-full items-center gap-3">
-                <span className="min-w-0 flex-1 truncate text-[14.5px] leading-[1.25] font-medium">
-                  {e.name}
-                </span>
-                {e.isPrimary ? (
-                  <span className="font-display flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em] text-lime uppercase">
-                    básico
-                  </span>
-                ) : null}
-                <span className="flex-none text-[12.5px] leading-none text-mid">
-                  {e.schemeLabel}
-                </span>
-                <span className="num min-w-[62px] flex-none text-right text-[14px] leading-none font-semibold">
-                  {e.weightLabel}
-                </span>
-              </div>
-              <div className="mt-1 text-[11.5px] leading-[1.4] text-faint">
-                desc. {e.restLabel}
-                {e.notes ? ` · ${e.notes}` : ""}
-              </div>
-            </Row>
-          ))}
-        </RowStack>
+      <div className="flex-1 overflow-auto pt-2 pb-4">
+        <StrengthDay
+          day={day}
+          eyebrow={`Básico · ${phase.name} · semana ${placement.week}`}
+          targetRir={ctx.profile.target_rir}
+          showPlates={ctx.profile.show_plate_breakdown}
+        />
 
         {day.isDeload ? (
           <div className="mt-3.5 px-5">
             <Callout eyebrow="Semana de descarga">
-              Mitad de series, mismos pesos. Llegar fresco a la semana
-              siguiente es el objetivo de esta.
+              Mitad de series y pesos más bajos, a propósito. El objetivo es
+              llegar fresco a la semana siguiente.
             </Callout>
           </div>
         ) : null}
 
         {future ? (
           <Footnote>
-            Pesos calculados con la RM de hoy: si el motor reacciona antes de
-            esta fecha, cambiarán.
+            Pesos calculados con tus RM de hoy: si cambian antes de esta
+            fecha, estos pesos cambian con ellas.
           </Footnote>
         ) : null}
 
@@ -203,23 +118,39 @@ export default async function FuerzaPage({
           Ver resumen
         </LinkBar>
       ) : startable ? (
-        <StartSessionButton
-          day={{
-            phaseId: phase.id,
-            slotId: slot.id,
-            scheduledOn: day.date,
-            week: placement.week,
-            dayIndex: day.dayIndex,
-            sessionType: day.sessionType,
-            title: day.title,
-            group: day.group,
-          }}
-          existingSessionId={session?.id ?? null}
-          existingStatus={session?.status ?? null}
-          groupLabel={
-            day.date === today ? GROUP_LABEL[day.group] : "Entrenar esta hoy"
-          }
-        />
+        <>
+          <div className="flex flex-none justify-center">
+            <SkipDayButton
+              day={{
+                phaseId: phase.id,
+                slotId: slot.id,
+                scheduledOn: day.date,
+                week: placement.week,
+                dayIndex: day.dayIndex,
+                sessionType: day.sessionType,
+                title: day.title,
+                group: day.group,
+              }}
+            />
+          </div>
+          <StartSessionButton
+            day={{
+              phaseId: phase.id,
+              slotId: slot.id,
+              scheduledOn: day.date,
+              week: placement.week,
+              dayIndex: day.dayIndex,
+              sessionType: day.sessionType,
+              title: day.title,
+              group: day.group,
+            }}
+            existingSessionId={session?.id ?? null}
+            existingStatus={session?.status ?? null}
+            groupLabel={
+              day.date === today ? GROUP_LABEL[day.group] : "Entrenar esta hoy"
+            }
+          />
+        </>
       ) : null}
     </div>
   );

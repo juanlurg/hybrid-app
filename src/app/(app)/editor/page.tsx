@@ -143,12 +143,11 @@ export default async function EditorPage({
       phase={{ id: phase.id, key: phase.key, name: phase.name, weeks: phase.weeks }}
       phaseOptions={phases.map((p) => ({
         key: p.key,
+        name: p.name,
         active: p.id === phase.id,
         current: p.id === placement.phase.id,
       }))}
       isCurrentPhase={isCurrentPhase}
-      week={phaseWeek}
-      absoluteWeek={absoluteWeekShown}
       isDeload={isDeloadWeek(phaseWeek, phaseConfig)}
       waveIndex={weekInCycle(phaseWeek, phaseConfig.cycleWeeks)}
       wave={[...phaseConfig.wave]}

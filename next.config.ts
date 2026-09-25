@@ -1,6 +1,19 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Historial became Progreso; the engine's side of the old Progreso
+  // (the per-lift breakdown, `?lift=`) became /motor.
+  async redirects() {
+    return [
+      { source: "/historial", destination: "/progreso", permanent: false },
+      {
+        source: "/progreso",
+        has: [{ type: "query", key: "lift" }],
+        destination: "/motor",
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

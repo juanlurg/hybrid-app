@@ -9,6 +9,7 @@ import {
   Row,
   RowStack,
   ScreenHeader,
+  TopBar,
   SectionLabel,
 } from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
@@ -57,7 +58,9 @@ export function ProgramBuilder({
 
     return (
       <div className="flex min-h-0 flex-1 flex-col">
+        <TopBar title="Generar programa" href="/programa" />
         <ScreenHeader
+          className="pt-2"
           eyebrow="Programa generado"
           title={preview.name}
           subtitle={`ARRANCA EL ${formatDayLong(preview.startsOn).toUpperCase()} · AÚN SIN ACTIVAR`}
@@ -196,8 +199,10 @@ export function ProgramBuilder({
   /* ── the brief ──────────────────────────────────────────────── */
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <TopBar title="Generar programa" href="/programa" />
       <ScreenHeader
-        eyebrow="Generar programa"
+        className="pt-2"
+        eyebrow="Otra temporada"
         title="Un plan nuevo, desde cero"
         subtitle="LA IA LO DISEÑA · TÚ LO REVISAS Y ACTIVAS"
       />
@@ -242,7 +247,7 @@ export function ProgramBuilder({
               type="button"
               disabled={!hasApiKey || pending}
               onClick={() => setBrief(e)}
-              className="rounded-sm border border-edge bg-soft px-2.5 py-2 text-left text-[10.5px] leading-[1.3] font-semibold disabled:opacity-40"
+              className="rounded-sm border border-edge bg-soft px-2.5 py-2 text-left text-[11px] leading-[1.3] font-semibold disabled:opacity-40"
             >
               {e.slice(0, 40)}…
             </button>

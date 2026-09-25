@@ -14,7 +14,7 @@ export interface LiftOption {
 /**
  * The lift selector — a wrapping row of pills.
  *
- * Navigation is a real URL change (`/progreso?lift=…`) so the server
+ * Navigation is a real URL change (`/motor?lift=…`) so the server
  * recomputes the whole audit — the breakdown must never be a client guess.
  */
 export function LiftPicker({
@@ -41,7 +41,7 @@ export function LiftPicker({
             onClick={() => {
               if (isActive) return;
               startTransition(() => {
-                router.push(`/progreso?lift=${encodeURIComponent(lift.key)}`);
+                router.push(`/motor?lift=${encodeURIComponent(lift.key)}`);
               });
             }}
             className={cn(
