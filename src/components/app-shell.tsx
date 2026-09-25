@@ -6,21 +6,37 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/cn";
 
+/**
+ * Four tabs, one question each: what now, what's coming, how am I doing,
+ * how is it built. Every other screen belongs to one of them, and that
+ * tab stays lit while you are there — you are never nowhere.
+ */
 const PRIMARY = [
-  { href: "/", label: "Hoy" },
-  { href: "/semana", label: "Semana" },
-  { href: "/progreso", label: "Progreso" },
-  { href: "/programa", label: "Programa" },
+  { href: "/", label: "Hoy", owns: ["/movilidad"] },
+  { href: "/semana", label: "Semana", owns: ["/fuerza", "/carrera"] },
+  { href: "/progreso", label: "Progreso", owns: [] },
+  {
+    href: "/programa",
+    label: "Plan",
+    owns: ["/editor", "/motor", "/ajustes", "/generar"],
+  },
 ] as const;
 
-const SECONDARY = [
-  { href: "/historial", label: "Historial" },
-  { href: "/editor", label: "Editar" },
+/** Plan's own screens, one click away on the desktop rail. */
+const PLAN_SCREENS = [
+  { href: "/editor", label: "Semana tipo" },
+  { href: "/motor", label: "Motor" },
   { href: "/ajustes", label: "Ajustes" },
 ] as const;
 
-function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+function isActive(pathname: string, item: (typeof PRIMARY)[number]) {
+  if (item.href === "/") {
+    return pathname === "/" || item.owns.some((p) => pathname.startsWith(p));
+  }
+  return (
+    pathname.startsWith(item.href) ||
+    item.owns.some((p) => pathname.startsWith(p))
+  );
 }
 
 /**
@@ -36,7 +52,6 @@ export function AppShell({
   seasonLabel?: string;
 }) {
   const pathname = usePathname();
-  const all = [...PRIMARY, ...SECONDARY];
   // The runner pins its own action bar to the bottom edge; a tab strip
   // directly under "Hecho" is pure mis-tap surface mid-set.
   const inRunner = pathname.startsWith("/sesion/");
@@ -55,8 +70,8 @@ export function AppShell({
           ) : null}
         </div>
         <div className="flex flex-col gap-0.5 px-3">
-          {all.map((item) => {
-            const active = isActive(pathname, item.href);
+          {PRIMARY.map((item) => {
+            const active = isActive(pathname, item);
             return (
               <Link
                 key={item.href}
@@ -66,13 +81,31 @@ export function AppShell({
                   "font-display border-l-[3px] px-3 py-[11px] text-[12px] leading-none tracking-[0.1em] uppercase",
                   active
                     ? "rounded-md border-lime-line bg-lime-soft font-bold text-lime"
-                    : "border-transparent font-semibold text-faint hover:text-ink",
+                    : "border-transparent font-semibold text-mid hover:text-ink",
                 )}
               >
                 {item.label}
               </Link>
             );
           })}
+          <div className="mt-1 flex flex-col gap-0.5 pl-6">
+            {PLAN_SCREENS.map((item) => {
+              const active = pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "px-3 py-2 text-[13px] leading-none",
+                    active ? "font-semibold text-ink" : "text-mid hover:text-ink",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
         </div>
         <div className="mt-auto px-[22px] py-[22px] text-[11px] leading-[1.5] text-faint">
           El motor calcula el peso. Tú solo levantas.
@@ -98,15 +131,15 @@ export function AppShell({
         {inRunner ? null : (
           <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-chrome px-2 pb-[calc(8px+var(--safe-bottom))] md:hidden">
             {PRIMARY.map((item) => {
-              const active = isActive(pathname, item.href);
+              const active = isActive(pathname, item);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "font-display flex h-11 flex-1 items-center justify-center text-[11px] leading-none tracking-[0.08em] uppercase",
-                    active ? "font-bold text-lime" : "font-semibold text-faint",
+                    "font-display flex h-11 flex-1 items-center justify-center text-[12px] leading-none tracking-[0.08em] uppercase",
+                    active ? "font-bold text-lime" : "font-semibold text-mid",
                   )}
                 >
                   {item.label}
@@ -116,37 +149,6 @@ export function AppShell({
           </nav>
         )}
       </div>
-    </div>
-  );
-}
-
-/**
- * Secondary nav shown inside Programa, Historial, Editar and Ajustes on
- * phones. Three pills, not a segmented well — on Programa none is active.
- */
-export function SecondaryNav() {
-  const pathname = usePathname();
-  return (
-    <div className="mx-5 mt-3.5 flex gap-1.5 md:hidden">
-      {SECONDARY.map((item) => {
-        const active = isActive(pathname, item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              // 44px rather than the mock's 31px: still a tap target.
-              "font-display flex h-11 flex-1 items-center justify-center rounded-md px-1 text-[10.5px] leading-none tracking-[0.08em] uppercase",
-              active
-                ? "bg-strength font-bold text-on-strength"
-                : "border border-edge bg-surface font-semibold text-mid",
-            )}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
-import { SecondaryNav } from "@/components/app-shell";
 import {
   Card,
   Chip,
@@ -12,6 +11,7 @@ import {
   RuleNote,
   SectionLabel,
   Stepper,
+  TopBar,
 } from "@/components/ui/kit";
 import { accentFor, TONE } from "@/components/day-accents";
 import { cn } from "@/lib/cn";
@@ -85,7 +85,6 @@ export function ProgramEditor({
   phase,
   phaseOptions,
   isCurrentPhase,
-  week,
   isDeload,
   waveIndex,
   wave,
@@ -104,11 +103,9 @@ export function ProgramEditor({
 }: {
   phase: { id: string; key: string; name: string; weeks: number };
   /** Every phase of the season; `active` is the one on screen. */
-  phaseOptions: Array<{ key: string; active: boolean; current: boolean }>;
+  phaseOptions: Array<{ key: string; name: string; active: boolean; current: boolean }>;
   /** False when looking at a phase other than today's. */
   isCurrentPhase: boolean;
-  week: number;
-  absoluteWeek: number;
   isDeload: boolean;
   waveIndex: number;
   wave: number[];
@@ -187,27 +184,16 @@ export function ProgramEditor({
       ? `${slot.label} · ${day.subtitle || day.load}`
       : `${day.title} · sin sesión`;
 
+  const advisories = warnings.filter((w) => w.tone !== "fail");
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex-none px-5 pt-6">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="font-display min-w-0 flex-1 text-[22px] leading-[1.15] font-bold">
-            Plantilla semanal
-          </h1>
-          <span className="num flex-none text-[11px] leading-none text-faint">
-            {isCurrentPhase
-              ? `${phase.key} · SEM ${week}/${phase.weeks}`
-              : `${phase.key} · ${phase.weeks} SEM`}
-          </span>
-        </div>
-        <p className="mt-1.5 text-[12.5px] leading-[1.45] text-mid">
-          {slot
-            ? `Editar ${slot.label} la cambia en toda la fase.`
-            : "Editar una sesión la cambia en toda la fase."}
-        </p>
-      </header>
-
-      <SecondaryNav />
+      <TopBar title="Semana tipo" href="/programa" />
+      <p className="flex-none px-5 text-[13px] leading-[1.45] text-mid">
+        {slot
+          ? `Editar ${slot.label} la cambia en todas las semanas de la fase.`
+          : "Editar una sesión la cambia en todas las semanas de la fase."}
+      </p>
 
       <div className="min-h-0 flex-1 overflow-auto pb-6">
         {/* Any phase is editable, not just the one being lived. */}
@@ -219,14 +205,14 @@ export function ProgramEditor({
                 href={p.current ? "/editor" : `/editor?fase=${p.key}`}
                 aria-current={p.active ? "page" : undefined}
                 className={cn(
-                  "font-display flex h-9 items-center rounded-sm border px-3 text-[11px] leading-none font-semibold uppercase",
+                  "flex h-10 items-center rounded-sm border px-3 text-[13px] leading-none font-semibold",
                   p.active
                     ? "border-transparent bg-strength text-on-strength"
                     : "border-edge bg-soft text-mid",
                 )}
               >
-                {p.key}
-                {p.current ? <span className="ml-1 opacity-70">· hoy</span> : null}
+                {p.name}
+                {p.current ? <span className="ml-1 opacity-70">· ahora</span> : null}
               </Link>
             ))}
           </div>
@@ -619,7 +605,7 @@ export function ProgramEditor({
                   </div>
                 ) : null}
 
-                <p className="mt-3 text-[11.5px] leading-[1.5] text-faint">
+                <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">
                   El básico del día manda: su rango de reps es lo que dispara la
                   regla de regresión. Los accesorios no tocan el motor de pesos.
                 </p>
@@ -629,19 +615,47 @@ export function ProgramEditor({
         </div>
 
         {warnings.length > 0 ? (
+          // Blocking problems stay in view; advisories fold behind one line,
+          // or a plan that trips them every week turns them into wallpaper.
           <div className="flex flex-col gap-3.5 px-5 pt-4">
-            {warnings.map((w, i) => (
-              <RuleNote
-                key={i}
-                tone={w.tone === "fail" ? TONE.fail : TONE.warn}
-                title={w.title}
-              >
-                {w.detail}
-              </RuleNote>
-            ))}
+            {warnings
+              .filter((w) => w.tone === "fail")
+              .map((w, i) => (
+                <RuleNote key={i} tone={TONE.fail} title={w.title}>
+                  {w.detail}
+                </RuleNote>
+              ))}
+            {advisories.length > 0 ? (
+              <details className="group rounded-lg border border-line bg-surface">
+                <summary className="flex min-h-11 list-none items-center gap-3 px-3.5 py-3 [&::-webkit-details-marker]:hidden">
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 flex-none rounded-full bg-warn"
+                  />
+                  <span className="min-w-0 flex-1 text-[13.5px] leading-[1.3] font-medium">
+                    {advisories.length === 1
+                      ? "1 aviso sobre esta semana"
+                      : `${advisories.length} avisos sobre esta semana`}
+                  </span>
+                  <span
+                    aria-hidden
+                    className="font-display flex-none text-[13px] leading-none text-mid transition-transform group-open:rotate-45"
+                  >
+                    ＋
+                  </span>
+                </summary>
+                <div className="flex flex-col gap-3.5 border-t border-line px-3.5 pt-3 pb-3.5">
+                  {advisories.map((w, i) => (
+                    <RuleNote key={i} tone={TONE.warn} title={w.title}>
+                      {w.detail}
+                    </RuleNote>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </div>
         ) : (
-          <p className="px-5 pt-4 text-[12.5px] leading-[1.5] text-faint">
+          <p className="px-5 pt-4 text-[12.5px] leading-[1.5] text-mid">
             La semana pasa las comprobaciones: hay bloque de movilidad, cada
             sesión de fuerza tiene su básico y no hay pierna pesada pegada a la
             tirada larga.
@@ -663,7 +677,7 @@ export function ProgramEditor({
             />
           </div>
         ) : (
-          <p className="px-5 pt-4 text-[12.5px] leading-[1.5] text-faint">
+          <p className="px-5 pt-4 text-[12.5px] leading-[1.5] text-mid">
             La IA propone solo sobre la fase en curso. Esta la editas a mano.
           </p>
         )}
@@ -673,12 +687,12 @@ export function ProgramEditor({
         <details className="group mt-3.5">
           <summary className="mx-5 flex min-h-11 list-none items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-3 [&::-webkit-details-marker]:hidden">
             <span className="font-display min-w-0 flex-1 text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
-              Motor de pesos
+              % de la RM por semana
             </span>
-            <span className="num flex-none text-[12px] leading-none text-faint">
+            <span className="num flex-none text-[12.5px] leading-none text-mid">
               {waveScope === "fixed"
                 ? `${Math.round((pctOfRm ?? 0.8) * 100)} % fijo`
-                : `ola ${wave.length} sem · ${Math.round(wave[waveIndex] * 100)} %`}
+                : `ciclo de ${wave.length} · esta ${Math.round(wave[waveIndex] * 100)} %`}
             </span>
             <span
               aria-hidden
@@ -694,17 +708,15 @@ export function ProgramEditor({
                 {Math.round((pctOfRm ?? 0.8) * 100)} %
               </div>
               <p className="mt-2 text-[12.5px] leading-[1.5] text-mid">
-                {phase.key} va a porcentaje fijo de la RM: sin olas, sin bumps y
-                sin descargas automáticas. No hay ola que editar en esta fase.
+                Esta fase va a porcentaje fijo de la RM: el mismo cada semana,
+                sin subidas por ciclo ni descargas automáticas.
               </p>
             </Card>
           ) : (
             <>
               <SectionLabel>
-                Ola de {wave.length} semanas ·{" "}
-                {waveScope === "phase"
-                  ? `de esta fase (${phase.key})`
-                  : "del programa"}
+                Ciclo de {wave.length} semanas ·{" "}
+                {waveScope === "phase" ? "de esta fase" : "de todo el programa"}
               </SectionLabel>
               <div className="mx-5 mt-3 flex h-[104px] items-end gap-1">
                 {wave.map((w, i) => {
@@ -736,9 +748,9 @@ export function ProgramEditor({
               <div className="mx-5 mt-1 flex gap-1">
                 {wave.map((_, i) => (
                   <div key={i} className="flex flex-1 flex-col gap-1">
-                    <div className="font-display pt-1.5 pb-1 text-center text-[9.5px] leading-none font-semibold text-faint">
+                    <div className="font-display pt-1.5 pb-1 text-center text-[11px] leading-none font-semibold text-mid">
                       S{i + 1}
-                      {i === wave.length - 1 ? "·D" : ""}
+                      {i === wave.length - 1 ? " ↓" : ""}
                     </div>
                     <div className="flex gap-1">
                       <button
@@ -763,12 +775,13 @@ export function ProgramEditor({
                   </div>
                 ))}
               </div>
-              <p className="mx-5 mt-3.5 text-[12.5px] leading-[1.5] text-faint">
-                La semana {wave.length} es la descarga: mismos pesos al{" "}
-                {Math.round(wave[wave.length - 1] * 100)} %, mitad de series.
-                Cambiar el pico cambia todos los pesos calculados de ese ciclo
+              <p className="mx-5 mt-3.5 text-[12.5px] leading-[1.5] text-mid">
+                La semana {wave.length} es la descarga: los básicos al{" "}
+                {Math.round(wave[wave.length - 1] * 100)} % de la RM y la mitad
+                de series. Cambiar un porcentaje cambia los pesos de esa semana
+                en cada ciclo
                 {waveScope === "phase"
-                  ? " — solo en esta fase; las demás siguen con su propia ola."
+                  ? " — solo en esta fase; las demás tienen el suyo."
                   : "."}
                 {isDeload ? " Estás en ella ahora mismo." : ""}
               </p>
@@ -779,35 +792,18 @@ export function ProgramEditor({
               this screen keeps only what it can actually edit (the wave).
               The AI cannot touch them either way. */}
           <Link
-            href="/ajustes"
+            href="/motor"
             className="mt-2 flex items-center gap-2.5 px-6 py-2"
           >
             <span className="flex-1 text-[13px] leading-[1.4] text-mid">
-              Parámetros del motor · se cambian en ajustes
+              Cómo calcula el motor cada peso
             </span>
-            <span aria-hidden className="text-[13px] leading-none text-faint">
+            <span aria-hidden className="text-[13px] leading-none text-mid">
               ›
             </span>
           </Link>
         </details>
 
-        <Link
-          href="/generar"
-          className="mx-5 mt-3.5 flex items-center gap-3 rounded-lg border border-edge bg-surface px-3.5 py-3"
-        >
-          <span className="h-[30px] w-[30px] flex-none rounded-sm bg-strength" />
-          <span className="flex-1">
-            <span className="block text-[13.5px] leading-[1.2] font-semibold">
-              Generar un programa nuevo
-            </span>
-            <span className="font-display mt-1 block text-[10px] leading-none font-semibold tracking-[0.08em] text-faint">
-              OTRA TEMPORADA, OTRO OBJETIVO · TUS RM SE CONSERVAN
-            </span>
-          </span>
-          <span aria-hidden className="text-[16px] leading-none text-mid">
-            →
-          </span>
-        </Link>
       </div>
     </div>
   );

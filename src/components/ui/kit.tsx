@@ -156,6 +156,51 @@ export function Framed({
   );
 }
 
+/**
+ * A reference block folded behind its own summary. `details` keeps the body
+ * mounted, so anything stateful inside survives an open/close.
+ */
+export function Fold({
+  title,
+  summary,
+  children,
+  className,
+}: {
+  title: string;
+  summary: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <details
+      className={cn(
+        "group mx-5 rounded-xl border border-edge bg-surface",
+        className,
+      )}
+    >
+      <summary className="flex min-h-12 list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          <span className="font-display block text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
+            {title}
+          </span>
+          <span className="mt-1 block text-[12.5px] leading-[1.35] text-mid">
+            {summary}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className="font-display flex-none text-[14px] leading-none text-mid transition-transform group-open:rotate-45"
+        >
+          ＋
+        </span>
+      </summary>
+      <div className="rounded-b-xl border-t border-line bg-sunk px-4 pt-3.5 pb-4">
+        {children}
+      </div>
+    </details>
+  );
+}
+
 /* ── numbers ─────────────────────────────────────────────────── */
 
 /** The lit number. There is one of these per screen, and only one. */

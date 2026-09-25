@@ -1,120 +1,329 @@
+import {
+  TONE,
+  accentFor,
+  cellColour,
+  STATUS_LABEL,
+  statusTone,
+} from "@/components/day-accents";
+import { Footnote, Framed, Row, RowStack, SectionLabel } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
-import { liftStateFrom, phaseEngineConfig, phaseSpans } from "@/lib/domain/plan";
 import { formatDayShort, placeDate, type IsoDate } from "@/lib/domain/calendar";
 import {
+  groupOf,
+  phaseEngineConfig,
+  phaseSpans,
+  resolveWeek,
+  type LiftRow,
+  type ResolvedDay,
+  type SessionRow,
+  type SessionStatus,
+} from "@/lib/domain/plan";
+import {
+  epley1RM,
+  formatTonnage,
   formatWeight,
   isDeloadWeek,
-  regressionLadder,
-  round2,
-  roundToStep,
-  weekInCycle,
-  workingWeight,
-  workingWeightKg,
 } from "@/lib/engine";
 import { createClient } from "@/lib/supabase/server";
-import { accentFor, TONE } from "@/components/day-accents";
-import { Card, Framed } from "@/components/ui/kit";
 import { cn } from "@/lib/cn";
 
-import { LiftPicker } from "./lift-picker";
+import { HistoryLog, type HistoryEntry } from "./history-log";
+import { HistoryTabs } from "./history-tabs";
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 /** Pa:HR only means something on the long, steady stuff. */
 const DECOUPLING_LIMIT = 5;
 
-/** No eyebrow on this screen: the title is one word and carries it. */
-function Header({ week, seasonWeeks }: { week: number; seasonWeeks: number }) {
-  return (
-    <header className="flex flex-none items-baseline gap-2.5 px-5 pt-6">
-      <h1 className="font-display flex-1 text-[22px] leading-[1.1] font-bold">
-        Progreso
-      </h1>
-      <span className="num flex-none text-[12px] leading-none text-faint">
-        SEM {week}/{seasonWeeks}
-      </span>
-    </header>
+/**
+ * Every fill `cellColour` can return, in its own words. No `colour` is the
+ * dashed outline the grid draws for a day still ahead.
+ */
+const LEGEND: Array<{ label: string; colour?: string }> = [
+  { label: "fuerza", colour: accentFor("strength") },
+  { label: "carrera", colour: accentFor("run") },
+  { label: "movilidad", colour: accentFor("mobility") },
+  { label: "descanso", colour: accentFor("rest") },
+  { label: "parcial", colour: TONE.warn },
+  { label: "sin registrar", colour: TONE.soft },
+  { label: "por venir" },
+];
+
+const dayKey = (date: string, slotId: string | null) =>
+  `${date}|${slotId ?? ""}`;
+
+/** "52′", "1 h 05′". Never a bare number of seconds. */
+function formatMinutes(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return "—";
+  const total = Math.round(seconds / 60);
+  if (total < 60) return `${total}′`;
+  return `${Math.floor(total / 60)} h ${String(total % 60).padStart(2, "0")}′`;
+}
+
+interface BestSet {
+  weightKg: number;
+  reps: number;
+  sessionId: string;
+  loggedAt: string;
+}
+
+/**
+ * The heaviest set ever logged for each basic.
+ *
+ * One query per lift, one row each: a single ordered query over every set
+ * would need a cap, and the cap would silently drop the lighter lifts —
+ * a press record buried under hundreds of heavier squat sets would read
+ * as "no hay récord" when there is one.
+ */
+async function bestSetPerLift(
+  supabase: Supabase,
+  userId: string,
+  lifts: LiftRow[],
+): Promise<Map<string, BestSet>> {
+  const rows = await Promise.all(
+    lifts.map(async (lift) => {
+      const { data } = await supabase
+        .from("set_logs")
+        .select("weight_kg, reps, session_id, logged_at")
+        .eq("user_id", userId)
+        .eq("lift_key", lift.key)
+        .not("weight_kg", "is", null)
+        .not("reps", "is", null)
+        .order("weight_kg", { ascending: false })
+        .order("reps", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data || data.weight_kg == null || data.reps == null) return null;
+      return [
+        lift.key,
+        {
+          weightKg: Number(data.weight_kg),
+          reps: data.reps,
+          sessionId: data.session_id,
+          loggedAt: data.logged_at,
+        },
+      ] as const;
+    }),
+  );
+  return new Map(
+    rows.filter((row): row is NonNullable<typeof row> => row !== null),
   );
 }
 
-export default async function ProgresoPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ lift?: string | string[] }>;
-}) {
+interface LiftRecord {
+  lift: LiftRow;
+  best: {
+    weightKg: number;
+    reps: number;
+    date: IsoDate;
+    epleyKg: number;
+  } | null;
+}
+
+/**
+ * Progreso: what has actually happened — adherence, records, the log and
+ * the running trend. What the engine will do lives in /motor.
+ */
+export default async function ProgresoPage() {
   const athlete = await requireAthlete();
-  const { ctx, config, placement, seasonWeeks } = athlete;
+  const { ctx, config, placement, today, userId, seasonWeeks } = athlete;
+  const { program } = ctx;
+  const phase = ctx.phases.find((p) => p.id === placement.phase.id)!;
+  const phases = [...ctx.phases].sort((a, b) => a.position - b.position);
 
-  const lifts = [...ctx.lifts].sort((a, b) => a.key.localeCompare(b.key));
+  const supabase = await createClient();
+  const [
+    { data: sessionRows },
+    { data: runRows },
+    { data: mobilityRows },
+    bestByLift,
+  ] = await Promise.all([
+    supabase
+      .from("sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("program_id", program.id)
+      .order("scheduled_on", { ascending: false }),
+    supabase.from("run_logs").select("*").eq("user_id", userId),
+    supabase.from("mobility_logs").select("*").eq("user_id", userId),
+    bestSetPerLift(supabase, userId, ctx.lifts),
+  ]);
 
-  if (lifts.length === 0) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <Header week={placement.absoluteWeek} seasonWeeks={seasonWeeks} />
-        <p className="px-5 pt-5 text-[12px] leading-[1.55] text-mid">
-          Este programa no tiene básicos con RM asociada, así que el motor no
-          calcula ningún peso. Añade tus RM en Programa y esta pantalla empieza
-          a tener números.
-        </p>
-      </div>
-    );
-  }
+  const sessions: SessionRow[] = sessionRows ?? [];
+  const sessionById = new Map(sessions.map((s) => [s.id, s] as const));
+  const recent = sessions.slice(0, 30);
+  const recentIds = recent.map((s) => s.id);
 
-  const raw = (await searchParams).lift;
-  const requested = Array.isArray(raw) ? raw[0] : raw;
-  const liftRow = lifts.find((l) => l.key === requested) ?? lifts[0];
-  const lift = liftStateFrom(liftRow);
+  // Records can point at a session from an earlier program, which the query
+  // above does not cover. Only ask for the ones actually missing.
+  const recordSessionIds = [...bestByLift.values()]
+    .map((b) => b.sessionId)
+    .filter((id) => id && !sessionById.has(id));
 
-  /* ── the numbers ─────────────────────────────────────────────── */
+  const [recentSetsRes, recordSessionsRes] = await Promise.all([
+    recentIds.length
+      ? supabase
+          .from("set_logs")
+          .select("*")
+          .eq("user_id", userId)
+          .in("session_id", recentIds)
+      : null,
+    recordSessionIds.length
+      ? supabase
+          .from("sessions")
+          .select("id, scheduled_on")
+          .eq("user_id", userId)
+          .in("id", recordSessionIds)
+      : null,
+  ]);
+  const recentSets = recentSetsRes?.data ?? [];
+  const recordDates = new Map<string, IsoDate>([
+    ...sessions.map((s) => [s.id, s.scheduled_on as IsoDate] as const),
+    ...(recordSessionsRes?.data ?? []).map(
+      (s) => [s.id, s.scheduled_on as IsoDate] as const,
+    ),
+  ]);
 
-  // Project the season phase by phase: each phase runs its own
-  // progression on its own local weeks (F2's wave, F3/F4's fixed %).
-  const orderedPhases = [...ctx.phases].sort((a, b) => a.position - b.position);
-  const currentPhase =
-    ctx.phases.find((p) => p.id === placement.phase.id) ?? orderedPhases[0];
-  const phaseConfig = phaseEngineConfig(config, currentPhase);
+  /* ── the season as planned, week by week ─────────────────────── */
 
-  const cleanLift = { ...lift, hold: false, holdAtKg: null };
-  const series: number[] = [];
-  const deloadFlags: boolean[] = [];
-  for (const p of orderedPhases) {
-    const pc = phaseEngineConfig(config, p);
+  const seasonDays: ResolvedDay[] = [];
+  let absoluteWeek = 0;
+  for (const p of phases) {
     for (let w = 1; w <= p.weeks; w++) {
-      series.push(workingWeightKg(cleanLift, w, pc));
-      deloadFlags.push(isDeloadWeek(w, pc));
+      absoluteWeek += 1;
+      for (const d of resolveWeek({
+        ctx,
+        config,
+        phase: p,
+        week: w,
+        absoluteWeek,
+      })) {
+        seasonDays.push(d);
+      }
     }
   }
 
-  const breakdown = workingWeight(lift, placement.week, phaseConfig);
-  const currentKg = breakdown.workingKg;
-
-  // Same wave step, first cycle of THIS phase: what this week would
-  // have weighed before any cycle bumps.
-  const phaseBase = orderedPhases
-    .slice(0, orderedPhases.findIndex((p) => p.id === currentPhase.id))
-    .reduce((acc, p) => acc + p.weeks, 0);
-  const cycleOneWeek = weekInCycle(placement.week, phaseConfig.cycleWeeks) + 1;
-  const baselineKg = series[phaseBase + cycleOneWeek - 1] ?? currentKg;
-  const deltaKg = round2(currentKg - baselineKg);
-
-  const maxKg = series.reduce((acc, v) => Math.max(acc, v), 0);
-  const incKg = lift.kind === "lower" ? config.incLowerKg : config.incUpperKg;
-  const penalisedRmKg = roundToStep(
-    lift.e1rmKg * (1 - lift.penalty),
-    config.roundingKg,
+  const dayByKey = new Map(
+    seasonDays.map((d) => [dayKey(d.date, d.slot?.id ?? null), d] as const),
+  );
+  const sessionByKey = new Map(
+    sessions.map((s) => [dayKey(s.scheduled_on, s.slot_id), s] as const),
+  );
+  const runBySession = new Map(
+    (runRows ?? []).map((r) => [r.session_id, r] as const),
+  );
+  const mobilityBySession = new Map(
+    (mobilityRows ?? [])
+      .filter((m) => m.session_id)
+      .map((m) => [m.session_id as string, m] as const),
+  );
+  const mobilityByDate = new Map(
+    (mobilityRows ?? []).map((m) => [m.performed_on, m] as const),
   );
 
-  // What the *next* miss does. Under the conservative rule that is another
-  // hold, not a cut — promising "la RM baja un 0 %" would be a lie.
-  const ladder = regressionLadder(config.regressionRule);
-  const nextPenalty = ladder[Math.min(lift.failCount, 2)];
-  const firstCutStrike = ladder.findIndex((p) => p > 0) + 1;
-  const nextStepText =
-    nextPenalty > 0
-      ? `Otro fallo y la RM baja un ${Math.round(nextPenalty * 100)} %.`
-      : firstCutStrike > 0
-        ? `Otro fallo y el peso se vuelve a repetir: con esta regla la RM no ` +
-          `baja hasta el fallo ${firstCutStrike}.`
-        : `Otro fallo y el peso se vuelve a repetir: con esta regla la RM no ` +
-          `baja nunca por fallos de rango.`;
+  /**
+   * What happened on a planned day. Mobility never opens a `sessions` row —
+   * it is logged item by item in `mobility_logs` — so its state comes from
+   * the block itself, not from the absence of a session.
+   */
+  const statusForDay = (d: ResolvedDay): SessionStatus | null => {
+    if (!d.slot) return null;
+    const row = sessionByKey.get(dayKey(d.date, d.slot.id));
+    if (row) return row.status;
+    if (d.group !== "mobility") return null;
+    const log = mobilityByDate.get(d.date);
+    if (!log) return null;
+    const done = log.completed_slugs.length;
+    if (done === 0) return null;
+    return log.total_items > 0 && done < log.total_items ? "partial" : "done";
+  };
+
+  /**
+   * Adherence over a set of days. Only strength and running count: the
+   * mobility block is daily and explicitly not training, and rest days are
+   * not something to comply with. Today only counts once it is closed —
+   * a session still pending at nine in the morning is not a miss.
+   */
+  const tally = (days: ResolvedDay[]) => {
+    let elapsed = 0;
+    let credit = 0;
+    for (const d of days) {
+      if (!d.slot || (d.group !== "strength" && d.group !== "run")) continue;
+      if (d.date > today) continue;
+      const status = statusForDay(d);
+      const closed =
+        status === "done" || status === "partial" || status === "skipped";
+      if (d.date === today && !closed) continue;
+      elapsed += 1;
+      if (status === "done") credit += 1;
+      else if (status === "partial") credit += 0.5;
+    }
+    return {
+      elapsed,
+      pct: elapsed === 0 ? null : Math.round((credit / elapsed) * 100),
+    };
+  };
+
+  /* ── KPIs ────────────────────────────────────────────────────── */
+
+  const adherence = tally(seasonDays).pct;
+
+  const registered = sessions.filter(
+    (s) => s.status === "done" || s.status === "partial",
+  ).length;
+
+  const totalTonnage = sessions.reduce(
+    (acc, s) => acc + Number(s.tonnage_kg ?? 0),
+    0,
+  );
+
+  let runSeconds = 0;
+  for (const s of sessions) {
+    if (groupOf(s.session_type) !== "run") continue;
+    if (s.status !== "done" && s.status !== "partial") continue;
+    const logged =
+      s.duration_seconds ?? runBySession.get(s.id)?.duration_seconds ?? null;
+    if (logged && logged > 0) {
+      runSeconds += logged;
+      continue;
+    }
+    // Marked done without a stopwatch: the prescription's own target stands
+    // in, and the footnote says so.
+    const day = dayByKey.get(dayKey(s.scheduled_on, s.slot_id));
+    runSeconds += (day?.estimatedMinutes ?? 0) * 60;
+  }
+  const runHours = Math.round((runSeconds / 3600) * 10) / 10;
+
+  /* ── the running trend ───────────────────────────────────────── */
+
+  // CARRERA-juanlu.md calls Pa:HR drift THE progress metric, so it gets a
+  // trend, not a strip. Two runs can share a date: the session is the id.
+  const spans = phaseSpans(ctx.phases);
+  const decouplingSeries = sessions
+    .flatMap((s) => {
+      const log = runBySession.get(s.id);
+      if (!log || log.decoupling_pct == null) return [];
+      return [
+        {
+          id: s.id,
+          date: s.scheduled_on as IsoDate,
+          pct: Number(log.decoupling_pct),
+        },
+      ];
+    })
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const decouplings = decouplingSeries.slice(-4); // newest last
+
+  // Weekly volume across the season, from the logged distances.
+  const kmByWeek = new Map<number, number>();
+  for (const s of sessions) {
+    const log = runBySession.get(s.id);
+    if (!log || log.distance_km == null) continue;
+    const week = placeDate(spans, s.scheduled_on as IsoDate)?.absoluteWeek;
+    if (week == null) continue;
+    kmByWeek.set(week, (kmByWeek.get(week) ?? 0) + Number(log.distance_km));
+  }
+  const maxWeekKm = Math.max(0, ...kmByWeek.values());
 
   // One tick per cycle on the season axis, thinned further on long seasons:
   // with 39 semanas cada celda mide ~7 px y un número de dos cifras no cabe.
@@ -125,402 +334,523 @@ export default async function ProgresoPage({
   if (seasonWeeks - lastTick >= 2) tickWeeks.push(seasonWeeks);
   const ticks = new Set(tickWeeks);
 
-  /* ── failures on this lift, and the Pa:HR history ────────────── */
+  /* ── consistency grid, current phase ─────────────────────────── */
 
-  const supabase = await createClient();
+  const phaseConfig = phaseEngineConfig(config, phase);
+  const gridWeeks = Array.from({ length: phase.weeks }, (_, i) => {
+    const week = i + 1;
+    const days = seasonDays.filter(
+      (d) => d.phaseId === phase.id && d.week === week,
+    );
+    return {
+      week,
+      label: `S${week}`,
+      deload: isDeloadWeek(week, phaseConfig),
+      days,
+      pct: tally(days).pct,
+    };
+  });
 
-  const [failRes, runSessionRes] = await Promise.all([
-    supabase
-      .from("engine_events")
-      .select("session_id")
-      .eq("user_id", athlete.userId)
-      .eq("lift_id", liftRow.id)
-      .in("kind", ["fail_hold", "fail_penalty"])
-      .is("reverted_at", null),
-    // The season charts below claim "lo no anotado no existe", so the
-    // window has to hold a whole season: ~4 runs × 39 weeks ≪ 400.
-    supabase
-      .from("sessions")
-      .select("id, scheduled_on")
-      .eq("user_id", athlete.userId)
-      .in("session_type", ["run_easy", "run_long", "run_quality", "run_test"])
-      .order("scheduled_on", { ascending: false })
-      .limit(400),
-  ]);
+  /* ── records ─────────────────────────────────────────────────── */
 
-  const failEvents = failRes.data ?? [];
-  const runSessions = runSessionRes.data ?? [];
-  const failSessionIds = failEvents
-    .map((e) => e.session_id)
-    .filter((id): id is string => Boolean(id));
-  const runSessionIds = runSessions.map((s) => s.id);
+  const records: LiftRecord[] = ctx.lifts.map((lift) => {
+    const best = bestByLift.get(lift.key);
+    if (!best) return { lift, best: null };
+    const date = (recordDates.get(best.sessionId) ??
+      best.loggedAt.slice(0, 10)) as IsoDate;
+    return {
+      lift,
+      best: {
+        weightKg: best.weightKg,
+        reps: best.reps,
+        date,
+        epleyKg: epley1RM(best.weightKg, best.reps),
+      },
+    };
+  });
 
-  const [failSessionRes, runLogRes] = await Promise.all([
-    failSessionIds.length
-      ? supabase
-          .from("sessions")
-          .select("id, scheduled_on")
-          .eq("user_id", athlete.userId)
-          .in("id", failSessionIds)
-      : null,
-    runSessionIds.length
-      ? supabase
-          .from("run_logs")
-          .select("session_id, decoupling_pct, distance_km")
-          .eq("user_id", athlete.userId)
-          .in("session_id", runSessionIds)
-      : null,
-  ]);
+  /* ── the log ─────────────────────────────────────────────────── */
 
-  // `engine_events.week` is the week inside its phase, not the season week the
-  // chart runs on, so the session's own date is the only thing that can place a
-  // failure. An event we cannot place stays off the chart instead of staining
-  // whichever bar happens to carry that number.
-  const spans = phaseSpans(ctx.phases);
-  const failDates = new Map<string, IsoDate>(
-    (failSessionRes?.data ?? []).map((s) => [s.id, s.scheduled_on as IsoDate]),
-  );
-  const failWeeks = new Set<number>();
-  for (const event of failEvents) {
-    const iso = event.session_id ? failDates.get(event.session_id) : undefined;
-    if (!iso) continue;
-    const week = placeDate(spans, iso)?.absoluteWeek;
-    if (week != null && week >= 1) failWeeks.add(week);
-  }
+  const entries: HistoryEntry[] = recent.map((s) => {
+    const group = groupOf(s.session_type);
+    const day = dayByKey.get(dayKey(s.scheduled_on, s.slot_id)) ?? null;
+    const logs = recentSets
+      .filter((l) => l.session_id === s.id)
+      .sort((a, b) => a.position - b.position || a.set_index - b.set_index);
+    const runLog = runBySession.get(s.id) ?? null;
+    const loggedSeconds =
+      s.duration_seconds ?? runLog?.duration_seconds ?? null;
 
-  const runDates = new Map<string, IsoDate>(
-    runSessions.map((s) => [s.id, s.scheduled_on as IsoDate]),
-  );
-  // Every logged decoupling, oldest first — CARRERA-juanlu.md calls
-  // Pa:HR drift THE progress metric, so it gets a trend, not a strip.
-  const decouplingSeries = (runLogRes?.data ?? [])
-    .flatMap((log) => {
-      const date = runDates.get(log.session_id);
-      if (!date || log.decoupling_pct == null) return [];
-      // Two runs can share a date, so the session is the identity.
-      return [{ id: log.session_id, date, pct: Number(log.decoupling_pct) }];
-    })
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  const decouplings = decouplingSeries.slice(-4); // newest last
+    const details: Array<{ label: string; value: string }> = [];
+    let subtitle = day?.subtitle ?? "";
+    let headline = "—";
 
-  // Weekly volume across the season, from the logged distances.
-  const kmByWeek = new Map<number, number>();
-  for (const log of runLogRes?.data ?? []) {
-    const date = runDates.get(log.session_id);
-    if (!date || log.distance_km == null) continue;
-    const week = placeDate(spans, date)?.absoluteWeek;
-    if (week == null) continue;
-    kmByWeek.set(week, (kmByWeek.get(week) ?? 0) + Number(log.distance_km));
-  }
-  const maxWeekKm = Math.max(0, ...kmByWeek.values());
+    if (group === "strength") {
+      const primary = day?.primary ?? null;
+      const planned = day?.totalSets ?? 0;
+      const tonnageKg = Number(s.tonnage_kg ?? 0);
+      headline =
+        tonnageKg > 0 ? formatTonnage(tonnageKg) : `${logs.length} ser.`;
 
-  /* ── the audit ───────────────────────────────────────────────── */
+      // The basic as it was actually lifted that day. Never the weight the
+      // engine would prescribe for it today — the RM has moved since.
+      const primaryLogs = primary
+        ? logs.filter(
+            (l) =>
+              l.program_exercise_id === primary.id ||
+              (primary.liftKey != null && l.lift_key === primary.liftKey),
+          )
+        : logs.filter((l) => l.position === logs[0]?.position);
+      const basicName = primary?.name ?? primaryLogs[0]?.exercise_name ?? null;
+      const basicWeight = primaryLogs.find(
+        (l) => l.weight_kg != null,
+      )?.weight_kg;
+      const basicReps = primaryLogs.map((l) => l.reps ?? 0).join("·");
+      const basic =
+        primaryLogs.length === 0
+          ? null
+          : basicWeight != null
+            ? `${formatWeight(Number(basicWeight))} kg × ${basicReps}`
+            : `${basicReps} reps`;
 
-  const terms: Array<{ label: string; value: string }> = [
-    { label: "RM estimada", value: `${formatWeight(breakdown.e1rmKg)} kg` },
+      subtitle = basicName
+        ? `${basicName} · ${basic ?? "sin series registradas"}`
+        : subtitle || s.title;
+
+      details.push(
+        {
+          label: "Series",
+          value: planned ? `${logs.length}/${planned}` : String(logs.length),
+        },
+        { label: "Básico", value: basic ?? "—" },
+        {
+          label: "Tonelaje",
+          value: tonnageKg > 0 ? formatTonnage(tonnageKg) : "—",
+        },
+        { label: "Duración", value: formatMinutes(loggedSeconds) },
+      );
+    } else if (group === "run") {
+      const targetMinutes = day?.estimatedMinutes ?? 0;
+      subtitle =
+        runLog?.prescription || day?.prescription || subtitle || s.title;
+      headline = loggedSeconds
+        ? formatMinutes(loggedSeconds)
+        : targetMinutes > 0
+          ? `${targetMinutes}′`
+          : "—";
+      details.push(
+        { label: "Duración", value: formatMinutes(loggedSeconds) },
+        {
+          label: "Previsto",
+          value: targetMinutes > 0 ? `${targetMinutes}′` : "—",
+        },
+        {
+          label: "Distancia",
+          value:
+            runLog?.distance_km == null
+              ? "—"
+              : `${formatWeight(Number(runLog.distance_km))} km`,
+        },
+        { label: "Zona dominante", value: runLog?.dominant_zone || "—" },
+        {
+          label: "Desacople",
+          value:
+            runLog?.decoupling_pct == null
+              ? "—"
+              : `${formatWeight(Number(runLog.decoupling_pct))} %`,
+        },
+        {
+          label: "RPE",
+          value:
+            runLog?.perceived_effort == null
+              ? "—"
+              : String(runLog.perceived_effort),
+        },
+      );
+    } else {
+      const mob =
+        mobilityBySession.get(s.id) ??
+        mobilityByDate.get(s.scheduled_on) ??
+        null;
+      const total = mob?.total_items ?? 0;
+      const done = mob?.completed_slugs.length ?? 0;
+      subtitle = subtitle || "Movilidad y correctivos";
+      headline = total > 0 ? `${done}/${total}` : formatMinutes(loggedSeconds);
+      details.push(
+        { label: "Ejercicios", value: total > 0 ? `${done}/${total}` : "—" },
+        { label: "Duración", value: formatMinutes(loggedSeconds) },
+      );
+    }
+
+    // The expanded panel links out to the session's own screen: the log
+    // is the index, the resumen (or the run page) is the record.
+    const href =
+      group === "strength" && (s.status === "done" || s.status === "partial")
+        ? `/sesion/${s.id}/resumen`
+        : group === "run" && s.status !== "skipped"
+          ? `/carrera/${s.scheduled_on}`
+          : null;
+
+    return {
+      id: s.id,
+      group,
+      accent: accentFor(group),
+      title: s.title || day?.title || "Sesión",
+      status: s.status,
+      statusLabel: STATUS_LABEL[s.status],
+      statusTone: statusTone(s.status),
+      subtitle,
+      headline,
+      dateLabel: formatDayShort(s.scheduled_on),
+      incomplete: s.status === "partial" || s.status === "skipped",
+      details,
+      href,
+    };
+  });
+
+  /* ── header copy ─────────────────────────────────────────────── */
+
+  // `formatTonnage` hands back "9,7 t"; the tile draws the unit smaller.
+  const [tonnage, tonnageUnit] = formatTonnage(totalTonnage).split(" ");
+
+  const kpis: Array<{
+    label: string;
+    value: string | number;
+    unit?: string;
+    tone?: string;
+  }> = [
     {
-      label: "Penalización por fallos",
-      value:
-        breakdown.penalty > 0
-          ? `−${Math.round(breakdown.penalty * 100)} %`
-          : "ninguna",
+      label: "adherencia",
+      value: adherence ?? "—",
+      unit: adherence == null ? undefined : "%",
+      // A bad week must not be painted the same green as a good one.
+      tone:
+        adherence == null
+          ? "text-faint"
+          : adherence >= 90
+            ? "text-lime"
+            : adherence < 70
+              ? "text-warn"
+              : "text-ink",
     },
-    {
-      label: `Ciclo ${breakdown.cycle} · incremento`,
-      value:
-        breakdown.cycleBumpKg > 0
-          ? `+${formatWeight(breakdown.cycleBumpKg)} kg`
-          : "sin ciclos cerrados",
-    },
-    {
-      label: `Ola · semana ${cycleOneWeek} de ${config.cycleWeeks}`,
-      value: `${Math.round(breakdown.waveFactor * 100)} %${
-        breakdown.isDeload ? " · descarga" : ""
-      }`,
-    },
-    { label: "Redondeo", value: `${formatWeight(breakdown.roundingKg)} kg` },
+    { label: "sesiones registradas", value: registered },
+    { label: "tonelaje acumulado", value: tonnage, unit: tonnageUnit },
+    { label: "horas de carrera", value: formatWeight(runHours), unit: "h" },
   ];
 
-  if (breakdown.isHeld) {
-    terms.push({
-      label: "Peso en espera",
-      value: `repite ${formatWeight(currentKg)} kg`,
-    });
-  }
-
-  const stateText = breakdown.isHeld
-    ? `Se repite ${formatWeight(currentKg)} kg en la próxima sesión de ` +
-      `${liftRow.name.toLowerCase()}. La ola habría pedido ` +
-      `${formatWeight(breakdown.uncappedKg)} kg, pero fallaste el mínimo del ` +
-      `rango y el motor congela el peso en vez de subir. ${nextStepText}`
-    : lift.hold && lift.holdAtKg != null
-      ? `Hay un fallo abierto: la ola no pasará de ` +
-        `${formatWeight(Number(lift.holdAtKg))} kg hasta una sesión limpia a ` +
-        `ese peso. Esta semana la ola pide menos ` +
-        `(${formatWeight(currentKg)} kg), así que el tope no toca — pero ` +
-        `sigue ahí.`
-      : lift.penalty > 0
-        ? `RM estimada a ${formatWeight(penalisedRmKg)} kg tras un recorte del ` +
-          `${Math.round(lift.penalty * 100)} %. La ola se recalcula sobre ese ` +
-          `número: ${formatWeight(currentKg)} kg. Una sesión con todas las ` +
-          `series dentro del rango pone el contador de fallos a cero; la RM ` +
-          `vuelve a subir por el incremento de ciclo, no de golpe.`
-        : `Sin fallos abiertos. El peso sale entero de la ola sobre una RM de ` +
-          `${formatWeight(breakdown.e1rmKg)} kg, y cada ciclo cerrado le suma ` +
-          `${formatWeight(incKg)} kg. Solo el básico del día mueve el motor: ` +
-          `los accesorios no cuentan.`;
-
-  const deltaTone =
-    deltaKg > 0 ? "text-ok" : deltaKg < 0 ? "text-fail" : "text-mid";
-  const deltaGlyph = deltaKg === 0 ? "=" : deltaKg > 0 ? "↑" : "↓";
-  const deltaText =
-    deltaKg === 0
-      ? "vs ciclo 1"
-      : `${deltaKg > 0 ? "+" : "−"}${formatWeight(Math.abs(deltaKg))} kg vs ciclo 1`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <Header week={placement.absoluteWeek} seasonWeeks={seasonWeeks} />
+      <header className="flex-none px-5 pt-6">
+        <h1 className="font-display text-[26px] leading-[1.1] font-bold">
+          Progreso
+        </h1>
+      </header>
 
-      <LiftPicker
-        lifts={lifts.map((l) => ({ key: l.key, name: l.name }))}
-        active={liftRow.key}
-      />
-
-      <div className="flex-1 overflow-auto px-5 pt-4 pb-6">
-        {/* ── the lit number, over its own projection ──────────── */}
-        <Card>
-          <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-            {liftRow.name} ·{" "}
-            {liftRow.kind === "lower" ? "tren inferior" : "tren superior"}
-          </div>
-
-          <div className="mt-2 flex items-end gap-3">
-            <span className="num text-[64px] leading-[0.95] font-bold tracking-[-0.02em] text-lime">
-              {formatWeight(currentKg)}
-            </span>
-            <span className="font-display pb-1.5 text-[12px] leading-[1.3] font-semibold whitespace-nowrap text-mid">
-              KG
-              <br />
-              ESTA SEMANA
-            </span>
-
-            <span className="ml-auto pb-1 text-right">
-              <span
+      <div className="flex-1 overflow-auto pb-6">
+        <div className="grid grid-cols-2 gap-1.5 px-5 pt-3.5">
+          {kpis.map((k) => (
+            <div
+              key={k.label}
+              className="rounded-xl border border-line bg-surface px-4 py-3.5"
+            >
+              <div
                 className={cn(
-                  "font-display block text-[20px] leading-none font-bold",
-                  deltaTone,
+                  "num flex items-baseline gap-1 text-[26px] leading-none font-bold tracking-[-0.02em]",
+                  k.tone,
                 )}
               >
-                {deltaGlyph}
-              </span>
-              {/* The magnitude rides in the caption: the glyph carries the
-                  direction, the line under it the size and the comparison. */}
-              <span className="mt-1 block text-[11px] leading-[1.4] text-faint">
-                {deltaText}
-                <br />
-                mismo paso de ola
-              </span>
-            </span>
-          </div>
-
-          <div
-            className="mt-4 flex h-[88px] items-end gap-0.5 border-b border-edge"
-            role="img"
-            aria-label={`Peso de trabajo de ${liftRow.name} por semana, de la 1 a la ${seasonWeeks}`}
-          >
-            {series.map((value, i) => {
-              const week = i + 1;
-              const failed = failWeeks.has(week);
-              const isNow = week === placement.absoluteWeek;
-              return (
-                <div
-                  key={week}
-                  className={cn(
-                    "min-w-0 flex-1 rounded-t-[2px]",
-                    failed
-                      ? "bg-fail"
-                      : isNow
-                        ? "bg-lime-line"
-                        : deloadFlags[i]
-                          ? // `soft` is white-on-white against the card in
-                            // the light theme; `quiet` still reads as dimmer.
-                            "bg-quiet"
-                          : "bg-hairline",
-                  )}
-                  style={{
-                    height: `${maxKg > 0 ? Math.max(4, (value / maxKg) * 100) : 4}%`,
-                  }}
-                  title={`Semana ${week} · ${formatWeight(value)} kg`}
-                />
-              );
-            })}
-          </div>
-
-          <p className="mt-2 text-[11px] leading-[1.5] text-faint">
-            Proyección de la ola, {seasonWeeks} semanas · máx{" "}
-            {formatWeight(maxKg)} kg · verde = semana actual · tenue = descargas
-            {failWeeks.size > 0 ? " · rojo = fallo de rango" : ""}
-          </p>
-        </Card>
-
-        {/* ── the audit ────────────────────────────────────────── */}
-        <Card className="mt-3.5">
-          <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
-            Cómo sale el peso de hoy
-          </div>
-
-          <dl className="mt-3 flex flex-col gap-[9px]">
-            {terms.map((term) => (
-              <div key={term.label} className="flex items-baseline gap-2.5">
-                <dt className="flex-1 text-[13px] leading-[1.3] text-mid">
-                  {term.label}
-                </dt>
-                <dd className="num flex-none text-[13.5px] leading-none font-semibold">
-                  {term.value}
-                </dd>
+                <span>{k.value}</span>
+                {k.unit ? <span className="text-[14px]">{k.unit}</span> : null}
               </div>
-            ))}
-          </dl>
+              <div className="mt-1.5 text-[12px] leading-[1.25] text-mid">
+                {k.label}
+              </div>
+            </div>
+          ))}
+        </div>
 
-          <div className="mt-3.5 flex items-baseline gap-2.5 border-t border-edge pt-3">
-            <span className="font-display flex-1 text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
-              Peso de trabajo
-            </span>
-            <span className="num flex-none text-[24px] leading-none font-bold tracking-[-0.02em] text-lime">
-              {formatWeight(currentKg)}
-              <span className="text-[13px] font-semibold uppercase"> kg</span>
-            </span>
-          </div>
-
-          <p className="mt-3 text-[12px] leading-[1.55] text-faint">
-            {stateText}
-          </p>
-        </Card>
-
-        {/* ── Pa:HR ────────────────────────────────────────────── */}
-        <Framed className="mt-3.5">
-          <div className="flex items-baseline gap-3">
-            <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
-              Desacople Pa:HR
-            </span>
-            <span className="ml-auto text-[11px] leading-none text-faint">
-              ÚLTIMAS TIRADAS
-            </span>
-          </div>
-
-          {decouplings.length > 0 ? (
+        <HistoryTabs
+          constancia={
             <>
-              <div className="mt-3.5 flex gap-1.5">
-                {decouplings.map((d) => (
-                  <div
-                    key={d.id}
-                    className="min-w-0 flex-1 rounded-lg bg-soft px-2.5 py-2.5"
-                  >
-                    <div
-                      className={cn(
-                        "num text-[21px] leading-none font-bold tracking-[-0.02em]",
-                        d.pct < DECOUPLING_LIMIT ? "text-ok" : "text-warn",
-                      )}
-                    >
-                      {formatWeight(d.pct)}
-                      <span className="text-[11px] font-semibold"> %</span>
-                    </div>
-                    <div className="font-display mt-2 text-[10px] leading-none font-semibold tracking-[0.08em] text-mid uppercase">
-                      {formatDayShort(d.date)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {decouplingSeries.length > 4 ? (
-                <>
-                  <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
-                    {decouplingSeries.map((d) => (
-                      <div
-                        key={d.id}
-                        className="min-w-0 flex-1 rounded-t-[2px]"
-                        style={{
-                          height: `${Math.max(8, Math.min(100, Math.round((d.pct / 10) * 100)))}%`,
-                          background:
-                            d.pct < DECOUPLING_LIMIT ? TONE.ok : TONE.warn,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div className="mt-1.5 flex justify-between">
-                    <span className="num text-[10px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
-                      {formatDayShort(decouplingSeries[0].date)}
-                    </span>
-                    <span className="num text-[10px] leading-none font-semibold tracking-[0.06em] text-faint uppercase">
-                      {formatDayShort(
-                        decouplingSeries[decouplingSeries.length - 1].date,
-                      )}
-                    </span>
-                  </div>
-                </>
-              ) : null}
-              <p className="mt-3 text-[11px] leading-[1.5] text-faint">
-                Ritmo por pulsación, segunda mitad contra primera; solo dice algo
-                en tiradas largas a ritmo constante. Por debajo del{" "}
-                {DECOUPLING_LIMIT} % la base aeróbica aguanta el rodaje
-                {decouplingSeries.length > 4
-                  ? " — la serie completa de la temporada, abajo."
-                  : "."}
-              </p>
-            </>
-          ) : (
-            <p className="mt-2.5 text-[12px] leading-[1.55] text-mid">
-              Todavía no hay ninguna tirada con desacople anotado. Se calcula
-              comparando el ritmo por pulsación de la primera y la segunda mitad
-              de una tirada de 60′ o más: por debajo del {DECOUPLING_LIMIT} % la
-              base aeróbica aguanta, por encima estás corriendo por encima de tu
-              aeróbico. Anótalo al marcar una tirada larga y aparecerá aquí.
-            </p>
-          )}
-        </Framed>
+              <SectionLabel
+                className="pt-4"
+                right={<span className="text-[12px]">L M X J V S D</span>}
+              >
+                {phase.name} · {phase.weeks} semanas
+              </SectionLabel>
 
-        {/* ── weekly km ────────────────────────────────────────── */}
-        {maxWeekKm > 0 ? (
-          <Framed className="mt-3.5">
-            <div className="flex items-baseline gap-3">
-              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
-                Kilómetros por semana
-              </span>
-              <span className="num ml-auto text-[11px] leading-none text-faint uppercase">
-                MÁX {formatWeight(maxWeekKm)} km
-              </span>
-            </div>
-            <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
-              {Array.from({ length: seasonWeeks }, (_, i) => {
-                const km = kmByWeek.get(i + 1) ?? 0;
-                return (
-                  <div
-                    key={i}
-                    className="min-w-0 flex-1 rounded-t-[2px]"
-                    style={{
-                      height: `${km > 0 ? Math.max(6, Math.round((km / maxWeekKm) * 100)) : 2}%`,
-                      background: km > 0 ? accentFor("run") : TONE.hairline,
-                    }}
-                  />
-                );
-              })}
-            </div>
-            <div className="mt-1.5 flex gap-0.5">
-              {Array.from({ length: seasonWeeks }, (_, i) => (
-                <div
-                  key={i}
-                  className="num min-w-0 flex-1 text-center text-[9px] leading-none font-semibold text-faint"
-                >
-                  {ticks.has(i + 1) ? i + 1 : ""}
+              <div className="mt-2.5 flex flex-col gap-[5px] pb-1">
+                {gridWeeks.map((row) => {
+                  // Weeks the athlete has not reached yet read as a plan, not a score.
+                  const ahead = row.week > placement.week;
+                  return (
+                    <div
+                      key={row.week}
+                      className="flex items-center gap-2 px-5"
+                    >
+                      <span
+                        className={cn(
+                          "font-display w-[30px] flex-none text-[11px] leading-none font-semibold",
+                          ahead ? "text-faint" : "text-mid",
+                        )}
+                        title={row.deload ? "Semana de descarga" : undefined}
+                      >
+                        {row.label}
+                        {row.deload ? (
+                          <span className="text-faint">↓</span>
+                        ) : null}
+                      </span>
+                      <div className="flex flex-1 gap-1">
+                        {row.days.map((d) => {
+                          const colour = cellColour(
+                            d.group,
+                            statusForDay(d),
+                            d.date > today,
+                          );
+                          return (
+                            <div
+                              key={d.date}
+                              title={`${d.dateLabel} · ${d.title}`}
+                              className={cn(
+                                "h-4 flex-1 rounded-[4px] border",
+                                // No fill is how `cellColour` says "still ahead".
+                                colour.background === "transparent" &&
+                                  "border-dashed",
+                              )}
+                              style={{
+                                background: colour.background,
+                                borderColor: colour.border,
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <span
+                        className={cn(
+                          "num w-[36px] flex-none text-right text-[11px] leading-none font-semibold",
+                          ahead ? "text-faint" : "text-mid",
+                        )}
+                      >
+                        {row.pct == null ? "—" : `${row.pct}%`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pt-3">
+                {LEGEND.map((l) => (
+                  <span key={l.label} className="flex items-center gap-1.5">
+                    {l.colour ? (
+                      /* The hairline outline is what makes the palest fills —
+                         "sin registrar" against the page — visible at 10px. */
+                      <span
+                        className="h-[10px] w-[10px] flex-none rounded-[3px] border border-hairline"
+                        style={{ background: l.colour }}
+                      />
+                    ) : (
+                      <span className="h-[10px] w-[10px] flex-none rounded-[3px] border border-dashed border-hairline" />
+                    )}
+                    <span className="text-[12px] leading-none text-mid">
+                      {l.label}
+                    </span>
+                  </span>
+                ))}
+                <span className="text-[12px] leading-none text-mid">
+                  ↓ descarga
+                </span>
+              </div>
+
+              <Footnote>
+                La adherencia cuenta los días de fuerza y carrera ya pasados;
+                una sesión parcial suma media. La movilidad y el descanso no
+                cuentan.
+              </Footnote>
+            </>
+          }
+          records={
+            <>
+              <SectionLabel className="pt-4">Tu mejor serie</SectionLabel>
+
+              <RowStack className="mt-2.5">
+                {records.length === 0 ? (
+                  <Row>
+                    <p className="text-[13px] leading-[1.55] text-mid">
+                      Este programa no tiene básicos con RM asociada, así que no
+                      hay récords que seguir.
+                    </p>
+                  </Row>
+                ) : (
+                  records.map(({ lift, best }) => (
+                    <Row key={lift.id} className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[15px] leading-[1.2] font-semibold">
+                          {lift.name}
+                        </div>
+                        <div className="mt-0.5 truncate text-[12.5px] leading-[1.35] text-mid">
+                          {best
+                            ? `${formatDayShort(best.date)} · ${formatWeight(best.weightKg)} kg × ${best.reps}`
+                            : "sin series todavía"}
+                        </div>
+                      </div>
+                      {best ? (
+                        <span className="flex-none text-right">
+                          <span className="num block text-[16px] leading-none font-bold text-lime">
+                            {formatWeight(best.epleyKg)} kg
+                          </span>
+                          <span className="mt-1 block text-[11px] leading-none text-mid">
+                            RM que sale
+                          </span>
+                        </span>
+                      ) : null}
+                    </Row>
+                  ))
+                )}
+              </RowStack>
+              <Footnote>
+                La RM que sale de tu mejor serie (fórmula de Epley). La que usa
+                el motor para tus pesos está en Plan.
+              </Footnote>
+            </>
+          }
+          registro={
+            <>
+              <SectionLabel
+                className="pt-4"
+                right={
+                  entries.length > 0 ? (
+                    <span className="text-[12px]">
+                      últimas {entries.length}
+                    </span>
+                  ) : undefined
+                }
+              >
+                Sesiones
+              </SectionLabel>
+              <HistoryLog entries={entries} />
+            </>
+          }
+          carrera={
+            <div className="px-5 pt-4">
+              <Framed>
+                <div className="flex items-baseline gap-3">
+                  <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
+                    Desacople Pa:HR
+                  </span>
+                  <span className="ml-auto text-[12px] leading-none text-mid">
+                    últimas tiradas
+                  </span>
                 </div>
-              ))}
+
+                {decouplings.length > 0 ? (
+                  <>
+                    <div className="mt-3.5 flex gap-1.5">
+                      {decouplings.map((d) => (
+                        <div
+                          key={d.id}
+                          className="min-w-0 flex-1 rounded-lg bg-soft px-2.5 py-2.5"
+                        >
+                          <div
+                            className={cn(
+                              "num text-[21px] leading-none font-bold tracking-[-0.02em]",
+                              d.pct < DECOUPLING_LIMIT ? "text-ok" : "text-warn",
+                            )}
+                          >
+                            {formatWeight(d.pct)}
+                            <span className="text-[12px] font-semibold"> %</span>
+                          </div>
+                          <div className="num mt-2 text-[11.5px] leading-none text-mid">
+                            {formatDayShort(d.date)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {decouplingSeries.length > 4 ? (
+                      <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
+                        {decouplingSeries.map((d) => (
+                          <div
+                            key={d.id}
+                            className="min-w-0 flex-1 rounded-t-[2px]"
+                            style={{
+                              height: `${Math.max(8, Math.min(100, Math.round((d.pct / 10) * 100)))}%`,
+                              background:
+                                d.pct < DECOUPLING_LIMIT ? TONE.ok : TONE.warn,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">
+                      Por debajo del {DECOUPLING_LIMIT} % la base aeróbica
+                      aguanta la tirada: tu pulso no se dispara en la segunda
+                      mitad.
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-2.5 text-[13px] leading-[1.55] text-mid">
+                    Todavía no hay ninguna tirada con desacople anotado. Anótalo
+                    al marcar una tirada larga (60′ o más) y aparecerá aquí: por
+                    debajo del {DECOUPLING_LIMIT} % la base aeróbica aguanta.
+                  </p>
+                )}
+              </Framed>
+
+              <Framed className="mt-3.5">
+                <div className="flex items-baseline gap-3">
+                  <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
+                    Kilómetros por semana
+                  </span>
+                  {maxWeekKm > 0 ? (
+                    <span className="num ml-auto text-[12px] leading-none text-mid">
+                      máx {formatWeight(maxWeekKm)} km
+                    </span>
+                  ) : null}
+                </div>
+                {maxWeekKm > 0 ? (
+                  <>
+                    <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
+                      {Array.from({ length: seasonWeeks }, (_, i) => {
+                        const km = kmByWeek.get(i + 1) ?? 0;
+                        return (
+                          <div
+                            key={i}
+                            className="min-w-0 flex-1 rounded-t-[2px]"
+                            style={{
+                              height: `${km > 0 ? Math.max(6, Math.round((km / maxWeekKm) * 100)) : 2}%`,
+                              background:
+                                km > 0 ? accentFor("run") : TONE.hairline,
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="mt-1.5 flex gap-0.5">
+                      {Array.from({ length: seasonWeeks }, (_, i) => (
+                        <div
+                          key={i}
+                          className="num min-w-0 flex-1 text-center text-[11px] leading-none text-mid"
+                        >
+                          {ticks.has(i + 1) ? i + 1 : ""}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-2.5 text-[13px] leading-[1.55] text-mid">
+                    Anota la distancia al marcar cada carrera y aquí verás el
+                    volumen de cada semana.
+                  </p>
+                )}
+                <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">
+                  {runHours > 0
+                    ? `${formatWeight(runHours)} h de carrera esta temporada.`
+                    : "Sin horas de carrera todavía."}
+                </p>
+              </Framed>
             </div>
-            <p className="mt-3 text-[11px] leading-[1.5] text-faint">
-              Suma de las distancias anotadas al marcar cada carrera. Las semanas
-              sin kilómetros son huecos de verdad: lo no anotado no existe.
-            </p>
-          </Framed>
-        ) : null}
+          }
+        />
       </div>
     </div>
   );

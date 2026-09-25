@@ -638,6 +638,25 @@ export function SessionRunner({
     return out;
   }, [exercise.repMax, exercise.effort]);
 
+  /**
+   * What one tap on "Hecho" logs. Never the top of the range by default:
+   * all sets at the top is exactly what bumps an accessory, so the laziest
+   * tap must not be the one that moves a load. The first set of an
+   * exercise logs the range minimum; after that, whatever the athlete
+   * last logged on it — pick 8 once with "Otras" and the rest follow.
+   */
+  const quickValue = (() => {
+    for (let i = nextFreeIndex - 1; i >= 0; i--) {
+      const entry = logs[keyOf(exercise.id, i)];
+      if (entry) return entry.value;
+    }
+    for (let i = exercise.sets - 1; i >= 0; i--) {
+      const entry = logs[keyOf(exercise.id, i)];
+      if (entry) return entry.value;
+    }
+    return exercise.repMin;
+  })();
+
   const setNumber = Math.min(nextFreeIndex + 1, exercise.sets);
   const eyebrow = exercise.isPrimary
     ? `Básico del día · serie ${setNumber}/${exercise.sets}`
@@ -1123,7 +1142,7 @@ export function SessionRunner({
               setRepsOpen(true);
               return;
             }
-            record(exercise.repMax);
+            record(quickValue);
           }}
           className="font-display flex h-[68px] flex-1 items-center justify-center gap-2.5 rounded-2xl bg-strength text-[18px] leading-none font-bold tracking-[0.04em] text-on-strength uppercase active:opacity-85 disabled:opacity-40"
         >
@@ -1133,7 +1152,7 @@ export function SessionRunner({
             <>
               Hecho ·
               <span className="num">
-                {exercise.repMax}
+                {quickValue}
                 {exercise.effort === "seconds" ? "″" : ""}
               </span>
             </>
