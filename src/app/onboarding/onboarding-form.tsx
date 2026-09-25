@@ -42,8 +42,8 @@ export function OnboardingForm({
             Monta tu temporada
           </h1>
           <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">
-            Elige el plan de partida y dinos cuatro números. Todo lo demás lo
-            calcula el motor, y todo se puede cambiar después.
+            Elige el plan de partida y cuándo empieza. Los pesos los calcula
+            el motor, y todo se puede cambiar después.
           </p>
         </div>
       </header>
@@ -51,7 +51,7 @@ export function OnboardingForm({
       <form action={action} className="mx-auto w-full max-w-xl flex-1 px-5 py-7">
         <input type="hidden" name="template" value={selected} />
 
-        <div className="font-display text-[10px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+        <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
           Plan de partida
         </div>
         <div className="mt-3 flex flex-col gap-1.5">
@@ -80,7 +80,7 @@ export function OnboardingForm({
                   )}
                 />
               </div>
-              <p className="mt-2 text-[11.5px] leading-[1.45] text-mid">
+              <p className="mt-2 text-[12.5px] leading-[1.45] text-mid">
                 {t.goal}
               </p>
             </button>
@@ -110,7 +110,7 @@ export function OnboardingForm({
               min={100}
               max={230}
               placeholder="168"
-              hint="Si no lo sabes, déjalo vacío: el test cae en la semana 4."
+              hint="Tu pulso umbral. Si no lo sabes, déjalo vacío: el plan trae un test."
             />
             <Field
               label="Peso corporal"
@@ -133,10 +133,10 @@ export function OnboardingForm({
           <SubmitBar pendingLabel="Montando el plan…">Empezar</SubmitBar>
         </div>
 
-        <p className="mt-5 text-[11px] leading-[1.55] text-faint">
+        <p className="mt-5 text-[12.5px] leading-[1.55] text-mid">
           Las RM de partida vienen del plan y son una estimación. Corrígelas en
-          Programa antes de la primera sesión pesada: son lo que el motor usa
-          para calcular cada peso.
+          Plan → Tus RM antes de la primera sesión pesada: son lo que el motor
+          usa para calcular cada peso.
         </p>
       </form>
     </div>

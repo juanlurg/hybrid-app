@@ -4,6 +4,13 @@
 recedes into cards on the page colour. The engine's reasoning folds behind a
 single line. Dark and light are peers: the palette flips, the hierarchy does not.
 
+**Plain words by default, the mechanism on demand.** A screen says what the
+athlete does and what changed — "80 % de tu RM", "peso congelado", "sin
+hacer" — and links to `/motor` for the why. Training vocabulary the athlete
+already uses (RM, RIR, Z2, LTHR) stays; the engine's own words (ola, bump,
+en espera, phase keys like F2) stay out of Hoy, Semana and the day screens.
+One week number per screen: the week of the phase.
+
 ## Themes
 
 Light lives on `:root`, dark on `[data-theme="dark"]`. `THEME_SCRIPT` (from
@@ -31,7 +38,8 @@ pointing at the variable instead of copying its value at build time.
 | `hairline` | `#3a403b` | `#cfd8ca` | dashed borders, inert spines |
 | `ink` | `#eef2ec` | `#171b16` | primary text |
 | `mid` | `#9aa39b` | `#5f6a60` | secondary text |
-| `faint` / `ghost` | `#5d665e` | `#98a299` | tertiary text |
+| `faint` | `#7a847b` | `#6c776d` | tertiary text — ≥ 4:1 on every surface |
+| `ghost` | `#5d665e` | `#98a299` | decoration only: struck-through, inert — never information |
 | `strength` / `on-strength` | `#b8ee3c` | `#b8ee3c` | the lime **fill** — same in both themes |
 | `lime` | `#b8ee3c` | `#4c7d1a` | lime as **ink**: eyebrows, hero numbers |
 | `lime-line` | `#b8ee3c` | `#6cb520` | lime as a **stroke**: spines, progress, selection |
@@ -73,6 +81,9 @@ browser would fake them.
 Put `num` on anything numeric — it turns on tabular figures **and** the display
 face. That one class is what makes numbers read as Chakra Petch app-wide.
 
+Nothing smaller than 11px, and 11px only for uppercase labels; anything the
+athlete has to read is 12.5px or more, in `mid` rather than `faint`.
+
 ## Layout idioms
 
 - **Radii**: `sm` 8, `md` 10, `lg` 12, `xl` 14, `2xl` 18, `3xl` 22. Cards are
@@ -106,26 +117,33 @@ baja un 5 %."* — never *"¡Buen trabajo!"*.
 
 ## Screen inventory
 
-Bottom nav (mobile): **Hoy · Semana · Progreso · Programa**.
-Desktop rail adds **Historial · Editar · Ajustes**; on mobile they hang off
-Programa via `SecondaryNav` — three pills, the active one filled lime, rendered
-on Programa, Historial, Editar and Ajustes.
+Four tabs, one question each — **Hoy** (what now) · **Semana** (what's
+coming) · **Progreso** (how am I doing) · **Plan** (how it's built). Every
+other screen belongs to one of them and keeps that tab lit (`PRIMARY.owns`
+in `app-shell.tsx`); pushed screens carry a `TopBar` back arrow. The desktop
+rail adds Plan's own screens under it. A day looks the same wherever it is
+opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 
-| Route | Screen |
-|---|---|
-| `/` | Hoy — today's session, big weight, start bar |
-| `/sesion/[id]` | Live runner — set pills, weight stepper, rest timer, regression banner |
-| `/sesion/[id]/resumen` | Summary — KPIs and what the engine changed |
-| `/semana` | The 7 days + season phase bar |
-| `/progreso` | Per-lift chart, engine breakdown, Pa:HR |
-| `/programa` | RMs, calculadora de RM (Epley), regression rule |
-| `/carrera/[fecha]` | Run blocks, HR zones, mark done |
-| `/fuerza/[fecha]` | Strength day read-only, any date + within-week catch-up |
-| `/movilidad` | Guided / list mobility block |
-| `/historial` | Consistency grid, records, log, engine timeline |
-| `/editor` | Weekly template editor + AI refinement |
-| `/generar` | AI program builder — brief in, preview, explicit activation |
-| `/ajustes` | Every knob, grouped |
+| Route | Tab | Screen |
+|---|---|---|
+| `/` | Hoy | Today's session, week strip, what to recover, big weight, start bar |
+| `/movilidad` | Hoy | Guided / list mobility block |
+| `/sesion/[id]` | — | Live runner — set pills, weight stepper, rest timer, regression banner |
+| `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
+| `/semana` | Semana | The 7 days + season phase bar |
+| `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
+| `/carrera/[fecha]` | Semana | Run blocks, zones (folded), mark done, skip |
+| `/progreso` | Progreso | Adherence, records, the log, running trend (Pa:HR, km) |
+| `/programa` | Plan | Phases and what each is for, links, RMs, calculadora |
+| `/editor` | Plan | Semana tipo — weekly template editor + AI refinement |
+| `/motor` | Plan | Where each weight comes from, season projection, regression rule, engine timeline |
+| `/ajustes` | Plan | Every knob, grouped; the engine's folded |
+| `/generar` | Plan | AI program builder — brief in, preview, explicit activation |
+
+`/historial` redirects to `/progreso`, and `/progreso?lift=` to `/motor`.
+`scripts/walkthrough.ts` holds each screen to a density budget — controls and
+words in the first viewport. A change that adds to a screen takes something
+away or raises its budget in the same diff.
 
 Session notifications are client-side only: one tray card per session
 (`tag`), the rest line carries an absolute end time so a frozen tab still

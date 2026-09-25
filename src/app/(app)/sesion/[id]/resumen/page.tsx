@@ -342,7 +342,7 @@ export default async function ResumenPage({
               </div>
               <div
                 className={cn(
-                  "font-display mt-1 text-[9.5px] leading-none font-semibold tracking-[0.08em]",
+                  "font-display mt-1 text-[11px] leading-none font-semibold tracking-[0.08em]",
                   s.missedSets > 0 ? "text-fail" : "text-mid",
                 )}
               >
@@ -511,7 +511,7 @@ export default async function ResumenPage({
                     <div className="text-[12.5px] leading-none font-semibold text-fail">
                       <span className="num">{m.reps ?? "—"}</span> reps
                     </div>
-                    <div className="font-display mt-1 text-[9.5px] leading-none font-semibold tracking-[0.08em] text-mid">
+                    <div className="font-display mt-1 text-[11px] leading-none font-semibold tracking-[0.08em] text-mid">
                       MÍN. <span className="num">{m.repMin ?? "—"}</span>
                     </div>
                   </div>

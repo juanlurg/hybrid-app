@@ -77,7 +77,7 @@ function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
 
   return (
     <>
-      <div className="mt-4 flex items-baseline gap-3 text-[10px] leading-none">
+      <div className="mt-4 flex items-baseline gap-3 text-[11px] leading-none">
         <span className="font-display flex-1 font-semibold tracking-[0.12em] text-mid uppercase">
           Serie de referencia
         </span>
@@ -92,7 +92,7 @@ function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
           the inset width on a phone. */}
       <div className="mt-2.5 grid grid-cols-2 gap-1.5">
         <div className="min-w-0 rounded-lg border border-line bg-surface px-3 py-3">
-          <div className="font-display text-[9.5px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
+          <div className="font-display text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
             Peso · kg
           </div>
           <div className="mt-2.5">
@@ -108,7 +108,7 @@ function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
         </div>
 
         <div className="min-w-0 rounded-lg border border-line bg-surface px-3 py-3">
-          <div className="font-display text-[9.5px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
+          <div className="font-display text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
             Repeticiones
           </div>
           <div className="mt-2.5">
@@ -124,7 +124,7 @@ function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
       </div>
 
       <Card className="mt-1.5 px-4 py-4">
-        <div className="font-display text-[10px] leading-none font-semibold tracking-[0.12em] text-warn uppercase">
+        <div className="font-display text-[11px] leading-none font-semibold tracking-[0.12em] text-warn uppercase">
           RM estimada · {formatWeight(weightKg)} kg × {reps}
         </div>
         <HeroNumber

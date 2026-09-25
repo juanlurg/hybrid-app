@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
 import { liftStateFrom, phaseEngineConfig, phaseSpans } from "@/lib/domain/plan";
-import { placeDate, type IsoDate } from "@/lib/domain/calendar";
+import { formatDayShort, placeDate, type IsoDate } from "@/lib/domain/calendar";
 import {
   formatWeight,
   isDeloadWeek,
@@ -232,10 +232,8 @@ export default async function MotorPage({
           `ese número: ${formatWeight(currentKg)} kg. Una sesión con todas las ` +
           `series dentro del rango pone el contador de fallos a cero; la RM ` +
           `vuelve a subir con cada ciclo, no de golpe.`
-        : `Sin fallos abiertos. El peso es un porcentaje de tu RM de ` +
-          `${formatWeight(breakdown.e1rmKg)} kg, y cada ciclo cerrado le suma ` +
-          `${formatWeight(incKg)} kg. Solo el básico del día mueve el motor: ` +
-          `los accesorios no cuentan.`;
+        : `Sin fallos abiertos: cada ciclo cerrado suma ` +
+          `${formatWeight(incKg)} kg. Solo el básico del día mueve el motor.`;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -385,7 +383,8 @@ export default async function MotorPage({
                   >
                     <div className="flex items-baseline gap-2">
                       <span className="num text-[11px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
-                        semana {e.week ?? "—"}
+                        {formatDayShort(e.created_at.slice(0, 10) as IsoDate)}
+                        {e.week != null ? ` · semana ${e.week}` : ""}
                       </span>
                       {reverted ? (
                         <span className="font-display text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">

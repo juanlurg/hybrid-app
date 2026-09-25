@@ -845,7 +845,7 @@ export function SettingsGroups({
                       </span>
                     ) : null}
                     {p.is_active ? (
-                      <span className="font-display flex-none rounded-full border border-lime-edge bg-lime-soft px-2 py-1 text-[9.5px] leading-none font-semibold tracking-[0.1em] text-lime uppercase">
+                      <span className="font-display flex-none rounded-full border border-lime-edge bg-lime-soft px-2 py-1 text-[11px] leading-none font-semibold tracking-[0.1em] text-lime uppercase">
                         Activo
                       </span>
                     ) : (
@@ -865,7 +865,7 @@ export function SettingsGroups({
                             router.refresh();
                           });
                         }}
-                        className="font-display flex-none rounded-sm border border-edge bg-soft px-2 py-1.5 text-[9.5px] leading-none font-semibold tracking-[0.1em] uppercase disabled:opacity-40"
+                        className="font-display flex-none rounded-sm border border-edge bg-soft px-2 py-1.5 text-[11px] leading-none font-semibold tracking-[0.1em] uppercase disabled:opacity-40"
                       >
                         Activar
                       </button>

@@ -257,8 +257,8 @@ export default async function HoyPage() {
               }
             >
               {recover.title} ({WEEKDAY[recover.dayIndex]}) va antes que{" "}
-              {trains(day) ? day.title : "el resto"} en esta fase. Si hoy solo
-              entrenas una, que sea esa: se puede recuperar hasta el domingo.
+              {trains(day) ? day.title : "el resto"}. Si hoy solo entrenas una,
+              que sea esa.
             </Callout>
           </div>
         ) : null}

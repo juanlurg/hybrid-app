@@ -247,7 +247,7 @@ export function ProgramBuilder({
               type="button"
               disabled={!hasApiKey || pending}
               onClick={() => setBrief(e)}
-              className="rounded-sm border border-edge bg-soft px-2.5 py-2 text-left text-[10.5px] leading-[1.3] font-semibold disabled:opacity-40"
+              className="rounded-sm border border-edge bg-soft px-2.5 py-2 text-left text-[11px] leading-[1.3] font-semibold disabled:opacity-40"
             >
               {e.slice(0, 40)}…
             </button>

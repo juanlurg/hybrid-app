@@ -13,7 +13,7 @@ export function Field({
 }: ComponentProps<"input"> & { label: string; hint?: string }) {
   return (
     <label className="block">
-      <span className="font-display text-[10px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+      <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
         {label}
       </span>
       <input

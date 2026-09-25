@@ -344,7 +344,7 @@ export function ProgramEditor({
 
             {editing ? (
               <div className="mt-3">
-                <div className="font-display text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                <div className="font-display text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
                   Sesión de este día
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -379,7 +379,7 @@ export function ProgramEditor({
                         <span className="min-w-0 flex-1 text-[13px] leading-[1.35] font-medium">
                           {e.name}
                           {e.isPrimary ? (
-                            <span className="font-display ml-1 rounded-[5px] bg-lime-soft px-1.5 py-0.5 text-[9px] font-bold text-lime-dim">
+                            <span className="font-display ml-1 rounded-[5px] bg-lime-soft px-1.5 py-0.5 text-[11px] font-bold text-lime-dim">
                               BÁSICO
                             </span>
                           ) : null}
@@ -416,7 +416,7 @@ export function ProgramEditor({
 
                       {editing && openExerciseId === e.id ? (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span className="font-display text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                          <span className="font-display text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
                             Series
                           </span>
                           <Stepper
@@ -430,7 +430,7 @@ export function ProgramEditor({
                               run(() => setExerciseSets(e.id, 1))
                             }
                           />
-                          <span className="font-display text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                          <span className="font-display text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
                             Reps
                           </span>
                           <Stepper
@@ -469,7 +469,7 @@ export function ProgramEditor({
                               )
                             }
                           />
-                          <span className="font-display text-[9.5px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+                          <span className="font-display text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
                             Desc.
                           </span>
                           <Stepper
@@ -526,8 +526,8 @@ export function ProgramEditor({
                       ) : null}
 
                       {diff ? (
-                        <div className="mt-2 flex items-center gap-2 text-[10.5px] leading-none font-semibold">
-                          <span className="font-display text-[9px] font-semibold tracking-[0.1em] text-lime">
+                        <div className="mt-2 flex items-center gap-2 text-[11px] leading-none font-semibold">
+                          <span className="font-display text-[11px] font-semibold tracking-[0.1em] text-lime">
                             IA
                           </span>
                           <span className="text-faint line-through">
@@ -562,7 +562,7 @@ export function ProgramEditor({
 
                 {addOpen ? (
                   <div className="mt-2 rounded-lg border border-edge bg-soft p-1.5">
-                    <div className="font-display px-2 py-2 text-[10px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
+                    <div className="font-display px-2 py-2 text-[11px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
                       Del catálogo · según tu material
                     </div>
                     <div className="flex max-h-64 flex-col gap-1 overflow-auto">
@@ -585,7 +585,7 @@ export function ProgramEditor({
                           <span className="min-w-0 flex-1 text-[13px] leading-[1.3] font-medium">
                             {c.name}
                           </span>
-                          <span className="font-display flex-none text-[9.5px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+                          <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
                             {c.pattern ?? c.equipment}
                           </span>
                         </button>

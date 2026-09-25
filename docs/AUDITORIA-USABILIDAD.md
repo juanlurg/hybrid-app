@@ -445,6 +445,16 @@ FLEX-04 (cualquier día de la semana en curso entrenable desde
 con re-evaluación de duración, tonelaje y bumps de accesorios). La hoja de
 ruta de esta auditoría queda completa.
 
+Estado (2026-09-25, tercera ronda, rama `claude/friendly-wozniak-if2ydk`):
+con la hoja de ruta completa la app seguía abrumando y costando entender,
+porque cada arreglo había *añadido* superficie. Esta ronda resta: cuatro
+pestañas por pregunta (hoy · semana · progreso · plan; historial dentro de
+progreso, `/motor` como única casa del porqué), un solo diseño de día de
+fuerza, palabras llanas en vez de las del motor, hoy consciente de la semana
+(qué recuperar según la prioridad de la fase), «Hecho» que ya no registra
+el tope del rango por defecto, texto mínimo de 11 px, `faint` a ≥ 4:1 y un
+presupuesto de densidad por pantalla en `scripts/walkthrough.ts`.
+
 **ola 1 — victorias rápidas (E1)**
 1. DEN-01 + DEN-02 — reps objetivo y discos por lado a tamaño legible.
 2. ERR-01 (mitigación) — banner pre-temporada en hoy + confirmación al

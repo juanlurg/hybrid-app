@@ -16,8 +16,8 @@ comments are English.
 | `src/lib/offline/` | IndexedDB queue, snapshot, syncer, local session |
 | `src/lib/actions/` | server actions — `program`, `session`, `ai`, `profile`, `onboarding`, `auth` |
 | `src/app/api/sync/` | the single write path for session data; replays the engine idempotently |
-| `src/app/(app)/…` | one folder per screen; route table in `docs/DESIGN.md` |
-| `src/components/ui/` | the kit — `ScreenHeader`, `RowStack`, `Row`, `SessionRow`, steppers, chips |
+| `src/app/(app)/…` | one folder per screen; tabs and route table in `docs/DESIGN.md` |
+| `src/components/ui/` | the kit — `ScreenHeader`, `TopBar`, `RowStack`, `Row`, `SessionRow`, `Fold`, steppers, chips |
 | `supabase/migrations/` | ordered SQL, timestamp-prefixed |
 | `docs/DESIGN.md` | design spec + the eight non-negotiables |
 | `docs/PROGRAMA-*.md` | one per athlete — the programme each template seeds (`*-juanlu.md` also splits out strength and running) |
@@ -25,7 +25,7 @@ comments are English.
 ## Read before you write
 
 - **Next 16 breaks your priors.** Before touching routing, caching, server actions, or `params`/`searchParams`, read the matching guide under `node_modules/next/dist/docs/`.
-- **UI work → `docs/DESIGN.md` first.** Reuse the kit and `accentFor(group)`. No border radius, no shadows, no gradients, no new colour literals, `num` on anything numeric.
+- **UI work → `docs/DESIGN.md` first.** Reuse the kit and `accentFor(group)`. Radii from the token scale only, no shadows, no gradients, no new colour literals, `num` on anything numeric, plain words over engine words, nothing under 11px. Adding to a screen means taking something away or raising its budget in `scripts/walkthrough.ts`.
 - **Plan / engine / AI / sync work → `docs/DESIGN.md` § Non-negotiables.** Those eight rules are binding; if the code seems to disagree, the code is the bug.
 
 ## Commands
