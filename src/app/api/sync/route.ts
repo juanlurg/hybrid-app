@@ -482,7 +482,7 @@ export async function POST(request: Request) {
                   kind: "clean_reset",
                   title: `${liftRow.name} · sesión limpia`,
                   detail:
-                    "Todas las series dentro del rango. El contador de fallos vuelve a cero y el peso deja de estar en espera.",
+                    "Todas las series dentro del rango. El contador de fallos vuelve a cero y el peso deja de estar congelado.",
                   // The state the release acted on — what a later replay
                   // rewinds to if this session stops being clean.
                   payload: { previous: { ...pre } },

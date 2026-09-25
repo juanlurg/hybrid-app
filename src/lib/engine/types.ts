@@ -15,7 +15,7 @@ export type LoadMode =
   | "fixed" // a number the athlete set by hand
   | "bodyweight" // no external load
   | "weighted_bodyweight" // added load on top of bodyweight (dominadas lastradas)
-  | "rpe"; // "progresiv." — by feel, nothing to compute
+  | "rpe"; // "a sensación" — by feel, nothing to compute
 
 /** What a "rep" in the prescribed range means. */
 export type Effort =

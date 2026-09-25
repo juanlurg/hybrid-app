@@ -755,7 +755,7 @@ export function ProgramEditor({
                     <div className="flex gap-1">
                       <button
                         type="button"
-                        aria-label={`Bajar la semana ${i + 1} de la ola`}
+                        aria-label={`Bajar la semana ${i + 1} del ciclo`}
                         disabled={pending}
                         onClick={() => run(() => setWaveStep(i, -0.01, phase.id))}
                         className="flex h-[30px] flex-1 items-center justify-center rounded-sm border border-edge bg-soft text-[15px] leading-none font-bold text-mid disabled:opacity-40"
@@ -764,7 +764,7 @@ export function ProgramEditor({
                       </button>
                       <button
                         type="button"
-                        aria-label={`Subir la semana ${i + 1} de la ola`}
+                        aria-label={`Subir la semana ${i + 1} del ciclo`}
                         disabled={pending}
                         onClick={() => run(() => setWaveStep(i, 0.01, phase.id))}
                         className="flex h-[30px] flex-1 items-center justify-center rounded-sm border border-edge bg-soft text-[15px] leading-none font-bold text-mid disabled:opacity-40"

@@ -219,11 +219,15 @@ export function registerFailure(
       action: "hold",
       penaltyApplied: 0,
       forcedDeload: false,
-      title: `Fallo ${failCount} · peso en espera`,
+      title: `Fallo ${failCount} · peso congelado`,
       detail:
         `Se repite ${formatWeight(missedAtKg)} kg en la próxima sesión de ` +
-        `${lift.name.toLowerCase()}; si toca descarga, manda la descarga. ` +
-        `Otro fallo y la RM baja un ${Math.round(nextPenalty * 100)} %.`,
+        `${lift.name.toLowerCase()}; si toca descarga, se hace la descarga. ` +
+        // Under the conservative rule the next miss is another hold, not
+        // a cut — "la RM baja un 0 %" would be a lie.
+        (nextPenalty > 0
+          ? `Otro fallo y la RM baja un ${Math.round(nextPenalty * 100)} %.`
+          : "Otro fallo y el peso se vuelve a repetir."),
     };
   }
 
@@ -245,8 +249,10 @@ export function registerFailure(
     title: `Fallo ${failCount} · RM −${Math.round(penalty * 100)} %`,
     detail:
       `RM estimada a ${formatWeight(roundToStep(lift.e1rmKg * (1 - penalty), config.roundingKg))} kg. ` +
-      `La ola se recalcula: ${formatWeight(recomputed)} kg` +
-      (forcedDeload ? " + descarga forzada (2 series @ 70 %)." : "."),
+      `Los pesos se recalculan: ${formatWeight(recomputed)} kg` +
+      (forcedDeload
+        ? ", con una descarga forzada: 2 series al 70 %."
+        : "."),
   };
 }
 

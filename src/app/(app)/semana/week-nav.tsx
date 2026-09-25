@@ -6,10 +6,9 @@ import { useTransition } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * The − / value / + stepper next to the header eyebrow. Navigation moves
- * the *absolute* season week through the URL, but the well counts weeks
- * inside the phase — the same number the title and the engine speak. The
- * absolute coordinate lives on the season strip below.
+ * ‹ / › beside the header, plus a way home when you have wandered off.
+ * The title already says which week this is, so the control does not
+ * repeat a number — two numbers side by side read as two different weeks.
  *
  * Navigation is a URL change so the server re-resolves the plan for that
  * week — no client-side plan maths, ever.
@@ -17,13 +16,12 @@ import { cn } from "@/lib/cn";
 export function WeekNav({
   absoluteWeek,
   seasonWeeks,
-  week,
-  phaseWeeks,
+  currentWeek,
 }: {
   absoluteWeek: number;
   seasonWeeks: number;
-  week: number;
-  phaseWeeks: number;
+  /** The absolute week today falls in. */
+  currentWeek: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -33,17 +31,26 @@ export function WeekNav({
     const target = Math.min(Math.max(1, next), last);
     if (target === absoluteWeek) return;
     startTransition(() => {
-      router.push(`/semana?semana=${target}`);
+      router.push(target === currentWeek ? "/semana" : `/semana?semana=${target}`);
     });
   };
 
   const square =
-    "flex h-8 w-8 flex-none items-center justify-center rounded-sm border border-edge bg-surface text-[15px] leading-none text-mid disabled:opacity-35";
+    "flex h-10 w-10 flex-none items-center justify-center rounded-sm border border-edge bg-surface text-[18px] leading-none text-mid disabled:opacity-35";
 
   return (
     <div
       className={cn("flex flex-none items-center gap-1", pending && "opacity-60")}
     >
+      {absoluteWeek !== currentWeek ? (
+        <button
+          type="button"
+          onClick={() => go(currentWeek)}
+          className="font-display flex h-10 flex-none items-center rounded-sm border border-edge bg-surface px-3 text-[12px] leading-none font-semibold tracking-[0.08em] text-lime uppercase"
+        >
+          Hoy
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label="Semana anterior"
@@ -51,15 +58,8 @@ export function WeekNav({
         onClick={() => go(absoluteWeek - 1)}
         className={square}
       >
-        −
+        ‹
       </button>
-      <div
-        aria-live="polite"
-        className="num flex h-8 flex-none items-center justify-center rounded-sm border border-edge bg-surface px-2.5 text-[12px] leading-none font-semibold"
-      >
-        <span className="sr-only">Semana de la fase </span>
-        {week}/{phaseWeeks}
-      </div>
       <button
         type="button"
         aria-label="Semana siguiente"
@@ -67,7 +67,7 @@ export function WeekNav({
         onClick={() => go(absoluteWeek + 1)}
         className={square}
       >
-        +
+        ›
       </button>
     </div>
   );

@@ -190,7 +190,7 @@ export function LogRunForm({
       <div className="grid grid-cols-2 gap-1.5 px-5 pt-2.5">
         {fields.map((f) => {
           const label = (
-            <span className="block text-[10.5px] leading-none tracking-[0.08em] text-faint uppercase">
+            <span className="block text-[11.5px] leading-none tracking-[0.08em] text-mid uppercase">
               {f.label}
             </span>
           );
@@ -235,7 +235,7 @@ export function LogRunForm({
 
       {registered ? null : (
         <div className="flex items-center gap-1.5 px-5 pt-2.5">
-          <span className="text-[10.5px] leading-none tracking-[0.08em] text-faint uppercase">
+          <span className="text-[11.5px] leading-none tracking-[0.08em] text-mid uppercase">
             RPE
           </span>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
@@ -255,12 +255,12 @@ export function LogRunForm({
         </div>
       )}
 
-      <p className="px-5 pt-2.5 text-[11.5px] leading-[1.5] text-faint">
-        Cuenta para el volumen de la semana y para el desacople Pa:HR.
-        {registered
-          ? null
-          : " El desacople es el Pa:HR que da el reloj al comparar las dos mitades del rodaje; por debajo del 5 % la base aeróbica aguanta. El RPE es la dureza percibida, de 1 a 10 — clave en las semanas de readaptación."}
-      </p>
+      {registered ? null : (
+        <p className="px-5 pt-2.5 text-[12.5px] leading-[1.5] text-mid">
+          Desacople: el Pa:HR que da el reloj en tiradas largas. RPE: lo dura
+          que se ha sentido, de 1 a 10.
+        </p>
+      )}
 
       {error ? (
         <p className="mx-5 mt-3 rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[11.5px] leading-[1.4] text-fail">

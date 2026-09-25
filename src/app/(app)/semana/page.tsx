@@ -15,10 +15,9 @@ import {
   formatDayShort,
   formatSeasonRange,
   phaseEnd,
-  startOfWeek,
   type IsoDate,
 } from "@/lib/domain/calendar";
-import { cycleOf, isDeloadWeek, waveFactor } from "@/lib/engine";
+import { isDeloadWeek, waveFactor, weekInCycle } from "@/lib/engine";
 import {
   Footnote,
   RowStack,
@@ -26,7 +25,6 @@ import {
   SectionLabel,
 } from "@/components/ui/kit";
 import { accentFor, STATUS_LABEL, statusTone } from "@/components/day-accents";
-import { SkipDayButton } from "@/components/session/start-session-button";
 import { cn } from "@/lib/cn";
 
 import { PhaseBar, type PhaseInfo } from "./phase-bar";
@@ -123,23 +121,24 @@ export default async function SemanaPage({
   };
 
   /* ── the note under the title ─────────────────────────────── */
-  // The engine reads the phase's own progression and the week inside it.
+  // The engine reads the phase's own progression and the week inside it;
+  // the athlete reads what that means for the bar.
   const phaseConfig = phaseEngineConfig(config, phase);
   const deload = isDeloadWeek(week, phaseConfig);
-  const cycle = cycleOf(week, phaseConfig.cycleWeeks);
-  const cycles = Math.max(1, Math.ceil(phase.weeks / phaseConfig.cycleWeeks));
+  const cycleWeek = weekInCycle(week, phaseConfig.cycleWeeks) + 1;
   const wavePct = Math.round(waveFactor(week, phaseConfig) * 100);
-  const nextDeload = cycle * phaseConfig.cycleWeeks;
+  const nextDeload =
+    week - cycleWeek + phaseConfig.cycleWeeks;
   const note =
     phaseConfig.progressionMode === "fixed_pct"
-      ? `Fase a porcentaje fijo · básicos al ${wavePct} % de la RM, sin olas ni descargas automáticas.`
+      ? `Básicos al ${wavePct} % de la RM todas las semanas de esta fase.`
       : deload
         ? phaseConfig.autoDeload
-          ? `Semana de descarga · ola al ${wavePct} % y mitad de series. Los pesos bajan a propósito.`
-          : `Semana de descarga · ola al ${wavePct} %. El auto-descarga está apagado, así que las series no se recortan.`
-        : `Ciclo ${cycle} de ${cycles} · ola al ${wavePct} %.` +
+          ? `Semana de descarga: básicos al ${wavePct} % de la RM y la mitad de series. Los pesos bajan a propósito.`
+          : `Semana de descarga: básicos al ${wavePct} % de la RM.`
+        : `Básicos al ${wavePct} % de la RM, semana ${cycleWeek} de ${phaseConfig.cycleWeeks} del ciclo.` +
           (nextDeload <= phase.weeks
-            ? ` Descarga en la semana ${nextDeload} de la fase.`
+            ? ` Descarga en la semana ${nextDeload}.`
             : "");
 
   /* ── the season bar ───────────────────────────────────────── */
@@ -196,15 +195,14 @@ export default async function SemanaPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader
-        eyebrow={`${program.name} · ${phase.key}`}
+        eyebrow={phase.name}
         title={`Semana ${week} de ${phase.weeks}`}
         subtitle={note}
         right={
           <WeekNav
             absoluteWeek={absoluteWeek}
             seasonWeeks={seasonWeeks}
-            week={week}
-            phaseWeeks={phase.weeks}
+            currentWeek={athlete.placement.absoluteWeek}
           />
         }
       />
@@ -224,6 +222,18 @@ export default async function SemanaPage({
               const figure = figureFor(day);
               const isToday = day.date === today;
               const rest = day.group === "rest";
+              // Only training days carry a status, and "pendiente" only
+              // means something once the day has gone by.
+              const trains = day.group === "strength" || day.group === "run";
+              const statusText = !trains || !status
+                ? null
+                : status !== "planned"
+                  ? STATUS_LABEL[status]
+                  : isToday
+                    ? "HOY"
+                    : day.date < today
+                      ? "SIN HACER"
+                      : null;
               const subtitle =
                 day.group === "run"
                   ? day.prescription || day.subtitle
@@ -275,21 +285,25 @@ export default async function SemanaPage({
                     </div>
                   )}
 
-                  {!rest && (figure || status) ? (
+                  {!rest && (figure || statusText) ? (
                     <div className="flex-none pl-1 text-right">
                       {figure ? (
                         <div className="num text-[14px] leading-none font-semibold">
                           {figure}
                         </div>
                       ) : null}
-                      {status ? (
+                      {statusText ? (
                         <div
                           className={cn(
-                            "font-display mt-[3px] text-[9.5px] leading-none font-semibold tracking-[0.1em]",
-                            isToday ? "text-lime" : statusTone(status),
+                            "font-display mt-[5px] text-[11px] leading-none font-semibold tracking-[0.08em]",
+                            isToday
+                              ? "text-lime"
+                              : status === "planned"
+                                ? "text-warn"
+                                : statusTone(status),
                           )}
                         >
-                          {STATUS_LABEL[status]}
+                          {statusText}
                         </div>
                       ) : null}
                     </div>
@@ -306,16 +320,6 @@ export default async function SemanaPage({
                     : "border border-line bg-surface py-3",
               );
 
-              // "Hoy no entreno" is a decision, not an omission: a
-              // deliberate skip closes the day as SALTADA instead of
-              // leaving it pending forever. A missed day of the current
-              // week is still open — trainable late, or skippable.
-              const skippable =
-                (day.group === "strength" || day.group === "run") &&
-                day.slot != null &&
-                day.date >= startOfWeek(today) &&
-                status === "planned";
-
               return (
                 <div
                   key={day.date}
@@ -330,20 +334,6 @@ export default async function SemanaPage({
                   ) : (
                     <div className="min-w-0 flex-1">{body}</div>
                   )}
-                  {skippable && day.slot ? (
-                    <SkipDayButton
-                      day={{
-                        phaseId: day.phaseId,
-                        slotId: day.slot.id,
-                        scheduledOn: day.date,
-                        week: day.week,
-                        dayIndex: day.dayIndex,
-                        sessionType: day.sessionType,
-                        title: day.title,
-                        group: day.group,
-                      }}
-                    />
-                  ) : null}
                 </div>
               );
             })}
@@ -352,34 +342,31 @@ export default async function SemanaPage({
 
         {missedDays > 0 && phase.priority ? (
           <Footnote>
-            Con la semana rota, el orden de prioridad de {phase.key}:{" "}
-            {phase.priority}.
+            Si no llegas a todo esta semana, este es el orden: {phase.priority}.
+            Lo que falte se puede recuperar hasta el domingo desde su día.
           </Footnote>
         ) : null}
 
         <SectionLabel
           right={
             <span className="num">
-              SEM {absoluteWeek}/{lastWeek}
+              {formatSeasonRange(seasonStart, seasonEnd)}
             </span>
           }
         >
-          TEMPORADA · {formatSeasonRange(seasonStart, seasonEnd).toUpperCase()}
+          La temporada
         </SectionLabel>
 
         <PhaseBar phases={barPhases} activeAbsoluteWeek={absoluteWeek} />
 
-        <div className="flex items-baseline gap-3 px-5 pt-2.5 pb-6">
-          <span className="min-w-0 flex-1 truncate text-[13px] leading-[1.2] font-semibold">
-            {phase.name}
-          </span>
-          {program.race_on ? (
-            <span className="flex-none text-[12px] leading-none text-mid">
-              {program.race_name ?? "Objetivo"} ·{" "}
-              {formatDayShort(program.race_on)}
-            </span>
-          ) : null}
-        </div>
+        {program.race_on ? (
+          <div className="px-5 pt-2.5 pb-6 text-[12.5px] leading-none text-mid">
+            {program.race_name ?? "Objetivo"} ·{" "}
+            <span className="num">{formatDayShort(program.race_on)}</span>
+          </div>
+        ) : (
+          <div className="pb-6" />
+        )}
       </div>
     </div>
   );

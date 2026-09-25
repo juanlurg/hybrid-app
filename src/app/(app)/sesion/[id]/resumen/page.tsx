@@ -260,6 +260,11 @@ export default async function ResumenPage({
 
   const reverted = engineEvents.filter((e) => e.reverted_at);
   const standing = engineEvents.length - reverted.length;
+  // A standing change is only bad news when it is a failure; a bumped
+  // accessory is the engine rewarding the session.
+  const standingFailure = engineEvents.some(
+    (e) => !e.reverted_at && e.kind.startsWith("fail_"),
+  );
   const [tonnageValue, tonnageUnit] = formatTonnage(
     Number(session.tonnage_kg),
   ).split(" ");
@@ -292,10 +297,10 @@ export default async function ResumenPage({
           : "Todo dentro del rango";
   const engineLine =
     standing === 0
-      ? "el motor no toca nada"
+      ? "ningún peso cambia"
       : standing === 1
-        ? "1 ajuste del motor"
-        : `${standing} ajustes del motor`;
+        ? "1 peso cambia"
+        : `${standing} pesos cambian`;
 
   const accessoryList =
     accessories.length > 0 ? (
@@ -405,8 +410,8 @@ export default async function ResumenPage({
             {avgRir ? (
               <Kpi label="RIR medio">{avgRir}</Kpi>
             ) : (
-              <Kpi label="Ajustes">
-                <span className={standing > 0 ? "text-warn" : undefined}>
+              <Kpi label="Pesos que cambian">
+                <span className={standingFailure ? "text-warn" : undefined}>
                   {standing}
                 </span>
               </Kpi>
@@ -524,10 +529,10 @@ export default async function ResumenPage({
           <Card className="px-4 py-4">
             <div className="flex items-baseline gap-2">
               <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
-                El motor
+                Qué cambia
               </span>
               {reverted.length > 0 ? (
-                <span className="ml-auto text-[11px] leading-none text-faint">
+                <span className="ml-auto text-[12px] leading-none text-mid">
                   {reverted.length}{" "}
                   {reverted.length === 1 ? "deshecho" : "deshechos"}
                 </span>
@@ -538,7 +543,7 @@ export default async function ResumenPage({
               <p className="mt-2 text-[12.5px] leading-[1.55] text-mid">
                 {logs.length === 0
                   ? "Esta sesión se cerró sin ninguna serie registrada, así que ni la RM ni los pesos han cambiado."
-                  : "Ninguna serie del básico del día cayó por debajo del rango, así que la ola sigue su curso."}
+                  : "Ninguna serie del básico del día cayó por debajo del rango, así que los pesos siguen el plan."}
               </p>
             ) : (
               <div className="mt-3 flex flex-col gap-3">
@@ -554,7 +559,7 @@ export default async function ResumenPage({
                   >
                     {event.detail}
                     {event.reverted_at ? (
-                      <span className="mt-1.5 block text-[10px] leading-none font-semibold tracking-[0.1em] text-ghost uppercase">
+                      <span className="mt-1.5 block text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
                         Deshecho — el motor volvió atrás
                       </span>
                     ) : null}
@@ -611,9 +616,8 @@ export default async function ResumenPage({
               {nextPhase ? (
                 <>
                   Última semana de {sessionPhase.name.toLowerCase()}. La semana
-                  que viene empieza {nextPhase.key} —{" "}
-                  {nextPhase.name.toLowerCase()} — y los pesos se recalculan con
-                  su progresión.
+                  que viene empieza {nextPhase.name.toLowerCase()} y los pesos
+                  se recalculan con su progresión.
                 </>
               ) : (
                 <>Última semana del plan.</>

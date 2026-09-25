@@ -214,12 +214,12 @@ export function repsLabel(min: number, max: number): string {
   return min === max ? String(min) : `${min}-${max}`;
 }
 
-/** "127,5 kg", "+12,5 kg", "corporal", "progresiv." */
+/** "127,5 kg", "+12,5 kg", "corporal", "a sensación" */
 export function weightLabelFor(
   loadMode: LoadMode,
   weightKg: number | null,
 ): string {
-  if (loadMode === "rpe") return "progresiv.";
+  if (loadMode === "rpe") return "a sensación";
   if (loadMode === "bodyweight") return "corporal";
   if (weightKg == null) return "—";
   if (loadMode === "weighted_bodyweight") {
@@ -396,6 +396,51 @@ export function resolveDay(
 
 export function resolveWeek(opts: ResolveOptions): ResolvedDay[] {
   return Array.from({ length: 7 }, (_, i) => resolveDay(opts, i));
+}
+
+const WEEKDAYS = [
+  "lunes",
+  "martes",
+  "miércoles",
+  "jueves",
+  "viernes",
+  "sábado",
+  "domingo",
+];
+
+/** Words that name a kind of session, not a particular one. */
+const GENERIC = new Set(["fuerza", "carrera", "sesión", "suave", "suelta"]);
+
+/**
+ * Where a day sits in its phase's "si falta un día" order — the plan's own
+ * free text, "Fuerza A > Fuerza B > Z2 sábado > Fuerza C > Z2 martes".
+ * A step names a day by its title ("Fuerza A"; "Larga" ⊂ "Carrera larga"),
+ * by its weekday ("Z2 sábado"), or by a distinctive word of it ("Tirada
+ * larga" ~ "Carrera larga"), in that order of trust. Lower is more
+ * important; a day no step names ranks after all of them.
+ */
+export function priorityRank(
+  priority: string,
+  day: { title: string; dayIndex: number },
+): number {
+  const steps = priority
+    .split(">")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const title = day.title.trim().toLowerCase();
+  const titleWords = new Set(title.split(/\s+/));
+  const weekday = WEEKDAYS[day.dayIndex];
+
+  const byTitle = steps.findIndex((s) => title === s || title.includes(s));
+  if (byTitle !== -1) return byTitle;
+  const byWeekday = steps.findIndex((s) => s.split(/\s+/).includes(weekday));
+  if (byWeekday !== -1) return byWeekday;
+  const byWord = steps.findIndex((s) =>
+    s
+      .split(/\s+/)
+      .some((w) => w.length >= 4 && !GENERIC.has(w) && titleWords.has(w)),
+  );
+  return byWord !== -1 ? byWord : steps.length;
 }
 
 /* ── session progress ────────────────────────────────────────── */

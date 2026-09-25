@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { ActionBar } from "@/components/ui/kit";
 import { setSessionStatus } from "@/lib/actions/session";
@@ -125,30 +125,68 @@ export function StartSessionButton({
   );
 }
 
-/** Quick "skip" used from the week list. */
-export function SkipDayButton({ day }: { day: DayTarget }) {
+/**
+ * "Hoy no entreno" is a decision, not an omission: a deliberate skip
+ * closes the day as SALTADA instead of leaving it pending. Lives on the
+ * day's own screen, one quiet line above the action — never on a list
+ * row, where it sat next to the tap that opens the day.
+ */
+export function SkipDayButton({
+  day,
+  label = "Saltar este día",
+}: {
+  day: DayTarget;
+  label?: string;
+}) {
   const [pending, start] = useTransition();
+  const [confirming, setConfirming] = useState(false);
+
+  if (confirming) {
+    return (
+      <div className="flex items-center gap-4 px-5 py-2">
+        <span className="text-[13px] leading-none text-mid">
+          ¿Saltar {day.title}?
+        </span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              await setSessionStatus({
+                phaseId: day.phaseId,
+                slotId: day.slotId,
+                scheduledOn: day.scheduledOn,
+                week: day.week,
+                dayIndex: day.dayIndex,
+                sessionType: day.sessionType,
+                title: day.title,
+                status: "skipped",
+              });
+              setConfirming(false);
+            })
+          }
+          className="font-display py-2 text-[12px] leading-none font-semibold tracking-[0.08em] text-fail uppercase"
+        >
+          {pending ? "…" : "Sí, saltar"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirming(false)}
+          className="font-display py-2 text-[12px] leading-none font-semibold tracking-[0.08em] text-mid uppercase"
+        >
+          No
+        </button>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
-      disabled={pending}
-      onClick={() =>
-        start(async () => {
-          await setSessionStatus({
-            phaseId: day.phaseId,
-            slotId: day.slotId,
-            scheduledOn: day.scheduledOn,
-            week: day.week,
-            dayIndex: day.dayIndex,
-            sessionType: day.sessionType,
-            title: day.title,
-            status: "skipped",
-          });
-        })
-      }
-      className="font-display text-[10.5px] leading-none font-semibold tracking-[0.08em] text-mid underline uppercase"
+      onClick={() => setConfirming(true)}
+      className="px-5 py-2 text-[13px] leading-none text-mid underline underline-offset-4"
     >
-      {pending ? "…" : "Saltar"}
+      {label}
     </button>
   );
 }
