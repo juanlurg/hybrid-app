@@ -54,10 +54,14 @@
   --color-fail-soft: var(--fail-soft);
   --color-tint: var(--tint);
 
-  /* The panel is dark in both themes, so what sits on it is fixed. */
-  --color-clay-panel: #e39b78;
-  --color-warn-panel: #f8c07a;
-  --color-fail-panel: #f0a08f;
+  /* What sits on the panel follows it: light on dark, dark on light. */
+  --color-panel-soft: var(--panel-soft);
+  --color-panel-well: var(--panel-well);
+  --color-panel-line: var(--panel-line);
+  --color-clay-panel: var(--clay-panel);
+  --color-warn-panel: var(--warn-panel);
+  --color-fail-panel: var(--fail-panel);
+  --color-ok-panel: var(--ok-panel);
   --color-ink-2: rgb(255 255 255 / 0.12);
   --color-ink-3: rgb(255 255 255 / 0.66);
 
@@ -95,6 +99,17 @@
   :root {
     color-scheme: light;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+    --panel-soft: rgb(255 255 255 / 0.7);
+    --panel-well: rgb(255 255 255 / 0.08);
+    --panel-line: rgb(255 255 255 / 0.1);
+    --clay-panel: #e39b78;
+    --warn-panel: #f8c07a;
+    --fail-panel: #f0a08f;
+    --ok-panel: #8dbf8f;
+    --plate-15: #e39b78;
+    --plate-20: #d76e3f;
+    --plate-25: #92411f;
 
     --bg: #f2e9e3;
     --surface: #fdfaf7;
@@ -158,8 +173,18 @@
     --soft: #322c28;
     --sunk: #2c2622;
     --chrome: #27221f;
-    --panel: #3d3e40;
-    --on-panel: #ffffff;
+    /* In dark the featured panel inverts: paper is the one light thing. */
+    --panel: #f2e9e3;
+    --on-panel: #1f1d1b;
+    --panel-soft: #4a423c;
+    --panel-well: #e7dad1;
+    --panel-line: rgb(31 29 27 / 0.08);
+    --clay-panel: #b4522b;
+    --warn-panel: #92411f;
+    --fail-panel: #b23a2b;
+    --ok-panel: #4e7a52;
+    --plate-15: #b4522b;
+    --plate-20: #c25e33;
 
     --edge: #3a332f;
     --line: #322c28;
@@ -197,7 +222,7 @@
     --sh-card: 0 6px 18px -6px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.3);
     --sh-raised: 0 2px 6px rgb(0 0 0 / 0.3);
     --sh-panel: 0 12px 30px -10px rgb(0 0 0 / 0.6),
-      inset 0 1px 0 rgb(255 255 255 / 0.08);
+      inset 0 1px 0 rgb(255 255 255 / 0.7);
     --sh-cta: 0 12px 24px -8px rgb(0 0 0 / 0.6);
     --sh-cta-run: 0 12px 24px -8px rgb(0 0 0 / 0.6);
     --sh-float: 0 12px 30px -10px rgb(0 0 0 / 0.6),

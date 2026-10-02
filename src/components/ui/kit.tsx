@@ -7,7 +7,7 @@
  * contact with real data.
  */
 
-import { ChevronDown, ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronLeft, Minus, Plus } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
@@ -540,21 +540,20 @@ export function Stepper({
   label?: string;
   compact?: boolean;
 }) {
-  const button =
-    "flex h-9 w-9 items-center justify-center rounded-full bg-soft text-[17px] leading-none font-bold text-ink";
+  const button = "flex h-10 w-9 items-center justify-center text-body";
   return (
-    <div className="flex flex-none items-center gap-1">
+    <div className="flex h-10 flex-none items-center rounded-full bg-soft">
       <button
         type="button"
         aria-label={label ? `Bajar ${label}` : "Bajar"}
         onClick={onDecrement}
         className={button}
       >
-        −
+        <Minus aria-hidden size={16} />
       </button>
       <div
         className={cn(
-          "num flex h-9 items-center justify-center px-1.5 text-[15px] leading-none font-extrabold",
+          "num flex items-center justify-center text-[14px] leading-none font-bold",
           compact ? "min-w-8" : "min-w-[58px]",
         )}
       >
@@ -566,7 +565,7 @@ export function Stepper({
         onClick={onIncrement}
         className={button}
       >
-        +
+        <Plus aria-hidden size={16} />
       </button>
     </div>
   );
@@ -589,8 +588,8 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "flex h-7 w-12 flex-none items-center rounded-full p-0.5 transition-colors",
-        checked ? "bg-strength" : "bg-quiet",
+        "flex h-[30px] w-[50px] flex-none items-center rounded-full p-[3px] transition-colors",
+        checked ? "bg-strength" : "bg-hairline",
       )}
     >
       <span
@@ -686,7 +685,7 @@ export function Callout({
         </span>
         {action ? <span className="ml-auto">{action}</span> : null}
       </div>
-      <div className="mt-2 text-[13px] leading-[1.5] font-medium text-white/75">
+      <div className="mt-2 text-[13px] leading-[1.5] font-medium text-panel-soft">
         {children}
       </div>
     </div>

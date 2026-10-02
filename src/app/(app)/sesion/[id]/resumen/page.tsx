@@ -570,7 +570,7 @@ export default async function ResumenPage({
             <Callout
               eyebrow="La próxima vez"
               eyebrowTone={
-                next.breakdown.isHeld ? "text-warn-panel" : "text-ok-bright"
+                next.breakdown.isHeld ? "text-warn-panel" : "text-ok-panel"
               }
             >
               {next.breakdown.isHeld ? (
@@ -607,7 +607,7 @@ export default async function ResumenPage({
 
         {!inPhase && sessionPhase ? (
           <div className="mx-5 mt-3.5">
-            <Callout eyebrow="La próxima vez" eyebrowTone="text-ok-bright">
+            <Callout eyebrow="La próxima vez" eyebrowTone="text-ok-panel">
               {nextPhase ? (
                 <>
                   Última semana de {sessionPhase.name.toLowerCase()}. La semana

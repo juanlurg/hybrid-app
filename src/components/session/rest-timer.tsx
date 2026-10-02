@@ -176,7 +176,7 @@ export function RestBar({
   const pct = Math.max(0, Math.round((rest.left / rest.total) * 100));
 
   const button =
-    "flex h-11 items-center rounded-full border border-white/12 bg-white/8 px-4 text-[14px] leading-none font-bold text-on-panel";
+    "flex h-11 items-center rounded-full border border-panel-line bg-panel-well px-4 text-[14px] leading-none font-bold text-on-panel";
 
   return (
     <div className="rounded-3xl bg-panel px-4.5 pt-4.5 pb-4 text-on-panel shadow-panel">
@@ -184,7 +184,7 @@ export function RestBar({
         <span className="text-[11px] leading-none font-bold tracking-[0.13em] text-clay-panel uppercase">
           Descanso
         </span>
-        <span className="ml-auto truncate text-[12px] leading-none font-medium text-white/70">
+        <span className="ml-auto truncate text-[12px] leading-none font-medium text-panel-soft">
           {rest.label}
         </span>
       </div>
@@ -204,9 +204,9 @@ export function RestBar({
           +30 s
         </button>
       </div>
-      <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-white/12">
+      <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-panel-well">
         <div
-          className="h-full rounded-full bg-[#d76e3f] transition-[width] duration-1000 ease-linear"
+          className="h-full rounded-full bg-clay-line transition-[width] duration-1000 ease-linear"
           style={{ width: `${pct}%` }}
         />
       </div>

@@ -2,13 +2,13 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 
-import { Chip } from "@/components/ui/kit";
+import { cn } from "@/lib/cn";
 import { THEME_COLOR, THEME_KEY, type ThemePref } from "@/lib/theme";
 
 const OPTIONS: Array<{ value: ThemePref; label: string }> = [
-  { value: "dark", label: "Oscuro" },
   { value: "light", label: "Claro" },
-  { value: "system", label: "Auto" },
+  { value: "dark", label: "Oscuro" },
+  { value: "system", label: "Sistema" },
 ];
 
 /* The preference lives in localStorage, so it is an external store: the
@@ -69,16 +69,22 @@ export function ThemeToggle() {
   }
 
   return (
-    <div className="flex flex-none gap-1.5">
+    <div className="flex gap-1 rounded-full bg-soft p-1">
       {OPTIONS.map((o) => (
-        <Chip
+        <button
           key={o.value}
-          active={o.value === pref}
+          type="button"
           aria-pressed={o.value === pref}
           onClick={() => choose(o.value)}
+          className={cn(
+            "h-9 flex-1 rounded-full text-[13.5px] leading-none font-bold",
+            o.value === pref
+              ? "bg-surface text-ink shadow-raised"
+              : "text-mid",
+          )}
         >
           {o.label}
-        </Chip>
+        </button>
       ))}
     </div>
   );

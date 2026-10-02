@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronRight, Download, LogOut, SlidersHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   useState,
@@ -153,7 +154,7 @@ export interface SettingsProgram {
 
 /** The small action that rides the right of a row: export, salir, borrar. */
 const ACTION =
-  "font-display flex h-11 items-center rounded-md border border-edge bg-soft px-3.5 text-[11px] leading-none font-semibold tracking-[0.08em] uppercase disabled:opacity-40";
+  "flex h-10 items-center gap-1.5 rounded-full bg-soft px-3.5 text-[13px] leading-none font-bold text-body disabled:opacity-40";
 
 /** The section index: ~29 rows is far more than a screen, so every
     section is one tap from the top instead of a blind scroll. */
@@ -364,7 +365,7 @@ export function SettingsGroups({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-1.5 px-5 pt-3">
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-5 pt-3.5 pb-0.5">
         {SECTIONS.map((s) => (
           <Chip
             key={s.id}
@@ -373,7 +374,10 @@ export function SettingsGroups({
                 .getElementById(s.id)
                 ?.scrollIntoView({ behavior: "smooth", block: "start" })
             }
-            className={s.id === "ajustes-peligro" ? "text-fail" : undefined}
+            className={cn(
+              "bg-surface px-3 py-2 shadow-raised",
+              s.id === "ajustes-peligro" && "bg-fail-soft text-fail",
+            )}
           >
             {s.label}
           </Chip>
@@ -397,7 +401,7 @@ export function SettingsGroups({
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
-            className="font-display h-9 w-[130px] rounded-sm border border-edge bg-soft px-2 text-right text-[13.5px] leading-none font-semibold"
+            className="h-10 w-[130px] rounded-full bg-soft px-3.5 text-right text-[14px] leading-none font-bold"
           />
         </SettingRow>
 
@@ -483,9 +487,11 @@ export function SettingsGroups({
           />
         </SettingRow>
         {/* Device preference, not profile: it lives in localStorage. */}
-        <SettingRow name="Tema" sub="Claro, oscuro, o lo que diga el sistema">
-          <ThemeToggle />
-        </SettingRow>
+        <SettingRow
+          name="Tema"
+          sub="Claro, oscuro, o lo que diga el sistema"
+          below={<ThemeToggle />}
+        />
       </Group>
 
       {/* ── equipo ─────────────────────────────────────────────── */}
@@ -672,23 +678,28 @@ export function SettingsGroups({
       {/* Folded: these move every future load and are set once, not
           weekly. The summary says what is set without opening it. */}
       <details className="group/motor mt-2">
-        <summary className="mx-5 flex min-h-12 list-none items-center gap-3 rounded-2xl border border-edge bg-surface px-4 py-3 [&::-webkit-details-marker]:hidden">
+        <summary className="mx-5 flex min-h-14 list-none items-center gap-3 rounded-2xl bg-surface px-4 py-3 shadow-card [&::-webkit-details-marker]:hidden">
+          <span
+            aria-hidden
+            className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-clay-soft text-clay"
+          >
+            <SlidersHorizontal size={18} />
+          </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[13.5px] leading-[1.25]">
+            <span className="block text-[14.5px] leading-[1.3] font-semibold">
               Cómo calcula los pesos
             </span>
-            <span className="mt-0.5 block text-[12px] leading-[1.35] text-mid">
+            <span className="num mt-0.5 block text-[12.5px] leading-[1.35] font-medium text-mid">
               Regla {RULE_WORD[profile.regression_rule]} · redondeo{" "}
               {formatWeight(profile.rounding_kg)} kg · RIR{" "}
               {profile.target_rir}
             </span>
           </span>
-          <span
+          <ChevronRight
             aria-hidden
-            className="font-display flex-none text-[14px] leading-none text-mid transition-transform group-open/motor:rotate-45"
-          >
-            ＋
-          </span>
+            size={16}
+            className="flex-none text-mid transition-transform group-open/motor:rotate-90"
+          />
         </summary>
       <Group>
         <SettingRow
@@ -823,7 +834,12 @@ export function SettingsGroups({
             </span>
           }
         >
-          <a href="/api/export" download className={ACTION}>
+          <a
+            href="/api/export"
+            download
+            className={cn(ACTION, "bg-panel text-on-panel")}
+          >
+            <Download aria-hidden size={15} />
             Exportar
           </a>
         </SettingRow>
@@ -835,17 +851,20 @@ export function SettingsGroups({
             below={
               <div className="flex flex-col gap-2">
                 {programs.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2.5">
-                    <span className="min-w-0 flex-1 truncate text-[12.5px] leading-[1.2] font-semibold">
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2.5 rounded-xl bg-sunk px-3 py-2.5"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] leading-[1.2] font-bold">
                       {p.name}
                     </span>
                     {p.starts_on ? (
-                      <span className="num flex-none text-[11px] leading-none text-faint">
+                      <span className="num flex-none text-[12px] leading-none font-semibold text-mid">
                         {p.starts_on}
                       </span>
                     ) : null}
                     {p.is_active ? (
-                      <span className="font-display flex-none rounded-full border border-clay-edge bg-clay-soft px-2 py-1 text-[11px] leading-none font-semibold tracking-[0.1em] text-clay uppercase">
+                      <span className="flex h-[22px] flex-none items-center rounded-full bg-ok-soft px-2 text-[11px] leading-none font-bold text-ok">
                         Activo
                       </span>
                     ) : (
@@ -865,7 +884,7 @@ export function SettingsGroups({
                             router.refresh();
                           });
                         }}
-                        className="font-display flex-none rounded-sm border border-edge bg-soft px-2 py-1.5 text-[11px] leading-none font-semibold tracking-[0.1em] uppercase disabled:opacity-40"
+                        className="flex h-[22px] flex-none items-center rounded-full bg-soft px-2.5 text-[11px] leading-none font-bold disabled:opacity-40"
                       >
                         Activar
                       </button>
@@ -886,7 +905,7 @@ export function SettingsGroups({
       <SectionLabel right={status()}>Cuenta y registro</SectionLabel>
       <Group>
         <SettingRow name="Correo" sub="La cuenta con la que entras">
-          <span className="font-display text-[13.5px] leading-none font-semibold">
+          <span className="text-[13.5px] leading-none font-bold">
             {email ?? "sin correo"}
           </span>
         </SettingRow>
@@ -910,6 +929,7 @@ export function SettingsGroups({
             sub="Habrá que volver a entrar con la contraseña"
           >
             <button type="submit" className={ACTION}>
+              <LogOut aria-hidden size={15} />
               Salir
             </button>
           </SettingRow>
@@ -922,7 +942,7 @@ export function SettingsGroups({
       <SectionLabel right={status()}>
         <span className="text-fail">Zona de peligro</span>
       </SectionLabel>
-      <Group className="border-fail/40">
+      <Group className="shadow-[inset_0_0_0_1.5px_rgb(178_58_43/0.22),var(--sh-card)]">
         <SettingRow
           name="Desplazar el plan"
           sub="El calendario manda: lo no hecho se pierde. Esto mueve todas las fases en bloque; lo ya registrado y la carrera no se mueven."
@@ -938,7 +958,7 @@ export function SettingsGroups({
                       setShiftTarget(e.target.value);
                       setConfirmShift(false);
                     }}
-                    className="num h-9 rounded-sm border border-edge bg-soft px-2 text-[13.5px] leading-none font-semibold"
+                    className="num h-10 rounded-full bg-soft px-3.5 text-[13.5px] leading-none font-bold"
                   />
                   <span className="num text-[11.5px] leading-none text-mid">
                     {!shiftValid
@@ -999,7 +1019,7 @@ export function SettingsGroups({
               <Chip
                 active
                 onClick={wipeHistory}
-                className="border-transparent bg-fail text-surface"
+                className="bg-fail text-surface"
               >
                 Sí
               </Chip>
@@ -1017,7 +1037,7 @@ export function SettingsGroups({
         </SettingRow>
 
         {cleared ? (
-          <div className="py-[11px] text-[11.5px] leading-[1.45] text-mid">
+          <div className="px-2.5 py-3 text-[12.5px] leading-[1.45] text-mid">
             Historial borrado. Las RM y el programa siguen intactos.
           </div>
         ) : null}
@@ -1043,7 +1063,7 @@ function Group({
 }) {
   return (
     <div className="mt-2 px-5">
-      <Card className={cn("divide-y divide-line px-4 py-1", className)}>
+      <Card className={cn("rounded-2xl px-1.5 py-1", className)}>
         {children}
       </Card>
     </div>
@@ -1066,12 +1086,12 @@ function SettingRow({
   below?: ReactNode;
 }) {
   return (
-    <div className="py-[11px]">
+    <div className="px-2.5 py-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-[14px] leading-[1.25]">{name}</div>
+          <div className="text-[14.5px] leading-[1.3] font-semibold">{name}</div>
           {sub ? (
-            <div className="mt-0.5 text-[12px] leading-[1.35] text-mid">
+            <div className="mt-0.5 text-[12.5px] leading-[1.35] font-medium text-mid">
               {sub}
             </div>
           ) : null}

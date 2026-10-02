@@ -600,7 +600,7 @@ export default async function ProgresoPage() {
                 {adherence ?? "—"}
               </span>
               {adherence == null ? null : (
-                <span className="text-[22px] leading-none font-bold text-white/70">
+                <span className="text-[22px] leading-none font-bold text-panel-soft">
                   %
                 </span>
               )}
@@ -609,7 +609,7 @@ export default async function ProgresoPage() {
               Adherencia
             </div>
           </div>
-          <div className="flex-1 text-[13px] leading-[1.5] font-medium text-white/70">
+          <div className="flex-1 text-[13px] leading-[1.5] font-medium text-panel-soft">
             Días de fuerza y carrera ya pasados. Una sesión parcial suma media.
           </div>
         </div>
