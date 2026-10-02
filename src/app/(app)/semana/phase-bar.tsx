@@ -28,49 +28,71 @@ export interface PhaseInfo {
 export function PhaseBar({
   phases,
   activeAbsoluteWeek,
+  currentWeekOfPhase,
 }: {
   phases: PhaseInfo[];
   /** The absolute week the screen is currently showing. */
   activeAbsoluteWeek: number;
+  /** That week, counted inside its own phase. */
+  currentWeekOfPhase: number;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = phases.find((p) => p.id === openId) ?? null;
+  const currentIndex = phases.findIndex((p) => p.current);
 
   return (
     <>
-      <div className="mt-2.5 flex gap-1 px-5">
-        {phases.map((p) => (
+      <div className="flex gap-1">
+        {phases.map((p, i) => (
           <button
             key={p.id}
             type="button"
             style={{ flex: p.weeks }}
             aria-expanded={openId === p.id}
             onClick={() => setOpenId(openId === p.id ? null : p.id)}
-            className={cn(
-              "font-display flex h-[34px] min-w-0 items-center justify-center rounded-sm px-1 text-[11px] leading-none uppercase",
-              p.current
-                ? "bg-strength font-bold text-on-strength"
-                : "border border-line bg-surface font-semibold text-faint",
-              openId === p.id && !p.current && "border-lime-line text-mid",
-            )}
+            className="flex min-w-0 flex-col gap-1.5"
           >
-            <span className="truncate">{p.key}</span>
+            <span
+              className={cn(
+                "num flex h-9 w-full items-center justify-center rounded-[10px] px-1 text-[12px] leading-none",
+                p.current
+                  ? "bg-strength font-extrabold text-on-strength"
+                  : i < currentIndex
+                    ? "bg-quiet font-bold text-mid"
+                    : "bg-soft font-bold text-body",
+                openId === p.id &&
+                  !p.current &&
+                  "shadow-[inset_0_0_0_2px_var(--clay-line)]",
+              )}
+            >
+              <span className="truncate">
+                {p.current ? `${p.key} · ${currentWeekOfPhase}/${p.weeks}` : p.key}
+              </span>
+            </span>
+            <span
+              className={cn(
+                "w-full truncate text-center text-[11px] leading-none",
+                p.current ? "font-bold text-clay" : "font-semibold text-mid",
+              )}
+            >
+              {i < currentIndex ? `${p.weeks} sem` : p.name}
+            </span>
           </button>
         ))}
       </div>
 
       {open ? (
-        <div className="mx-5 mt-2 rounded-xl border border-line bg-sunk px-3.5 py-3">
+        <div className="mt-3 rounded-lg bg-soft px-3.5 py-3">
           <div className="flex items-baseline gap-2">
-            <span className="min-w-0 flex-1 truncate text-[13.5px] leading-[1.2] font-semibold">
+            <span className="min-w-0 flex-1 truncate text-[14px] leading-[1.2] font-bold">
               {open.name}
             </span>
-            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.1em] text-faint uppercase">
+            <span className="flex-none text-[12px] leading-none font-semibold text-mid">
               <span className="num">{open.weeks}</span> semanas
             </span>
           </div>
           {open.rangeLabel ? (
-            <div className="num mt-1 text-[11.5px] leading-none text-faint">
+            <div className="num mt-1 text-[12px] leading-none font-medium text-mid">
               {open.rangeLabel}
             </div>
           ) : null}
@@ -86,9 +108,7 @@ export function PhaseBar({
           ) : null}
           {open.priority ? (
             <p className="mt-1.5 text-[12px] leading-[1.5] text-mid">
-              <span className="font-display text-[11px] font-semibold tracking-[0.1em] text-faint uppercase">
-                si falta un día ·{" "}
-              </span>
+              <span className="font-bold text-ink">Si falta un día: </span>
               {open.priority}
             </p>
           ) : null}
@@ -103,10 +123,10 @@ export function PhaseBar({
                   aria-label={`Semana ${i + 1} de ${open.key}`}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "num flex h-8 w-8 items-center justify-center rounded-sm border text-[12px] leading-none font-semibold",
+                    "num flex h-8 w-8 items-center justify-center rounded-full text-[12px] leading-none font-bold",
                     active
-                      ? "border-transparent bg-strength text-on-strength"
-                      : "border-edge bg-surface text-mid",
+                      ? "bg-strength text-on-strength"
+                      : "bg-surface text-mid",
                   )}
                 >
                   {i + 1}

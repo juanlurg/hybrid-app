@@ -1,5 +1,6 @@
 "use client";
 
+import { Minus, Plus, Snowflake } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import { TONE } from "@/components/day-accents";
@@ -22,7 +23,7 @@ export interface RmRow {
 
 // Mirrors the kit's Stepper, minus the well: here the RM is the bare figure.
 const NUDGE =
-  "flex h-11 w-11 flex-none items-center justify-center rounded-md border border-edge bg-soft text-[15px] leading-none text-mid";
+  "flex h-10 w-10 flex-none items-center justify-center rounded-full bg-soft text-ink";
 
 /**
  * The manual override on top of the engine. Every nudge is a rounding step,
@@ -34,10 +35,12 @@ export function RmRows({
   lifts,
   stepKg,
   label,
+  note,
 }: {
   lifts: RmRow[];
   stepKg: number;
   label: string;
+  note?: string;
 }) {
   const [, startTransition] = useTransition();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -57,15 +60,19 @@ export function RmRows({
   return (
     <>
       <SectionLabel
+        className="pb-0"
         right={
-          <button
+          <span className="flex items-baseline gap-3">
+            {note ? <span>{note}</span> : null}
+            <button
             type="button"
             aria-pressed={editing}
             onClick={() => setEditing((v) => !v)}
-            className="font-display -my-3 px-1 py-3 text-[12px] leading-none font-semibold tracking-[0.08em] text-lime uppercase"
+            className="-my-3 px-1 py-3 text-[13px] leading-none font-bold text-clay"
           >
-            {editing ? "listo" : "ajustar"}
-          </button>
+            {editing ? "Listo" : "Ajustar"}
+            </button>
+          </span>
         }
       >
         {label}
@@ -78,7 +85,7 @@ export function RmRows({
               : null;
           const held = heldAtKg != null;
           const status = held
-            ? `peso congelado en ${formatWeight(heldAtKg)} kg tras un fallo`
+            ? null
             : lift.effectiveRmKg != null
               ? `recortada un ${Math.round(lift.penalty * 100)} % · el motor usa ${formatWeight(lift.effectiveRmKg)} kg`
               : null;
@@ -86,16 +93,18 @@ export function RmRows({
           return (
             <Row key={lift.id} className="flex items-center gap-3 py-2.5">
               <div className="min-w-0 flex-1">
-                <div className="truncate text-[15px] leading-[1.2] font-semibold">
+                <div className="truncate text-[15px] leading-[1.25] font-bold">
                   {lift.name}
                 </div>
-                {status ? (
-                  <div
-                    className={cn(
-                      "mt-0.5 text-[12.5px] leading-[1.35]",
-                      held ? "text-warn" : "text-fail",
-                    )}
-                  >
+                {held ? (
+                  <div className="mt-1 flex">
+                    <span className="flex h-[22px] items-center gap-1 rounded-full bg-warn-soft px-2 text-[11px] leading-none font-bold text-ink">
+                      <Snowflake aria-hidden size={11} className="text-clay-dim" />
+                      congelado en {formatWeight(heldAtKg)} kg
+                    </span>
+                  </div>
+                ) : status ? (
+                  <div className="mt-0.5 text-[12.5px] leading-[1.35] font-semibold text-fail">
                     {status}
                   </div>
                 ) : null}
@@ -116,9 +125,9 @@ export function RmRows({
                     onClick={() => nudge(lift, -1)}
                     className={NUDGE}
                   >
-                    −
+                    <Minus aria-hidden size={16} strokeWidth={2.5} />
                   </button>
-                  <span className="num min-w-[56px] text-center text-[15px] leading-none font-bold">
+                  <span className="num min-w-[56px] text-center text-[16px] leading-none font-extrabold">
                     {formatWeight(lift.e1rmKg)}
                   </span>
                   <button
@@ -127,13 +136,12 @@ export function RmRows({
                     onClick={() => nudge(lift, 1)}
                     className={NUDGE}
                   >
-                    +
+                    <Plus aria-hidden size={16} strokeWidth={2.5} />
                   </button>
                 </div>
               ) : (
-                <span className="num flex-none text-[16px] leading-none font-bold">
-                  {formatWeight(lift.e1rmKg)}
-                  <span className="text-[12px] font-semibold text-mid"> kg</span>
+                <span className="num flex-none text-[17px] leading-none font-extrabold">
+                  {formatWeight(lift.e1rmKg)} kg
                 </span>
               )}
             </Row>

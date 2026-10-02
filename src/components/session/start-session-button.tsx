@@ -1,10 +1,12 @@
 "use client";
 
+import { Check, Play } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { ActionBar } from "@/components/ui/kit";
+import { cn } from "@/lib/cn";
 import { setSessionStatus } from "@/lib/actions/session";
 import { createLocalSession } from "@/lib/offline/local-session";
 import { enqueueOp, flush, putLocalSession } from "@/lib/offline/syncer";
@@ -26,19 +28,22 @@ export function StartSessionButton({
   existingSessionId,
   existingStatus,
   groupLabel,
+  className,
 }: {
   day: DayTarget;
   existingSessionId: string | null;
   existingStatus: SessionStatus | null;
   groupLabel: string;
+  /** Applied to the wrapper, so a screen can sit it beside another button. */
+  className?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
 
   if (day.group === "rest") {
     return (
-      <div className="flex-none px-5 pt-3.5 pb-3">
-        <div className="font-display flex h-15 w-full items-center justify-center rounded-xl border border-edge bg-soft text-[13px] leading-none font-semibold tracking-[0.1em] text-mid uppercase">
+      <div className={cn("flex-none px-4 pt-3.5 pb-3", className)}>
+        <div className="flex h-14 w-full items-center justify-center rounded-xl bg-quiet text-[15px] leading-none font-bold text-mid">
           Día libre
         </div>
       </div>
@@ -59,24 +64,30 @@ export function StartSessionButton({
             ? "/movilidad"
             : null;
     const pill =
-      "font-display flex h-15 w-full items-center justify-center gap-3 rounded-xl border border-lime-edge bg-lime-soft text-[15px] leading-none font-bold tracking-[0.06em] text-lime uppercase";
+      "flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-ok-soft text-[15px] leading-none font-bold text-ok";
     return (
-      <div className="flex-none px-5 pt-3.5 pb-3">
+      <div className={cn("flex-none px-4 pt-3.5 pb-3", className)}>
         {recordHref ? (
           <Link href={recordHref} className={pill}>
-            ✓ Registrada · ver
+            <Check aria-hidden size={18} strokeWidth={2.5} />
+            Registrada · ver
           </Link>
         ) : (
-          <div className={pill}>✓ Registrada</div>
+          <div className={pill}>
+            <Check aria-hidden size={18} strokeWidth={2.5} />
+            Registrada
+          </div>
         )}
       </div>
     );
   }
 
-  const label = pending ? "…" : existingSessionId ? "SEGUIR SESIÓN" : groupLabel;
+  const label = pending ? "…" : existingSessionId ? "Seguir sesión" : groupLabel;
+  const Icon = day.group === "strength" ? Play : Check;
 
   return (
     <ActionBar
+      className={className}
       tone={day.group === "run" ? "run" : "strength"}
       disabled={pending}
       onClick={() =>
@@ -120,6 +131,12 @@ export function StartSessionButton({
         })
       }
     >
+      <Icon
+        aria-hidden
+        size={day.group === "strength" ? 16 : 18}
+        strokeWidth={2.5}
+        fill={day.group === "strength" ? "currentColor" : "none"}
+      />
       {label}
     </ActionBar>
   );
@@ -134,18 +151,28 @@ export function StartSessionButton({
 export function SkipDayButton({
   day,
   label = "Saltar este día",
+  pill,
 }: {
   day: DayTarget;
   label?: string;
+  /** Drawn as the white button beside the start action. */
+  pill?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [confirming, setConfirming] = useState(false);
 
   if (confirming) {
     return (
-      <div className="flex items-center gap-4 px-5 py-2">
-        <span className="text-[13px] leading-none text-mid">
-          ¿Saltar {day.title}?
+      <div
+        className={cn(
+          "flex items-center gap-4",
+          pill
+            ? "h-14 flex-none rounded-xl bg-surface px-4 shadow-raised"
+            : "px-5 py-2",
+        )}
+      >
+        <span className="text-[13px] leading-none font-semibold text-mid">
+          {pill ? "¿Saltar?" : `¿Saltar ${day.title}?`}
         </span>
         <button
           type="button"
@@ -165,14 +192,14 @@ export function SkipDayButton({
               setConfirming(false);
             })
           }
-          className="font-display py-2 text-[12px] leading-none font-semibold tracking-[0.08em] text-fail uppercase"
+          className="py-2 text-[14px] leading-none font-bold text-fail"
         >
-          {pending ? "…" : "Sí, saltar"}
+          {pending ? "…" : "Sí"}
         </button>
         <button
           type="button"
           onClick={() => setConfirming(false)}
-          className="font-display py-2 text-[12px] leading-none font-semibold tracking-[0.08em] text-mid uppercase"
+          className="py-2 text-[14px] leading-none font-bold text-mid"
         >
           No
         </button>
@@ -184,7 +211,11 @@ export function SkipDayButton({
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="px-5 py-2 text-[13px] leading-none text-mid underline underline-offset-4"
+      className={
+        pill
+          ? "h-14 flex-none rounded-xl bg-surface px-4 text-[14px] leading-none font-bold text-ink shadow-raised"
+          : "px-5 py-2 text-[13px] leading-none font-semibold text-mid underline underline-offset-4"
+      }
     >
       {label}
     </button>

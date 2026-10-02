@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Card } from "@/components/ui/kit";
 
 export interface RestState {
   left: number;
@@ -177,40 +176,41 @@ export function RestBar({
   const pct = Math.max(0, Math.round((rest.left / rest.total) * 100));
 
   const button =
-    "font-display flex h-11 items-center rounded-md border border-edge bg-soft px-4 text-[12.5px] leading-none font-semibold";
+    "flex h-11 items-center rounded-full border border-white/12 bg-white/8 px-4 text-[14px] leading-none font-bold text-on-panel";
 
   return (
-    <Card className="py-[18px]">
-      <div className="flex items-baseline gap-2.5">
-        <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+    <div className="rounded-3xl bg-panel px-4.5 pt-4.5 pb-4 text-on-panel shadow-panel">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[11px] leading-none font-bold tracking-[0.13em] text-clay-panel uppercase">
           Descanso
         </span>
-        <span className="ml-auto truncate text-[12px] leading-none text-faint">
+        <span className="ml-auto truncate text-[12px] leading-none font-medium text-white/70">
           {rest.label}
         </span>
       </div>
-      <div className="mt-2 flex items-center gap-3">
-        <span className="num text-[56px] leading-none font-bold" aria-live="off">
+      <div className="mt-2 flex items-center gap-2">
+        <span
+          className="num flex-1 text-[56px] leading-none font-extrabold tracking-[-0.03em]"
+          aria-live="off"
+        >
           {mins}:{secs}
         </span>
         {/* Ending rest early is a between-sets staple: a real block
             target, not an 11px underline under a fatigued thumb. */}
-        <div className="ml-auto flex gap-2">
-          <button type="button" onClick={onSkip} className={button}>
-            SALTAR
-          </button>
-          <button type="button" onClick={onExtend} className={button}>
-            +30 S
-          </button>
-        </div>
+        <button type="button" onClick={onSkip} className={button}>
+          Saltar
+        </button>
+        <button type="button" onClick={onExtend} className={button}>
+          +30 s
+        </button>
       </div>
-      <div className="mt-3.5 h-[5px] rounded-full bg-soft">
+      <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-white/12">
         <div
-          className="h-full rounded-full bg-lime-line transition-[width] duration-300 ease-linear"
+          className="h-full rounded-full bg-[#d76e3f] transition-[width] duration-1000 ease-linear"
           style={{ width: `${pct}%` }}
         />
       </div>
-    </Card>
+    </div>
   );
 }
 

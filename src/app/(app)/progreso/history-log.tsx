@@ -116,7 +116,7 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
                     {entry.href ? (
                       <Link
                         href={entry.href}
-                        className="pt-1 text-[13px] leading-none font-medium text-lime"
+                        className="pt-1 text-[13px] leading-none font-medium text-clay"
                       >
                         {entry.group === "run" ? "ver carrera ›" : "ver resumen ›"}
                       </Link>

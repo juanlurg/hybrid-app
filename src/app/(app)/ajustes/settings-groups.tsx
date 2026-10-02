@@ -350,7 +350,7 @@ export function SettingsGroups({
    * the top to read is not a status. It replaces the label's static hint, so
    * showing it shifts nothing.
    */
-  const status = (hint?: string) => (pending ? "GUARDANDO…" : hint);
+  const status = (hint?: string) => (pending ? "guardando…" : hint);
 
   return (
     <div className="pb-2">
@@ -490,7 +490,7 @@ export function SettingsGroups({
 
       {/* ── equipo ─────────────────────────────────────────────── */}
       <div id="ajustes-equipo" className="scroll-mt-2" />
-      <SectionLabel right={status("GIMNASIO DE CASA")}>Equipo</SectionLabel>
+      <SectionLabel right={status("gimnasio de casa")}>Equipo</SectionLabel>
       <Group>
         <SettingRow name="Barra" sub="La barra con la que levantas en casa">
           <ChipRow
@@ -638,7 +638,7 @@ export function SettingsGroups({
 
       {/* ── carrera ────────────────────────────────────────────── */}
       <div id="ajustes-carrera" className="scroll-mt-2" />
-      <SectionLabel right={status("ZONAS Y DATOS")}>Carrera</SectionLabel>
+      <SectionLabel right={status("zonas y datos")}>Carrera</SectionLabel>
       <Group>
         <SettingRow
           name="LTHR"
@@ -845,7 +845,7 @@ export function SettingsGroups({
                       </span>
                     ) : null}
                     {p.is_active ? (
-                      <span className="font-display flex-none rounded-full border border-lime-edge bg-lime-soft px-2 py-1 text-[11px] leading-none font-semibold tracking-[0.1em] text-lime uppercase">
+                      <span className="font-display flex-none rounded-full border border-clay-edge bg-clay-soft px-2 py-1 text-[11px] leading-none font-semibold tracking-[0.1em] text-clay uppercase">
                         Activo
                       </span>
                     ) : (

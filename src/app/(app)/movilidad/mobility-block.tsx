@@ -178,7 +178,7 @@ export function MobilityBlock({
                         assumes, and the unit is capped narrow so it stacks
                         beside the figure instead of running to the card edge. */}
                     <div className="mt-3.5 flex items-baseline gap-2.5">
-                      <span className="num flex-none text-[58px] leading-[0.95] font-bold tracking-[-0.02em] text-lime min-[390px]:text-[76px]">
+                      <span className="num flex-none text-[58px] leading-[0.95] font-bold tracking-[-0.02em] text-clay min-[390px]:text-[76px]">
                         {current.dose}
                       </span>
                       {current.doseUnit ? (

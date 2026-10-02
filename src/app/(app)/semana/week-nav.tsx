@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -36,17 +37,20 @@ export function WeekNav({
   };
 
   const square =
-    "flex h-10 w-10 flex-none items-center justify-center rounded-sm border border-edge bg-surface text-[18px] leading-none text-mid disabled:opacity-35";
+    "flex h-11 w-11 flex-none items-center justify-center rounded-full bg-surface text-ink shadow-raised disabled:opacity-35";
 
   return (
     <div
-      className={cn("flex flex-none items-center gap-1", pending && "opacity-60")}
+      className={cn(
+        "mt-0.5 flex flex-none items-center gap-2",
+        pending && "opacity-60",
+      )}
     >
       {absoluteWeek !== currentWeek ? (
         <button
           type="button"
           onClick={() => go(currentWeek)}
-          className="font-display flex h-10 flex-none items-center rounded-sm border border-edge bg-surface px-3 text-[12px] leading-none font-semibold tracking-[0.08em] text-lime uppercase"
+          className="flex h-11 flex-none items-center rounded-full bg-surface px-3.5 text-[13px] leading-none font-bold text-clay shadow-raised"
         >
           Hoy
         </button>
@@ -58,7 +62,7 @@ export function WeekNav({
         onClick={() => go(absoluteWeek - 1)}
         className={square}
       >
-        ‹
+        <ChevronLeft aria-hidden size={18} />
       </button>
       <button
         type="button"
@@ -67,7 +71,7 @@ export function WeekNav({
         onClick={() => go(absoluteWeek + 1)}
         className={square}
       >
-        ›
+        <ChevronRight aria-hidden size={18} />
       </button>
     </div>
   );

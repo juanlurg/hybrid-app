@@ -19,7 +19,7 @@ import {
   type GeneratedPreview,
 } from "@/lib/actions/ai";
 import { activateProgram } from "@/lib/actions/onboarding";
-import { formatDayLong } from "@/lib/domain/calendar";
+import { formatDayFull } from "@/lib/domain/calendar";
 
 const EXAMPLES = [
   "Media maratón en 5 meses. Cinco días a la semana, gimnasio en casa con barra y rack. Quiero mantener el físico y bajar de 1h45.",
@@ -63,7 +63,7 @@ export function ProgramBuilder({
           className="pt-2"
           eyebrow="Programa generado"
           title={preview.name}
-          subtitle={`ARRANCA EL ${formatDayLong(preview.startsOn).toUpperCase()} · AÚN SIN ACTIVAR`}
+          subtitle={`Arranca el ${formatDayFull(preview.startsOn).toLowerCase()} · aún sin activar`}
         />
 
         <div className="min-h-0 flex-1 overflow-auto">
@@ -204,7 +204,7 @@ export function ProgramBuilder({
         className="pt-2"
         eyebrow="Otra temporada"
         title="Un plan nuevo, desde cero"
-        subtitle="LA IA LO DISEÑA · TÚ LO REVISAS Y ACTIVAS"
+        subtitle="La IA lo diseña; tú lo revisas y lo activas."
       />
 
       <div className="min-h-0 flex-1 overflow-auto">

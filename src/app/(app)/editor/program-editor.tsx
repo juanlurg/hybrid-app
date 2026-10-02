@@ -379,7 +379,7 @@ export function ProgramEditor({
                         <span className="min-w-0 flex-1 text-[13px] leading-[1.35] font-medium">
                           {e.name}
                           {e.isPrimary ? (
-                            <span className="font-display ml-1 rounded-[5px] bg-lime-soft px-1.5 py-0.5 text-[11px] font-bold text-lime-dim">
+                            <span className="font-display ml-1 rounded-[5px] bg-clay-soft px-1.5 py-0.5 text-[11px] font-bold text-clay-dim">
                               BÁSICO
                             </span>
                           ) : null}
@@ -527,7 +527,7 @@ export function ProgramEditor({
 
                       {diff ? (
                         <div className="mt-2 flex items-center gap-2 text-[11px] leading-none font-semibold">
-                          <span className="font-display text-[11px] font-semibold tracking-[0.1em] text-lime">
+                          <span className="font-display text-[11px] font-semibold tracking-[0.1em] text-clay">
                             IA
                           </span>
                           <span className="text-faint line-through">
@@ -704,7 +704,7 @@ export function ProgramEditor({
 
           {waveScope === "fixed" ? (
             <Card className="mx-5 mt-2.5 px-4 py-4">
-              <div className="num text-[30px] leading-none font-bold tracking-[-0.035em] text-lime">
+              <div className="num text-[30px] leading-none font-bold tracking-[-0.035em] text-clay">
                 {Math.round((pctOfRm ?? 0.8) * 100)} %
               </div>
               <p className="mt-2 text-[12.5px] leading-[1.5] text-mid">
@@ -729,7 +729,7 @@ export function ProgramEditor({
                       <span
                         className={cn(
                           "num text-[11px] leading-none font-bold",
-                          i === waveIndex ? "text-lime" : "text-mid",
+                          i === waveIndex ? "text-clay" : "text-mid",
                         )}
                       >
                         {Math.round(w * 100)} %

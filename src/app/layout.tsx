@@ -1,20 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Chakra_Petch } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
 import { THEME_SCRIPT } from "@/lib/theme";
 
-const chakra = Chakra_Petch({
-  variable: "--font-chakra",
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  display: "swap",
-});
-
-const barlow = Barlow({
-  variable: "--font-barlow",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -38,8 +31,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f2f4ef" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1210" },
+    { media: "(prefers-color-scheme: light)", color: "#f2e9e3" },
+    { media: "(prefers-color-scheme: dark)", color: "#1c1917" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -57,7 +50,7 @@ export default function RootLayout({
     // exactly the attribute mismatch React would otherwise shout about.
     <html
       lang="es"
-      className={`${chakra.variable} ${barlow.variable} h-full`}
+      className={`${jakarta.variable} h-full`}
       suppressHydrationWarning
     >
       <body className="flex min-h-full flex-col bg-bg text-ink antialiased">
