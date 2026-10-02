@@ -33,7 +33,7 @@ function whyLine(primary: ResolvedExercise): string | null {
 
 function PanelTag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="flex h-8 items-center rounded-full border border-white/10 bg-white/8 px-3 text-[13px] leading-none font-bold">
+    <span className="flex h-8 items-center rounded-full border border-panel-line bg-panel-well px-3 text-[13px] leading-none font-bold">
       {children}
     </span>
   );
@@ -89,14 +89,14 @@ export function StrengthDay({
                       ? "—"
                       : formatWeight(primary.weightKg)}
                   </span>
-                  <span className="text-[22px] leading-none font-bold text-white/65">
+                  <span className="text-[22px] leading-none font-bold text-panel-soft">
                     kg
                   </span>
                 </div>
                 {perSide ? (
                   <div className="flex flex-none flex-col items-end gap-2 pb-1">
                     <PlateBar perSide={perSide} onPanel scale={1.2} />
-                    <span className="num text-[12px] leading-none font-semibold text-white/70">
+                    <span className="num text-[12px] leading-none font-semibold text-panel-soft">
                       {perSideLabel(perSide)}
                     </span>
                   </div>
@@ -113,7 +113,7 @@ export function StrengthDay({
                 <PanelTag>Descanso {primary.restLabel}</PanelTag>
               </div>
               {primary.notes ? (
-                <p className="mt-3 text-[13px] leading-[1.45] font-medium text-white/70">
+                <p className="mt-3 text-[13px] leading-[1.45] font-medium text-panel-soft">
                   {primary.notes}
                 </p>
               ) : null}
@@ -124,15 +124,15 @@ export function StrengthDay({
                       ? `/motor?lift=${encodeURIComponent(primary.liftKey)}`
                       : "/motor"
                   }
-                  className="mt-4 flex items-center gap-2.5 border-t border-white/10 pt-3.5"
+                  className="mt-4 flex items-center gap-2.5 border-t border-panel-line pt-3.5"
                 >
-                  <span className="min-w-0 flex-1 text-[13px] leading-[1.4] font-medium text-white/70">
+                  <span className="min-w-0 flex-1 text-[13px] leading-[1.4] font-medium text-panel-soft">
                     {why} · cómo se calcula
                   </span>
                   <ChevronRight
                     aria-hidden
                     size={16}
-                    className="flex-none text-white/70"
+                    className="flex-none text-panel-soft"
                   />
                 </Link>
               ) : null}

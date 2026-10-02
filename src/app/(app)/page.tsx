@@ -418,7 +418,7 @@ export default async function HoyPage() {
                         <span className="num text-[88px] leading-[0.9] font-extrabold tracking-[-0.04em]">
                           {day.estimatedMinutes}
                         </span>
-                        <span className="text-[20px] leading-none font-bold text-white/65">
+                        <span className="text-[20px] leading-none font-bold text-panel-soft">
                           min aprox
                         </span>
                       </div>

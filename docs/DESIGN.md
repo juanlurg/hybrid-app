@@ -5,7 +5,8 @@ dark panel per screen for the thing that matters right now — the basic's
 weight on Hoy, the rest clock in the runner, adherence on Progreso.
 Everything else is a light card floating on a soft warm shadow. The engine's
 reasoning folds behind a single line. Light is the designed theme; dark is a
-warm mirror of it: the palette flips, the hierarchy does not.
+warm mirror of it: the palette flips, and the panel inverts — paper is the one
+light thing on a dark screen.
 
 **Plain words by default, the mechanism on demand.** A screen says what the
 athlete does and what changed — "80 % de tu RM", "peso congelado", "sin
@@ -34,7 +35,7 @@ pointing at the variable instead of copying its value at build time.
 | `surface` | `#fdfaf7` | `#27221f` | cards, sheets, the tab bar |
 | `soft` | `#f2e9e3` | `#322c28` | wells inside cards: inputs, number badges, chips |
 | `quiet` | `#e7dad1` | `#3a332f` | inert fills: rest days, tracks, sets still to do |
-| `panel` / `on-panel` | `#3d3e40` / white | same | the one dark panel per screen |
+| `panel` / `on-panel` | `#3d3e40` / white | `#f2e9e3` / `#1f1d1b` | the one featured panel per screen — dark on paper, paper on dark |
 | `edge` / `line` / `hairline` | `#e7dad1` / `#efe6df` / `#d9c8bc` | | dividers and dashed outlines — cards have no border |
 | `ink` / `body` / `mid` / `faint` | `#1f1d1b` / `#4a423c` / `#6b6058` / `#75685f` | | title, prose, secondary, tertiary |
 | `ghost` | `#b9a597` | `#6e625a` | decoration only, never information |
@@ -45,7 +46,8 @@ pointing at the variable instead of copying its value at build time.
 | `ok` / `ok-soft` | `#4e7a52` / `#e7efe4` | | done |
 | `warn` / `warn-soft` / `warn-dot` | `#92411f` / `#fdf0dc` / `#e88c22` | | partial, engine hold |
 | `fail` / `fail-soft` | `#b23a2b` / `#f8e3df` | | skipped, below range, RM cut |
-| `clay-panel` / `warn-panel` / `fail-panel` | fixed | fixed | eyebrows and figures **on** the panel |
+| `panel-soft` / `panel-well` / `panel-line` | white 70 % / 8 % / 10 % | `#4a423c` / `#e7dad1` / ink 8 % | secondary text, chips and dividers **on** the panel |
+| `clay-panel` / `warn-panel` / `fail-panel` / `ok-panel` | `#e39b78` / `#f8c07a` / `#f0a08f` / `#8dbf8f` | `#b4522b` / `#92411f` / `#b23a2b` / `#4e7a52` | eyebrows and figures **on** the panel |
 
 Accents by session group live in `src/components/day-accents.ts` — always use
 `accentFor(group)`; the glyph for a kind of day is `DayIcon`.
@@ -79,14 +81,14 @@ Put `num` on anything numeric — tabular figures. Nothing smaller than 11px.
   the tab bar and sheets.
 - **Card**: `rounded-3xl bg-surface shadow-card`, no border. `Card` in the kit.
 - **Panel**: `bg-panel text-on-panel shadow-panel rounded-3xl`, a `clay-panel`
-  eyebrow, the hero number in white, translucent `white/8` chips, a divider and
+  eyebrow, the hero number in `on-panel`, `panel-well` chips, a `panel-line` divider and
   one line of engine reasoning. `Callout` is the text-only variant.
 - **Note**: a card with a tinted 36px icon tile, a bold line and one sentence —
   frozen weight, deload, missed session. `Note` in the kit.
 - **Row stacks**: `RowStack` is one card with `p-1.5`; each `Row` inside is a
   padded `rounded-lg` hit area. Lists of days and exercises lead with a 36px
   icon tile or a numbered badge.
-- **Steppers**: round `bg-soft` − / + buttons either side of the figure.
+- **Steppers**: one `bg-soft` pill, − / + icons either side of the figure.
 - **Action**: pinned at the bottom, `px-4`, 56px (64px in the runner), clay with
   `shadow-cta`; a white secondary ("Hoy no entreno", "Otras", "Saltar") sits
   beside it.

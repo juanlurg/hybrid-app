@@ -16,13 +16,15 @@ const HEIGHT: Record<string, number> = {
 };
 
 function plateColour(kg: number, onPanel: boolean): string {
-  if (kg >= 25) return "var(--clay-dim)";
-  if (kg >= 20) return onPanel ? "#d76e3f" : "var(--clay-line)";
-  if (kg >= 15) return onPanel ? "#e39b78" : "#d76e3f";
-  if (kg >= 10) return onPanel ? "rgb(255 255 255 / 0.85)" : "var(--panel)";
-  if (kg >= 5) return onPanel ? "rgb(255 255 255 / 0.6)" : "var(--faint)";
-  if (kg >= 2.5) return onPanel ? "rgb(255 255 255 / 0.45)" : "var(--ghost)";
-  return onPanel ? "rgb(255 255 255 / 0.3)" : "var(--hairline)";
+  if (kg >= 25) return onPanel ? "var(--plate-25)" : "var(--clay-dim)";
+  if (kg >= 20) return onPanel ? "var(--plate-20)" : "var(--clay-line)";
+  if (kg >= 15) return onPanel ? "var(--plate-15)" : "#d76e3f";
+  if (kg >= 10) return onPanel ? "color-mix(in srgb, var(--on-panel) 85%, transparent)" : "var(--panel)";
+  if (kg >= 5) return onPanel ? "color-mix(in srgb, var(--on-panel) 60%, transparent)" : "var(--faint)";
+  if (kg >= 2.5) return onPanel ? "color-mix(in srgb, var(--on-panel) 45%, transparent)" : "var(--ghost)";
+  return onPanel
+    ? "color-mix(in srgb, var(--on-panel) 30%, transparent)"
+    : "var(--hairline)";
 }
 
 export function PlateBar({
@@ -34,7 +36,7 @@ export function PlateBar({
   onPanel?: boolean;
   scale?: number;
 }) {
-  const bar = onPanel ? "rgb(255 255 255 / 0.3)" : "var(--ghost)";
+  const bar = onPanel ? "color-mix(in srgb, var(--on-panel) 30%, transparent)" : "var(--ghost)";
   return (
     <div
       aria-hidden

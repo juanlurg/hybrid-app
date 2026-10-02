@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowRight, Check, Sparkles, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -94,65 +95,23 @@ export function AiPanel({
     applied != null;
 
   return (
-    <Card className="px-4 py-4">
+    <Card className="rounded-2xl p-4">
       <div className="flex items-center gap-2">
-        <span className="font-display min-w-0 flex-1 text-[11px] leading-none font-semibold tracking-[0.14em] text-clay uppercase">
+        <Sparkles aria-hidden size={16} className="flex-none text-clay" />
+        <span className="min-w-0 flex-1 text-[11px] leading-none font-bold tracking-[0.13em] text-clay uppercase">
           Refinar con IA
         </span>
         {appliedTotal > 0 ? (
-          <span className="num flex-none text-[11px] leading-none text-faint">
+          <span className="num flex-none text-[12px] leading-none font-semibold text-mid">
             {appliedTotal} {appliedTotal === 1 ? "aplicado" : "aplicados"}
           </span>
         ) : null}
       </div>
 
-      <input
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") ask(draft);
-        }}
-        disabled={!hasApiKey || pending}
-        placeholder="p. ej. «cambia el remo por dominadas asistidas»…"
-        aria-label="Mensaje para la IA"
-        className="mt-2.5 min-h-11 w-full rounded-md border border-edge bg-bg px-3.5 py-3 text-[13px] leading-[1.3] text-ink outline-none disabled:opacity-50"
-      />
-
-      <div className="mt-2.5 flex items-center gap-3">
-        <p className="min-w-0 flex-1 text-[11.5px] leading-[1.45] text-faint">
-          La IA propone un diff; tú marcas qué aplicar. Nunca toca tus RM.
-        </p>
-        {/* 44px rather than the mock's 40px: still a tap target. */}
-        <button
-          type="button"
-          disabled={!hasApiKey || pending || !draft.trim()}
-          onClick={() => ask(draft)}
-          className="font-display flex h-11 flex-none items-center rounded-md bg-strength px-[18px] text-[12.5px] leading-none font-bold text-on-strength uppercase disabled:opacity-40"
-        >
-          Proponer
-        </button>
-      </div>
-
-      {messages.length === 0 && !thinking ? (
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              disabled={!hasApiKey || pending}
-              onClick={() => ask(s)}
-              className="rounded-sm border border-edge bg-soft px-2.5 py-2 text-left text-[11px] leading-[1.3] font-medium disabled:opacity-40"
-            >
-              {s.length > 34 ? `${s.slice(0, 33)}…` : s}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
       {hasThread ? (
-        <div className="mt-3.5 flex flex-col gap-2.5 border-t border-line pt-3.5">
+        <div className="mt-3.5 flex flex-col gap-3">
           {!hasApiKey ? (
-            <div className="rounded-r-sm border-l-[4px] border-warn py-1 pl-3 text-[12.5px] leading-[1.55]">
+            <div className="rounded-xl bg-warn-soft px-4 py-3 text-[13px] leading-[1.5] font-medium text-clay-dim">
               Falta <code className="font-bold">GEMINI_API_KEY</code> en{" "}
               <code className="font-bold">.env.local</code>. Consíguela en
               aistudio.google.com/apikey, añádela y reinicia el servidor. El
@@ -160,31 +119,36 @@ export function AiPanel({
             </div>
           ) : null}
 
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={cn(
-                "max-w-[88%]",
-                m.role === "user"
-                  ? "self-end rounded-lg border border-edge bg-soft px-3.5 py-2.5 text-[12.5px] leading-[1.45]"
-                  : "self-start rounded-r-sm border-l-[3px] border-clay-line py-0.5 pl-3.5 text-[12.5px] leading-[1.55]",
-              )}
-            >
-              {m.content}
-            </div>
-          ))}
+          {messages.map((m, i) =>
+            m.role === "user" ? (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[86%] rounded-xl rounded-br-sm bg-soft px-3.5 py-2.5 text-[13.5px] leading-[1.45] font-medium">
+                  {m.content}
+                </div>
+              </div>
+            ) : (
+              <div key={i} className="flex items-start gap-2.5">
+                <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-clay-soft text-clay">
+                  <Sparkles aria-hidden size={14} />
+                </span>
+                <p className="mt-0.5 min-w-0 flex-1 text-[13.5px] leading-[1.5] font-medium text-body">
+                  {m.content}
+                </p>
+              </div>
+            ),
+          )}
 
           {thinking ? (
             <div className="flex items-center gap-2 text-mid">
               <span className="animate-pulse-block h-2.5 w-2.5 rounded-sm bg-strength" />
-              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.06em] uppercase">
+              <span className="text-[12.5px] leading-none font-semibold">
                 Leyendo tu plan…
               </span>
             </div>
           ) : null}
 
           {error ? (
-            <div className="rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[12.5px] leading-[1.5]">
+            <div className="rounded-xl bg-fail-soft px-4 py-3 text-[13px] leading-[1.45] font-medium text-fail">
               {error}
             </div>
           ) : null}
@@ -192,88 +156,98 @@ export function AiPanel({
           {proposal &&
           (proposal.changes.length > 0 || proposal.dropped.length > 0) ? (
             <>
-              <div className="flex items-baseline gap-2">
-                <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="flex-1 text-[14px] leading-none font-extrabold">
                   Cambios propuestos
                 </span>
-                <span className="num ml-auto text-[11px] leading-none text-faint">
+                <span className="num text-[12px] leading-none font-semibold text-mid">
                   {acceptedCount} de {proposal.changes.length} aceptados
                 </span>
               </div>
-              {proposal.changes.map((c, i) => {
-                const on = accepted.has(i);
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() =>
-                      setAccepted((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(i)) next.delete(i);
-                        else next.add(i);
-                        return next;
-                      })
-                    }
-                    className={cn(
-                      "flex gap-2.5 rounded-lg border px-3 py-2.5 text-left",
-                      on
-                        ? "border-clay-edge bg-clay-soft"
-                        : "border-line bg-soft",
-                    )}
-                  >
-                    <span
+              <div className="flex flex-col gap-1.5">
+                {proposal.changes.map((c, i) => {
+                  const on = accepted.has(i);
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() =>
+                        setAccepted((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(i)) next.delete(i);
+                          else next.add(i);
+                          return next;
+                        })
+                      }
                       className={cn(
-                        "font-display flex h-5 w-5 flex-none items-center justify-center rounded-[5px] text-[11px] leading-none font-semibold",
-                        on
-                          ? "bg-strength text-on-strength"
-                          : "border border-edge bg-surface",
+                        "flex gap-2.5 rounded-xl p-3 text-left",
+                        on ? "bg-sunk" : "ring-1 ring-edge ring-inset",
                       )}
                     >
-                      {on ? "✓" : ""}
+                      <span
+                        className={cn(
+                          "flex h-[22px] w-[22px] flex-none items-center justify-center rounded-[5px]",
+                          on
+                            ? "bg-strength text-on-strength"
+                            : "bg-soft text-transparent",
+                        )}
+                      >
+                        <Check aria-hidden size={14} strokeWidth={3} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cn(
+                            "block text-[13.5px] leading-[1.35] font-bold",
+                            !on && "text-mid",
+                          )}
+                        >
+                          {c.title}
+                        </span>
+                        <span className="num mt-1 flex flex-wrap items-center gap-1.5 text-[12px] leading-[1.3] font-semibold">
+                          <span className="text-faint line-through">
+                            {c.from || "—"}
+                          </span>
+                          <ArrowRight
+                            aria-hidden
+                            size={12}
+                            className="flex-none text-faint"
+                          />
+                          <span className="font-bold">{c.to || "—"}</span>
+                        </span>
+                        {c.why ? (
+                          <span className="mt-1.5 block text-[12.5px] leading-[1.45] font-medium text-mid">
+                            {c.why}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  );
+                })}
+                {proposal.dropped.map((d, i) => (
+                  <div
+                    key={`dropped-${i}`}
+                    className="flex gap-2.5 rounded-xl p-3 ring-1 ring-edge ring-inset"
+                  >
+                    <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-[5px] bg-soft text-faint">
+                      <X aria-hidden size={14} strokeWidth={3} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] leading-[1.3] font-medium">
-                        {c.title}
+                      <span className="block text-[13.5px] leading-[1.35] font-semibold text-faint line-through">
+                        {d.op.title}
                       </span>
-                      <span className="font-display mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] leading-[1.3]">
-                        <span className="text-faint line-through">
-                          {c.from || "—"}
-                        </span>
-                        <span className="text-faint">→</span>
-                        <span className="font-semibold">{c.to || "—"}</span>
+                      <span className="mt-1.5 block text-[12.5px] leading-[1.45] font-medium text-mid">
+                        Las reglas lo dejan fuera: {d.reason}.
                       </span>
-                      {c.why ? (
-                        <span className="mt-2 block text-[12px] leading-[1.45] text-mid">
-                          {c.why}
-                        </span>
-                      ) : null}
                     </span>
-                  </button>
-                );
-              })}
-              {proposal.dropped.map((d, i) => (
-                <div
-                  key={`dropped-${i}`}
-                  className="flex gap-2.5 rounded-lg border border-dashed border-hairline px-3 py-2.5"
-                >
-                  <span className="font-display flex h-5 w-5 flex-none items-center justify-center rounded-[5px] border border-hairline text-[11px] leading-none font-semibold text-ghost">
-                    ×
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] leading-[1.3] font-medium text-ghost line-through">
-                      {d.op.title}
-                    </span>
-                    <span className="mt-1.5 block text-[12px] leading-[1.45] text-mid">
-                      Las reglas lo dejan fuera: {d.reason}.
-                    </span>
-                  </span>
-                </div>
-              ))}
+                  </div>
+                ))}
+              </div>
             </>
           ) : null}
 
           {proposal && proposal.changes.length > 0 ? (
-            <div className="flex gap-1.5">
+            <div className="flex gap-2">
               <button
                 type="button"
                 disabled={pending || acceptedCount === 0}
@@ -296,7 +270,7 @@ export function AiPanel({
                     router.refresh();
                   })
                 }
-                className="font-display flex h-11 flex-1 items-center justify-center rounded-md bg-strength text-[12.5px] leading-none font-bold tracking-[0.06em] text-on-strength uppercase disabled:opacity-45"
+                className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-strength text-[14.5px] leading-none font-bold text-on-strength disabled:opacity-45"
               >
                 {acceptedCount === 0
                   ? "Nada seleccionado"
@@ -318,7 +292,7 @@ export function AiPanel({
                     ]);
                   })
                 }
-                className="font-display flex h-11 w-[104px] flex-none items-center justify-center rounded-md border border-edge bg-soft text-[11.5px] leading-none font-semibold tracking-[0.06em] text-mid uppercase"
+                className="flex h-12 w-[100px] flex-none items-center justify-center rounded-2xl bg-soft text-[14px] leading-none font-bold text-body"
               >
                 Descartar
               </button>
@@ -326,9 +300,15 @@ export function AiPanel({
           ) : null}
 
           {applied ? (
-            <div className="flex items-center gap-2.5 rounded-lg border border-line bg-soft px-3 py-2.5">
-              <span className="font-display min-w-0 flex-1 text-[11px] leading-none font-semibold tracking-[0.06em] text-clay-dim uppercase">
-                ✓ {applied.count}{" "}
+            <div className="flex items-center gap-2.5 rounded-xl bg-ok-soft px-3.5 py-3">
+              <Check
+                aria-hidden
+                size={16}
+                strokeWidth={2.5}
+                className="flex-none text-ok"
+              />
+              <span className="min-w-0 flex-1 text-[13.5px] leading-[1.3] font-bold text-ok">
+                {applied.count}{" "}
                 {applied.count === 1
                   ? "cambio aplicado al plan"
                   : "cambios aplicados al plan"}
@@ -354,14 +334,55 @@ export function AiPanel({
                     router.refresh();
                   })
                 }
-                className="flex-none text-[11px] leading-none font-medium text-mid underline"
+                className="-my-2 flex h-9 flex-none items-center text-[13px] leading-none font-bold text-clay disabled:opacity-40"
               >
-                deshacer
+                Deshacer
               </button>
             </div>
           ) : null}
         </div>
       ) : null}
+
+      {messages.length === 0 && !thinking ? (
+        <div className="mt-3.5 flex flex-wrap gap-1.5">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={!hasApiKey || pending}
+              onClick={() => ask(s)}
+              className="rounded-full bg-soft px-3 py-2 text-left text-[12px] leading-[1.3] font-semibold disabled:opacity-40"
+            >
+              {s.length > 34 ? `${s.slice(0, 33)}…` : s}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-3.5 flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") ask(draft);
+          }}
+          disabled={!hasApiKey || pending}
+          placeholder="p. ej. «cambia el remo por dominadas asistidas»…"
+          aria-label="Mensaje para la IA"
+          className="h-[46px] min-w-0 flex-1 rounded-2xl bg-soft px-3.5 text-[13.5px] leading-none font-medium text-ink outline-none placeholder:text-mid disabled:opacity-50"
+        />
+        <button
+          type="button"
+          disabled={!hasApiKey || pending || !draft.trim()}
+          onClick={() => ask(draft)}
+          className="flex h-[46px] flex-none items-center rounded-2xl bg-panel px-3.5 text-[13.5px] leading-none font-bold text-on-panel disabled:opacity-40"
+        >
+          Proponer
+        </button>
+      </div>
+      <p className="mt-2.5 text-[12px] leading-[1.45] font-medium text-mid">
+        La IA propone un diff; tú marcas qué aplicar. Nunca toca tus RM.
+      </p>
     </Card>
   );
 }
