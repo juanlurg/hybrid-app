@@ -32,8 +32,8 @@ const RUNTIME = "bloques-run-" + CACHE_VERSION;
 const SHELL_URL = "/~offline";
 const STATIC_URLS = [
   "/manifest.webmanifest",
-  "/icons/icon-192.svg",
-  "/icons/icon-512.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
 ];
 
 // Last resort for lie-fi (a connection that hangs without failing). A

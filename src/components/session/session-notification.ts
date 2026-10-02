@@ -83,8 +83,8 @@ async function post(
       body,
       silent: opts.silent,
       renotify: opts.renotify ?? false,
-      icon: "/icons/icon-192.svg",
-      badge: "/icons/icon-192.svg",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
       ...(opts.vibrate ? { vibrate: [140, 90, 140] } : {}),
     } as NotificationOptions);
   } catch {
