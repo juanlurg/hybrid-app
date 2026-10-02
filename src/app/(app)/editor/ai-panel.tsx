@@ -96,7 +96,7 @@ export function AiPanel({
   return (
     <Card className="px-4 py-4">
       <div className="flex items-center gap-2">
-        <span className="font-display min-w-0 flex-1 text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
+        <span className="font-display min-w-0 flex-1 text-[11px] leading-none font-semibold tracking-[0.14em] text-clay uppercase">
           Refinar con IA
         </span>
         {appliedTotal > 0 ? (
@@ -167,7 +167,7 @@ export function AiPanel({
                 "max-w-[88%]",
                 m.role === "user"
                   ? "self-end rounded-lg border border-edge bg-soft px-3.5 py-2.5 text-[12.5px] leading-[1.45]"
-                  : "self-start rounded-r-sm border-l-[3px] border-lime-line py-0.5 pl-3.5 text-[12.5px] leading-[1.55]",
+                  : "self-start rounded-r-sm border-l-[3px] border-clay-line py-0.5 pl-3.5 text-[12.5px] leading-[1.55]",
               )}
             >
               {m.content}
@@ -217,7 +217,7 @@ export function AiPanel({
                     className={cn(
                       "flex gap-2.5 rounded-lg border px-3 py-2.5 text-left",
                       on
-                        ? "border-lime-edge bg-lime-soft"
+                        ? "border-clay-edge bg-clay-soft"
                         : "border-line bg-soft",
                     )}
                   >
@@ -327,7 +327,7 @@ export function AiPanel({
 
           {applied ? (
             <div className="flex items-center gap-2.5 rounded-lg border border-line bg-soft px-3 py-2.5">
-              <span className="font-display min-w-0 flex-1 text-[11px] leading-none font-semibold tracking-[0.06em] text-lime-dim uppercase">
+              <span className="font-display min-w-0 flex-1 text-[11px] leading-none font-semibold tracking-[0.06em] text-clay-dim uppercase">
                 ✓ {applied.count}{" "}
                 {applied.count === 1
                   ? "cambio aplicado al plan"

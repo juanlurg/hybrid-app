@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 /* ──────────────────────────────────────────────────────────────
-   Bloques — Foco.
-   One thing lit per screen, the engine folded behind a line.
-   Dark and light are peers: the palette flips, the hierarchy does
-   not. Chakra Petch carries labels and numbers, Barlow the prose.
+   Bloques v2 — the notebook.
+   Warm paper, clay for strength, slate for running, and one dark
+   panel per screen for the thing that matters right now. Plus
+   Jakarta Sans throughout; cards float on soft warm shadows.
    ────────────────────────────────────────────────────────────── */
 
 /*
@@ -25,45 +25,59 @@
   --color-hairline: var(--hairline);
 
   --color-ink: var(--ink);
+  --color-body: var(--body);
   --color-mid: var(--mid);
   --color-faint: var(--faint);
   --color-ghost: var(--ghost);
 
-  /* `strength` is the lit surface — the same lime in both themes.
-     `lime` is that green used as ink, which light has to darken. */
+  /* `strength` is the clay fill; `clay` is that colour used as ink. */
   --color-strength: var(--strength);
   --color-on-strength: var(--on-strength);
-  --color-lime: var(--lime);
-  --color-lime-line: var(--lime-line);
-  --color-lime-soft: var(--lime-soft);
-  --color-lime-edge: var(--lime-edge);
-  --color-lime-dim: var(--lime-dim);
+  --color-clay: var(--clay);
+  --color-clay-line: var(--clay-line);
+  --color-clay-soft: var(--clay-soft);
+  --color-clay-edge: var(--clay-edge);
+  --color-clay-dim: var(--clay-dim);
   --color-run: var(--run);
   --color-on-run: var(--on-run);
+  --color-run-soft: var(--run-soft);
+  --color-run-mist: var(--run-mist);
   --color-quiet: var(--quiet);
 
-  --color-ok: var(--lime);
-  --color-ok-bright: var(--lime-line);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-bright: var(--ok-bright);
   --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-dot: var(--warn-dot);
   --color-fail: var(--fail);
+  --color-fail-soft: var(--fail-soft);
   --color-tint: var(--tint);
 
   /* The panel is dark in both themes, so what sits on it is fixed. */
-  --color-warn-panel: #e8c65a;
-  --color-fail-panel: #f08a7a;
+  --color-clay-panel: #e39b78;
+  --color-warn-panel: #f8c07a;
+  --color-fail-panel: #f0a08f;
+  --color-ink-2: rgb(255 255 255 / 0.12);
+  --color-ink-3: rgb(255 255 255 / 0.66);
 
-  --color-ink-2: var(--ink-2);
-  --color-ink-3: var(--ink-3);
+  --font-display: var(--font-jakarta), system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
 
-  --font-display: var(--font-chakra), system-ui, sans-serif;
-  --font-sans: var(--font-barlow), system-ui, sans-serif;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
 
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 14px;
-  --radius-2xl: 18px;
-  --radius-3xl: 22px;
+  /* Warm, low shadows: cards sit on the paper rather than inside a box. */
+  --shadow-card: var(--sh-card);
+  --shadow-raised: var(--sh-raised);
+  --shadow-panel: var(--sh-panel);
+  --shadow-cta: var(--sh-cta);
+  --shadow-cta-run: var(--sh-cta-run);
+  --shadow-float: var(--sh-float);
 }
 
 /*
@@ -82,84 +96,112 @@
     color-scheme: light;
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-    --bg: #f2f4ef;
-    --surface: #ffffff;
-    --soft: #eef2e8;
-    --sunk: #f7f9f3;
-    --chrome: #ffffff;
-    --panel: #171b16;
-    --on-panel: #eef2ec;
+    --bg: #f2e9e3;
+    --surface: #fdfaf7;
+    --soft: #f2e9e3;
+    --sunk: #f8f1ec;
+    --chrome: #fdfaf7;
+    --panel: #3d3e40;
+    --on-panel: #ffffff;
 
-    --edge: #dde3da;
-    --line: #e2e7df;
-    --hairline: #cfd8ca;
+    --edge: #e7dad1;
+    --line: #efe6df;
+    --hairline: #d9c8bc;
 
-    --ink: #171b16;
-    --mid: #5f6a60;
-    --faint: #6c776d;
-    --ghost: #98a299;
+    --ink: #1f1d1b;
+    --body: #4a423c;
+    --mid: #6b6058;
+    --faint: #75685f;
+    --ghost: #b9a597;
 
-    --strength: #b8ee3c;
-    --on-strength: #10140d;
-    --lime: #4c7d1a;
-    --lime-line: #6cb520;
-    --lime-soft: #e9f5d6;
-    --lime-edge: #9ccc52;
-    /* Lime turned down: sub-labels riding next to a lime figure. Light
-       darkens rather than lightens — `lime` is already dark here, so the
-       quieter green has to go under it, not over it, to stay legible. */
-    --lime-dim: #55702f;
-    --run: #1f7f96;
-    --on-run: #eef2ec;
-    --quiet: #dde3d2;
+    --strength: #c25e33;
+    --on-strength: #ffffff;
+    --clay: #b4522b;
+    --clay-line: #c25e33;
+    --clay-soft: #fbefe8;
+    --clay-edge: #efc3ae;
+    --clay-dim: #92411f;
+    --run: #3f6e86;
+    --on-run: #ffffff;
+    --run-soft: #e3ecf0;
+    --run-mist: #a9c3cf;
+    --quiet: #e7dad1;
 
-    --warn: #8a5d00;
-    --fail: #b4382a;
-    --tint: #f8f1e2;
+    --ok: #4e7a52;
+    --ok-soft: #e7efe4;
+    --ok-bright: #5f8f63;
+    --warn: #92411f;
+    --warn-soft: #fdf0dc;
+    --warn-dot: #e88c22;
+    --fail: #b23a2b;
+    --fail-soft: #f8e3df;
+    --tint: #fbf3e6;
 
-    --ink-2: #2b302c;
-    --ink-3: #7d867e;
+    --sh-card: 0 6px 18px -6px rgb(74 45 30 / 0.16),
+      0 1px 3px rgb(74 45 30 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.7);
+    --sh-raised: 0 2px 6px rgb(74 45 30 / 0.07);
+    --sh-panel: 0 12px 30px -10px rgb(20 16 14 / 0.38),
+      inset 0 1px 0 rgb(255 255 255 / 0.08);
+    --sh-cta: 0 12px 24px -8px rgb(140 60 25 / 0.45),
+      0 3px 8px rgb(140 60 25 / 0.24);
+    --sh-cta-run: 0 12px 24px -8px rgb(40 78 98 / 0.45),
+      0 3px 8px rgb(40 78 98 / 0.24);
+    --sh-float: 0 12px 30px -10px rgb(74 45 30 / 0.22),
+      0 2px 6px rgb(74 45 30 / 0.08);
   }
 
   [data-theme="dark"] {
     color-scheme: dark;
 
-    --bg: #0f1210;
-    --surface: #171b18;
-    --soft: #22271f;
-    --sunk: #131711;
-    --chrome: #131714;
-    /* In the dark theme the engine's box is just a card; only light
-       has to invert to keep that voice distinct from the page. */
-    --panel: #171b18;
-    --on-panel: #eef2ec;
+    --bg: #1c1917;
+    --surface: #27221f;
+    --soft: #322c28;
+    --sunk: #2c2622;
+    --chrome: #27221f;
+    --panel: #3d3e40;
+    --on-panel: #ffffff;
 
-    --edge: #262b27;
-    --line: #232824;
-    --hairline: #3a403b;
+    --edge: #3a332f;
+    --line: #322c28;
+    --hairline: #4d443e;
 
-    --ink: #eef2ec;
-    --mid: #9aa39b;
-    --faint: #7a847b;
-    --ghost: #5d665e;
+    --ink: #f2e9e3;
+    --body: #d6cbc3;
+    --mid: #b3a59b;
+    --faint: #a39488;
+    --ghost: #6e625a;
 
-    --strength: #b8ee3c;
-    --on-strength: #10140d;
-    --lime: #b8ee3c;
-    --lime-line: #b8ee3c;
-    --lime-soft: #1c2b12;
-    --lime-edge: #4d7c1e;
-    --lime-dim: #7fa14a;
-    --run: #6fd3e8;
-    --on-run: #10140d;
-    --quiet: #2b302c;
+    --strength: #c25e33;
+    --on-strength: #ffffff;
+    --clay: #e8936b;
+    --clay-line: #d76e3f;
+    --clay-soft: #3a2519;
+    --clay-edge: #7a3d22;
+    --clay-dim: #e39b78;
+    --run: #7fb0c8;
+    --on-run: #10161a;
+    --run-soft: #1f2d35;
+    --run-mist: #3f6e86;
+    --quiet: #3a332f;
 
-    --warn: #e8c65a;
+    --ok: #8dbf8f;
+    --ok-soft: #22301f;
+    --ok-bright: #8dbf8f;
+    --warn: #f0b866;
+    --warn-soft: #3a2a14;
+    --warn-dot: #e88c22;
     --fail: #f08a7a;
-    --tint: #241f14;
+    --fail-soft: #3d1f1a;
+    --tint: #2e2619;
 
-    --ink-2: #2b302c;
-    --ink-3: #5d665e;
+    --sh-card: 0 6px 18px -6px rgb(0 0 0 / 0.5), 0 1px 3px rgb(0 0 0 / 0.3);
+    --sh-raised: 0 2px 6px rgb(0 0 0 / 0.3);
+    --sh-panel: 0 12px 30px -10px rgb(0 0 0 / 0.6),
+      inset 0 1px 0 rgb(255 255 255 / 0.08);
+    --sh-cta: 0 12px 24px -8px rgb(0 0 0 / 0.6);
+    --sh-cta-run: 0 12px 24px -8px rgb(0 0 0 / 0.6);
+    --sh-float: 0 12px 30px -10px rgb(0 0 0 / 0.6),
+      0 2px 6px rgb(0 0 0 / 0.3);
   }
 
   html,
@@ -171,7 +213,7 @@
     margin: 0;
     background: var(--bg);
     color: var(--ink);
-    font-family: var(--font-barlow), system-ui, sans-serif;
+    font-family: var(--font-jakarta), system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     overscroll-behavior-y: none;
   }
@@ -191,9 +233,8 @@
   height: 0;
 }
 
-/* Numbers are the display face, and they line up. */
+/* Numbers line up. */
 .num {
-  font-family: var(--font-chakra), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -217,6 +258,15 @@
   }
 }
 
+@keyframes bloques-sheet {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
 @keyframes bloques-rise {
   from {
     transform: translateY(12px);
@@ -237,17 +287,21 @@
 .animate-rise {
   animation: bloques-rise 0.18s ease-out;
 }
+.animate-sheet {
+  animation: bloques-sheet 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-block,
   .animate-flash,
-  .animate-rise {
+  .animate-rise,
+  .animate-sheet {
     animation: none;
   }
 }
 
-/* Focus rings: a hard offset ring, never a glow. */
+/* Focus rings: an offset clay ring, never a glow. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--lime-line);
+  outline: 2px solid var(--clay-line);
   outline-offset: 2px;
 }

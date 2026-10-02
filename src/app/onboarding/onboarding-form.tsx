@@ -63,7 +63,7 @@ export function OnboardingForm({
               className={cn(
                 "rounded-lg px-4 py-4 text-left",
                 selected === t.slug
-                  ? "border-[1.5px] border-lime-line bg-lime-soft"
+                  ? "border-[1.5px] border-clay-line bg-clay-soft"
                   : "border border-line bg-surface",
               )}
             >
@@ -75,7 +75,7 @@ export function OnboardingForm({
                   className={cn(
                     "h-4 w-4 flex-none rounded-full border",
                     selected === t.slug
-                      ? "border-lime-line bg-strength"
+                      ? "border-clay-line bg-strength"
                       : "border-hairline",
                   )}
                 />

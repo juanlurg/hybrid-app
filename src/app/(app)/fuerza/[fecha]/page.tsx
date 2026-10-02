@@ -1,6 +1,7 @@
+import { BatteryLow } from "lucide-react";
 import { redirect } from "next/navigation";
 
-import { Callout, Footnote, LinkBar, TopBar } from "@/components/ui/kit";
+import { Footnote, LinkBar, Note, TopBar } from "@/components/ui/kit";
 import { GROUP_LABEL } from "@/components/day-accents";
 import {
   SkipDayButton,
@@ -9,7 +10,7 @@ import {
 import { StrengthDay } from "@/components/strength-day";
 import { requireAthlete } from "@/lib/data/athlete";
 import {
-  formatDayLong,
+  formatDayFull,
   placeDate,
   sameWeek,
   type IsoDate,
@@ -78,24 +79,37 @@ export default async function FuerzaPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TopBar title={day.title} href="/semana" right={formatDayLong(day.date)} />
+      <TopBar title={formatDayFull(day.date)} href="/semana" />
 
-      <div className="flex-1 overflow-auto pt-2 pb-4">
+      <div className="no-scrollbar flex-1 overflow-auto pt-2 pb-4">
+        <div className="px-5 pb-4">
+          <h1 className="text-[30px] leading-[1.1] font-extrabold tracking-[-0.02em]">
+            {day.title}
+          </h1>
+          {day.subtitle ? (
+            <p className="mt-1.5 text-[14px] leading-[1.45] font-medium text-body">
+              {day.subtitle}
+            </p>
+          ) : null}
+        </div>
         <StrengthDay
           day={day}
-          eyebrow={`Básico · ${phase.name} · semana ${placement.week}`}
+          eyebrow={`Básico del día · semana ${placement.week}`}
           targetRir={ctx.profile.target_rir}
           showPlates={ctx.profile.show_plate_breakdown}
-        />
-
-        {day.isDeload ? (
-          <div className="mt-3.5 px-5">
-            <Callout eyebrow="Semana de descarga">
+        >
+          {day.isDeload ? (
+            <Note
+              className="mx-5 mt-3"
+              tone="quiet"
+              icon={<BatteryLow size={18} />}
+              title="Semana de descarga"
+            >
               Mitad de series y pesos más bajos, a propósito. El objetivo es
               llegar fresco a la semana siguiente.
-            </Callout>
-          </div>
-        ) : null}
+            </Note>
+          ) : null}
+        </StrengthDay>
 
         {future ? (
           <Footnote>
@@ -118,10 +132,11 @@ export default async function FuerzaPage({
           Ver resumen
         </LinkBar>
       ) : startable ? (
-        <>
-          <div className="flex flex-none justify-center">
-            <SkipDayButton
-              day={{
+        <div className="flex flex-none gap-2.5 px-4 pt-3 pb-3">
+          <SkipDayButton
+            pill
+            label="Saltar"
+            day={{
                 phaseId: phase.id,
                 slotId: slot.id,
                 scheduledOn: day.date,
@@ -131,9 +146,9 @@ export default async function FuerzaPage({
                 title: day.title,
                 group: day.group,
               }}
-            />
-          </div>
+          />
           <StartSessionButton
+            className="min-w-0 flex-1 p-0"
             day={{
               phaseId: phase.id,
               slotId: slot.id,
@@ -150,7 +165,7 @@ export default async function FuerzaPage({
               day.date === today ? GROUP_LABEL[day.group] : "Entrenar esta hoy"
             }
           />
-        </>
+        </div>
       ) : null}
     </div>
   );

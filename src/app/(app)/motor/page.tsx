@@ -248,7 +248,7 @@ export default async function MotorPage({
         {/* ── where this week's number comes from ──────────────── */}
         <div className="px-5 pt-4">
           <Card>
-            <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
+            <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-clay uppercase">
               {liftRow.name} · esta semana
             </div>
 
@@ -269,7 +269,7 @@ export default async function MotorPage({
               <span className="font-display flex-1 text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
                 Peso de trabajo
               </span>
-              <span className="num flex-none text-[28px] leading-none font-bold tracking-[-0.02em] text-lime">
+              <span className="num flex-none text-[28px] leading-none font-bold tracking-[-0.02em] text-clay">
                 {formatWeight(currentKg)}
                 <span className="text-[13px] font-semibold uppercase"> kg</span>
               </span>
@@ -304,7 +304,7 @@ export default async function MotorPage({
                       failed
                         ? "bg-fail"
                         : isNow
-                          ? "bg-lime-line"
+                          ? "bg-clay-line"
                           : deloadFlags[i]
                             ? // `soft` is white-on-white against the card in
                               // the light theme; `quiet` still reads as dimmer.

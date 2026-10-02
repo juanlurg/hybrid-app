@@ -5,6 +5,7 @@ import {
   dateForPhaseDay,
   dayIndexOf,
   daysBetween,
+  formatDayFull,
   formatDayLong,
   formatSeasonRange,
   phaseEnd,
@@ -59,6 +60,7 @@ describe("date maths", () => {
 
   it("formats the way the screens do", () => {
     expect(formatDayLong("2026-10-14")).toBe("MIÉ 14 OCT");
+    expect(formatDayFull("2026-10-02")).toBe("Viernes, 2 de octubre");
     expect(formatSeasonRange("2026-07-27", "2027-04-25")).toBe("jul 26 → abr 27");
   });
 });

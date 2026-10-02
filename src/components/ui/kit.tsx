@@ -1,12 +1,13 @@
 /**
- * The Bloques kit — Foco.
+ * The Bloques kit — the notebook.
  *
- * One thing is lit per screen and everything else recedes into cards on
- * the page colour. Chakra Petch carries labels, numbers and actions;
- * Barlow carries prose. Every screen is built from these so the "one
- * lit thing" property survives contact with real data.
+ * Warm paper, cards that float on soft shadows, one dark panel per screen
+ * for the thing that matters now. Plus Jakarta Sans throughout. Every
+ * screen is built from these so the "one lit thing" property survives
+ * contact with real data.
  */
 
+import { ChevronDown, ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
 
@@ -24,12 +25,12 @@ export function SectionLabel({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-baseline gap-3 px-5 pt-5", className)}>
-      <span className="font-display flex-1 text-[12px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
+    <div className={cn("flex items-baseline gap-2 px-5 pt-6", className)}>
+      <span className="flex-1 text-[17px] leading-tight font-extrabold tracking-[-0.01em] text-ink">
         {children}
       </span>
       {right ? (
-        <span className="text-[12.5px] leading-none font-normal text-faint">
+        <span className="text-[13px] leading-none font-semibold text-mid">
           {right}
         </span>
       ) : null}
@@ -55,20 +56,22 @@ export function ScreenHeader({
 }) {
   return (
     <header className={cn("flex-none px-5 pt-6 pb-1", className)}>
-      <div className="flex items-center gap-3">
+      <div className="flex min-h-[30px] items-center gap-3">
         {/* Ellipsis, not a second line: `right` is often a control. */}
-        <span className="font-display min-w-0 flex-1 truncate text-[12px] leading-none font-semibold tracking-[0.12em] text-mid uppercase">
+        <span className="min-w-0 flex-1 truncate text-[11px] leading-none font-bold tracking-[0.13em] text-clay uppercase">
           {eyebrow}
         </span>
         {right}
       </div>
       {title ? (
-        <h1 className="font-display mt-2.5 text-[26px] leading-[1.1] font-bold">
+        <h1 className="mt-2 text-[32px] leading-[1.1] font-extrabold tracking-[-0.02em]">
           {title}
         </h1>
       ) : null}
       {subtitle ? (
-        <p className="mt-1 text-[13px] leading-[1.45] text-mid">{subtitle}</p>
+        <p className="mt-1.5 text-[14px] leading-[1.45] font-medium text-body">
+          {subtitle}
+        </p>
       ) : null}
       {children}
     </header>
@@ -87,15 +90,11 @@ export function TopBar({
   right?: ReactNode;
   onBack?: () => void;
 }) {
-  const arrow = (
-    <span aria-hidden className="text-[19px] leading-none text-mid">
-      ←
-    </span>
-  );
-  // The glyph is 19px; the target around it is a thumb.
-  const hit = "-m-3 flex h-11 w-11 flex-none items-center justify-center";
+  const arrow = <ChevronLeft aria-hidden size={18} strokeWidth={2.25} />;
+  const hit =
+    "flex h-10 w-10 flex-none items-center justify-center rounded-full bg-surface text-ink shadow-raised";
   return (
-    <div className="flex flex-none items-center gap-3 px-5 pt-6 pb-2">
+    <div className="flex flex-none items-center gap-3 px-4 pt-4 pb-2">
       {href ? (
         <Link href={href} aria-label="Volver" className={cn(hit, "cursor-pointer")}>
           {arrow}
@@ -105,14 +104,13 @@ export function TopBar({
           {arrow}
         </button>
       )}
-      <span className="font-display min-w-0 flex-1 truncate text-[13px] leading-none font-bold tracking-[0.1em] uppercase">
+      <span className="min-w-0 flex-1 truncate text-center text-[15px] leading-tight font-extrabold">
         {title}
       </span>
-      {right ? (
-        <span className="font-display flex-none text-[12px] leading-none text-mid">
-          {right}
-        </span>
-      ) : null}
+      {/* Keeps the title centred when there is nothing on the right. */}
+      <span className="flex min-w-10 flex-none justify-end text-[12.5px] leading-none font-semibold text-mid">
+        {right}
+      </span>
     </div>
   );
 }
@@ -128,7 +126,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-edge bg-surface px-5 py-5",
+        "rounded-3xl bg-surface px-5 py-5 shadow-card",
         className,
       )}
       {...rest}
@@ -149,7 +147,7 @@ export function Framed({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-edge bg-surface px-4 py-3.5",
+        "rounded-2xl bg-surface px-4 py-3.5 shadow-card",
         className,
       )}
     >
@@ -176,27 +174,26 @@ export function Fold({
   return (
     <details
       className={cn(
-        "group mx-5 rounded-xl border border-edge bg-surface",
+        "group mx-5 rounded-2xl bg-surface shadow-card",
         className,
       )}
     >
-      <summary className="flex min-h-12 list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 px-4 py-3.5 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 flex-1">
-          <span className="font-display block text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
+          <span className="block text-[15px] leading-tight font-bold">
             {title}
           </span>
-          <span className="mt-1 block text-[12.5px] leading-[1.35] text-mid">
+          <span className="mt-1 block text-[12.5px] leading-[1.35] font-medium text-mid">
             {summary}
           </span>
         </span>
-        <span
+        <ChevronDown
           aria-hidden
-          className="font-display flex-none text-[14px] leading-none text-mid transition-transform group-open:rotate-45"
-        >
-          ＋
-        </span>
+          size={18}
+          className="flex-none text-faint transition-transform group-open:rotate-180"
+        />
       </summary>
-      <div className="rounded-b-xl border-t border-line bg-sunk px-4 pt-3.5 pb-4">
+      <div className="rounded-b-2xl border-t border-line px-4 pt-3.5 pb-4">
         {children}
       </div>
     </details>
@@ -222,19 +219,19 @@ export function HeroNumber({
     <div className="mt-2 flex items-baseline gap-2.5">
       <span
         className={cn(
-          "num font-bold tracking-[-0.02em] text-lime",
+          "num font-extrabold tracking-[-0.04em] text-clay",
           size === "lg"
-            ? "text-[88px] leading-[0.95] sm:text-[108px]"
+            ? "text-[88px] leading-[0.9] sm:text-[104px]"
             : "text-[62px] leading-[0.95]",
         )}
       >
         {value}
       </span>
-      <span className="num text-[19px] leading-none font-semibold text-mid uppercase">
+      <span className="text-[20px] leading-none font-bold text-mid">
         {unit}
       </span>
       {lines ? (
-        <span className="ml-auto text-right text-[12.5px] leading-[1.5] text-mid">
+        <span className="ml-auto text-right text-[12.5px] leading-[1.5] font-medium text-mid">
           {lines}
         </span>
       ) : null}
@@ -252,7 +249,7 @@ export function StatGrid({
   return (
     <div
       className={cn(
-        "grid gap-1.5 px-5 pt-3",
+        "grid gap-2 px-5 pt-3",
         columns === 2 && "grid-cols-2",
         columns === 3 && "grid-cols-3",
         columns === 4 && "grid-cols-2 sm:grid-cols-4",
@@ -261,24 +258,24 @@ export function StatGrid({
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-lg border border-line bg-surface px-4 py-3.5"
+          className="rounded-xl bg-surface p-3.5 shadow-raised"
         >
-          <div className="flex items-baseline gap-1.5">
+          <div className="flex items-baseline gap-1">
             <span
               className={cn(
-                "num text-[28px] leading-none font-bold tracking-[-0.02em]",
+                "num text-[26px] leading-none font-extrabold tracking-[-0.02em]",
                 item.tone,
               )}
             >
               {item.value}
             </span>
             {item.unit ? (
-              <span className="text-[12px] leading-none font-medium text-mid">
+              <span className="text-[13px] leading-none font-bold text-mid">
                 {item.unit}
               </span>
             ) : null}
           </div>
-          <div className="font-display mt-2 text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
+          <div className="mt-1.5 text-[12px] leading-[1.3] font-semibold text-mid">
             {item.label}
           </div>
         </div>
@@ -289,7 +286,7 @@ export function StatGrid({
 
 /* ── rows ────────────────────────────────────────────────────── */
 
-/** A stack of cards. The page shows through the gap. */
+/** One card, rows inside it. Rows are padded hit areas, not boxes. */
 export function RowStack({
   children,
   className,
@@ -298,17 +295,21 @@ export function RowStack({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col gap-1.5 px-5", className)}>{children}</div>
+    <div
+      className={cn(
+        "mx-5 flex flex-col gap-0.5 rounded-2xl bg-surface p-1.5 shadow-card",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
 export function Row({ children, className, ...rest }: ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "rounded-lg border border-line bg-surface px-3.5 py-3",
-        className,
-      )}
+      className={cn("rounded-lg px-2.5 py-2.5", className)}
       {...rest}
     >
       {children}
@@ -316,7 +317,7 @@ export function Row({ children, className, ...rest }: ComponentProps<"div">) {
   );
 }
 
-/** Coloured spine + title/subtitle + right-hand figures. */
+/** Coloured tile (icon) or spine + title/subtitle + right-hand figures. */
 export function SessionRow({
   accent,
   title,
@@ -328,9 +329,12 @@ export function SessionRow({
   muted,
   onClick,
   href,
+  icon,
   className,
 }: {
   accent: string;
+  /** Replaces the spine with a tinted tile holding this icon. */
+  icon?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   primary?: ReactNode;
@@ -344,16 +348,28 @@ export function SessionRow({
 }) {
   const body = (
     <div className="flex w-full items-center gap-3 text-left">
-      <div
-        className="h-8 w-[3px] flex-none rounded-full"
-        style={{ background: accent }}
-      />
+      {icon ? (
+        <span
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-md"
+          style={{
+            color: accent,
+            background: `color-mix(in srgb, ${accent} 14%, var(--surface))`,
+          }}
+        >
+          {icon}
+        </span>
+      ) : (
+        <div
+          className="h-8 w-1 flex-none rounded-full"
+          style={{ background: accent }}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span
             className={cn(
-              "truncate text-[15px] leading-[1.2] font-semibold",
-              muted && "text-faint",
+              "truncate text-[15px] leading-[1.25] font-bold",
+              muted && "font-semibold text-mid",
             )}
           >
             {title}
@@ -361,7 +377,7 @@ export function SessionRow({
           {status ? (
             <span
               className={cn(
-                "font-display flex-none text-[11px] leading-none font-semibold tracking-[0.1em]",
+                "flex-none text-[11px] leading-none font-bold",
                 statusTone,
               )}
             >
@@ -372,7 +388,7 @@ export function SessionRow({
         {subtitle ? (
           <div
             className={cn(
-              "mt-0.5 truncate text-[12.5px] leading-[1.35]",
+              "mt-0.5 truncate text-[12.5px] leading-[1.35] font-medium",
               muted ? "text-faint" : "text-mid",
             )}
           >
@@ -385,7 +401,7 @@ export function SessionRow({
           {primary ? (
             <div
               className={cn(
-                "num text-[14px] leading-none font-semibold",
+                "num text-[15px] leading-none font-bold",
                 muted && "text-faint",
               )}
             >
@@ -408,7 +424,7 @@ export function SessionRow({
   );
 
   const classes = cn(
-    "block rounded-xl border border-line bg-surface px-3.5 py-3",
+    "block rounded-lg px-2.5 py-2.5",
     className,
   );
   if (href) {
@@ -440,10 +456,10 @@ export function Chip({
     <button
       type="button"
       className={cn(
-        "font-display rounded-sm border px-2.5 py-2 text-[12px] leading-none font-semibold",
+        "rounded-full px-3.5 py-2.5 text-[13px] leading-none font-bold",
         active
-          ? "border-transparent bg-strength text-on-strength"
-          : "border-edge bg-soft text-ink",
+          ? "bg-strength text-on-strength"
+          : "bg-soft text-ink",
         className,
       )}
       {...rest}
@@ -464,7 +480,7 @@ export function Tag({
   return (
     <span
       className={cn(
-        "font-display rounded-sm border border-edge bg-soft px-2.5 py-[7px] text-[12px] leading-none font-semibold",
+        "flex h-8 items-center rounded-full bg-soft px-3 text-[13px] leading-none font-bold",
         className,
       )}
     >
@@ -488,7 +504,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cn(
-        "flex gap-1 rounded-md border border-edge bg-soft p-1",
+        "flex gap-1 rounded-full bg-soft p-1",
         className,
       )}
     >
@@ -498,7 +514,7 @@ export function Segmented<T extends string>({
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "font-display flex-1 rounded-sm px-1 py-2.5 text-[11px] leading-none font-semibold tracking-[0.08em] uppercase",
+            "flex-1 rounded-full px-1 py-2.5 text-[13px] leading-none font-bold",
             value === o.value
               ? "bg-strength text-on-strength"
               : "bg-transparent text-mid",
@@ -525,7 +541,7 @@ export function Stepper({
   compact?: boolean;
 }) {
   const button =
-    "flex h-8 w-8 items-center justify-center rounded-sm border border-edge bg-surface text-[15px] leading-none text-mid";
+    "flex h-9 w-9 items-center justify-center rounded-full bg-soft text-[17px] leading-none font-bold text-ink";
   return (
     <div className="flex flex-none items-center gap-1">
       <button
@@ -538,7 +554,7 @@ export function Stepper({
       </button>
       <div
         className={cn(
-          "num flex h-8 items-center justify-center rounded-sm border border-edge bg-surface px-2.5 text-[14px] leading-none font-semibold",
+          "num flex h-9 items-center justify-center px-1.5 text-[15px] leading-none font-extrabold",
           compact ? "min-w-8" : "min-w-[58px]",
         )}
       >
@@ -573,14 +589,14 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        "flex h-[26px] w-12 flex-none items-center rounded-full border p-0.5 transition-colors",
-        checked ? "border-transparent bg-strength" : "border-edge bg-soft",
+        "flex h-7 w-12 flex-none items-center rounded-full p-0.5 transition-colors",
+        checked ? "bg-strength" : "bg-quiet",
       )}
     >
       <span
         className={cn(
-          "h-[18px] w-[18px] rounded-full transition-[margin] duration-100",
-          checked ? "ml-[22px] bg-on-strength" : "ml-0 bg-hairline",
+          "h-6 w-6 rounded-full bg-surface shadow-raised transition-[margin] duration-100",
+          checked ? "ml-5" : "ml-0",
         )}
       />
     </button>
@@ -590,14 +606,14 @@ export function Toggle({
 /* ── actions ─────────────────────────────────────────────────── */
 
 const BAR =
-  "font-display flex h-15 w-full items-center justify-center gap-3 rounded-xl text-[16px] leading-none font-bold tracking-[0.06em] uppercase active:opacity-85 disabled:opacity-40";
+  "flex h-14 w-full items-center justify-center gap-2.5 rounded-xl text-[16px] leading-none font-bold active:opacity-85 disabled:opacity-40 disabled:shadow-none";
 
 function barTone(tone: "ink" | "strength" | "run") {
   return tone === "strength"
-    ? "bg-strength text-on-strength"
+    ? "bg-strength text-on-strength shadow-cta"
     : tone === "run"
-      ? "bg-run text-on-run"
-      : "bg-panel text-on-panel";
+      ? "bg-run text-on-run shadow-cta-run"
+      : "bg-panel text-on-panel shadow-panel";
 }
 
 /** The action at the bottom of a screen. Inset, not full-bleed. */
@@ -608,7 +624,7 @@ export function ActionBar({
   ...rest
 }: ComponentProps<"button"> & { tone?: "ink" | "strength" | "run" }) {
   return (
-    <div className={cn("flex-none px-5 pt-3.5 pb-3", className)}>
+    <div className={cn("flex-none px-4 pt-3.5 pb-3", className)}>
       <button type="button" className={cn(BAR, barTone(tone))} {...rest}>
         {children}
       </button>
@@ -628,7 +644,7 @@ export function LinkBar({
   className?: string;
 }) {
   return (
-    <div className={cn("flex-none px-5 pt-3.5 pb-3", className)}>
+    <div className={cn("flex-none px-4 pt-3.5 pb-3", className)}>
       <Link href={href} className={cn(BAR, barTone(tone))}>
         {children}
       </Link>
@@ -638,10 +654,10 @@ export function LinkBar({
 
 /* ── notes ───────────────────────────────────────────────────── */
 
-/** The engine talking. In light it inverts; in dark it is a card. */
+/** The engine talking: the dark panel, a coloured eyebrow. */
 export function Callout({
   eyebrow,
-  eyebrowTone = "text-warn-panel",
+  eyebrowTone = "text-clay-panel",
   children,
   action,
   className,
@@ -655,14 +671,14 @@ export function Callout({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-edge bg-panel px-4 py-3.5 text-on-panel",
+        "rounded-3xl bg-panel px-5 py-4 text-on-panel shadow-panel",
         className,
       )}
     >
       <div className="flex items-baseline gap-2">
         <span
           className={cn(
-            "font-display text-[11px] leading-none font-semibold tracking-[0.14em] uppercase",
+            "text-[11px] leading-none font-bold tracking-[0.13em] uppercase",
             eyebrowTone,
           )}
         >
@@ -670,8 +686,63 @@ export function Callout({
         </span>
         {action ? <span className="ml-auto">{action}</span> : null}
       </div>
-      <div className="mt-2 text-[13px] leading-[1.5] opacity-85">
+      <div className="mt-2 text-[13px] leading-[1.5] font-medium text-white/75">
         {children}
+      </div>
+    </div>
+  );
+}
+
+const NOTE_TONE = {
+  warn: "bg-warn-soft text-clay-dim",
+  clay: "bg-clay-soft text-clay",
+  run: "bg-run-soft text-run",
+  quiet: "bg-quiet text-mid",
+} as const;
+
+/** A note on the page: a tinted icon tile, a bold line, one sentence. */
+export function Note({
+  icon,
+  tone = "warn",
+  title,
+  children,
+  action,
+  className,
+}: {
+  icon: ReactNode;
+  tone?: keyof typeof NOTE_TONE;
+  title: ReactNode;
+  children?: ReactNode;
+  action?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-2xl bg-surface px-4 py-3.5 shadow-card",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-9 w-9 flex-none items-center justify-center rounded-md",
+          NOTE_TONE[tone],
+        )}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <span className="flex-1 text-[14px] leading-[1.3] font-bold">
+            {title}
+          </span>
+          {action}
+        </div>
+        {children ? (
+          <div className="mt-1 text-[13px] leading-[1.45] font-medium text-mid">
+            {children}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -692,7 +763,7 @@ export function RuleNote({
       className="rounded-r-sm border-l-[4px] py-0.5 pl-3"
       style={{ borderColor: tone }}
     >
-      <div className="font-display text-[11.5px] leading-[1.2] font-bold tracking-[0.05em] uppercase">
+      <div className="text-[14px] leading-[1.3] font-bold">
         {title}
       </div>
       {children ? (
@@ -706,7 +777,7 @@ export function RuleNote({
 
 export function Footnote({ children }: { children: ReactNode }) {
   return (
-    <p className="px-5 py-4 text-[12.5px] leading-[1.5] text-faint">
+    <p className="px-6 py-4 text-[12.5px] leading-[1.5] font-medium text-mid">
       {children}
     </p>
   );
