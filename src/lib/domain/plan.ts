@@ -11,6 +11,7 @@ import {
   isDeloadWeek,
   loadableWeight,
   plateBreakdown,
+  repsForWeek,
   roundToStep,
   setsForWeek,
   workingWeight,
@@ -100,6 +101,7 @@ export function engineConfigFrom(
   const bells = (profile.kettlebells_kg ?? []).map(Number).filter((n) => n > 0);
   return {
     wave: wave.length ? wave : [0.75, 0.8, 0.85, 0.7],
+    waveReps: [],
     cycleWeeks: program.cycle_weeks || 4,
     incLowerKg: Number(profile.inc_lower_kg ?? 5),
     incUpperKg: Number(profile.inc_upper_kg ?? 2.5),
@@ -128,9 +130,16 @@ export function phaseEngineConfig(
 ): EngineConfig {
   const phaseWave = (phase.wave ?? []).map(Number).filter((n) => n > 0);
   const mode = (phase.progression_mode ?? "wave") as ProgressionMode;
+  // jsonb [[min, max] | null, …], parallel to the wave.
+  const waveReps = Array.isArray(phase.wave_reps)
+    ? phase.wave_reps.map((step) =>
+        Array.isArray(step) ? ([Number(step[0]), Number(step[1])] as const) : null,
+      )
+    : [];
   return {
     ...config,
     wave: phaseWave.length ? phaseWave : config.wave,
+    waveReps,
     cycleWeeks: phase.cycle_weeks || config.cycleWeeks,
     progressionMode: mode,
     pctOfRm: phase.pct_of_rm == null ? null : Number(phase.pct_of_rm),
@@ -233,6 +242,17 @@ export function estimateMinutes(totalSets: number): number {
   return totalSets === 0 ? 0 : Math.round(totalSets * 3.1 + 12);
 }
 
+/** A row's rep range on `week`: the basic follows its wave step. */
+export function repRangeFor(
+  row: ProgramExerciseRow,
+  week: number,
+  config: EngineConfig,
+): readonly [number, number] {
+  return row.is_primary
+    ? repsForWeek(row.rep_min, row.rep_max, week, config)
+    : [row.rep_min, row.rep_max];
+}
+
 export function resolveExercise(
   row: ProgramExerciseRow,
   week: number,
@@ -241,6 +261,7 @@ export function resolveExercise(
 ): ResolvedExercise {
   const plannedSets = row.sets;
   const sets = setsForWeek(plannedSets, week, config);
+  const [repMin, repMax] = repRangeFor(row, week, config);
 
   const equipment = (row.equipment ?? null) as Equipment | null;
 
@@ -277,10 +298,10 @@ export function resolveExercise(
     tag: row.tag ?? "",
     sets,
     plannedSets,
-    repMin: row.rep_min,
-    repMax: row.rep_max,
-    repsLabel: repsLabel(row.rep_min, row.rep_max),
-    schemeLabel: `${sets} × ${repsLabel(row.rep_min, row.rep_max)}${
+    repMin,
+    repMax,
+    repsLabel: repsLabel(repMin, repMax),
+    schemeLabel: `${sets} × ${repsLabel(repMin, repMax)}${
       row.effort === "seconds" ? "″" : ""
     }`,
     restSeconds: row.rest_seconds,

@@ -24,9 +24,11 @@ import {
   workingWeightKg,
   DEFAULT_ENGINE_CONFIG,
   formatWeight,
+  repsForWeek,
 } from "../src/lib/engine";
 import { parseStructure } from "../src/lib/engine/run";
 import { addDays } from "../src/lib/domain/calendar";
+import { phaseEngineConfig } from "../src/lib/domain/plan";
 
 /* ── env ─────────────────────────────────────────────────────── */
 
@@ -246,7 +248,7 @@ async function main() {
       {
         p_display_name: "Atleta A",
         p_template_slug: "plan-maestro-hibrido",
-        p_starts_on: "2026-08-17",
+        p_starts_on: "2026-09-28",
         p_lthr: 168,
       },
     );
@@ -259,8 +261,8 @@ async function main() {
       .order("position");
     check("the clone has 4 phases", phasesA?.length === 4);
     check(
-      "F2 starts on 14 Sep 2026, as the plan says",
-      phasesA?.find((p) => p.key === "F2")?.starts_on === "2026-09-14",
+      "F2 starts on 26 Oct 2026, as the plan says",
+      phasesA?.find((p) => p.key === "F2")?.starts_on === "2026-10-26",
       phasesA?.find((p) => p.key === "F2")?.starts_on,
     );
 
@@ -275,7 +277,7 @@ async function main() {
 
     const { data: exercisesA } = await a.client
       .from("program_exercises")
-      .select("id, name, is_primary, slot_id, position, rep_min, lift_key")
+      .select("id, name, is_primary, slot_id, position, rep_min, rep_max, lift_key")
       .in(
         "slot_id",
         (
@@ -395,9 +397,17 @@ async function main() {
       .single();
     const { data: basicPhase } = await a.client
       .from("program_phases")
-      .select("id, starts_on")
+      .select("*")
       .eq("id", basicSlot!.phase_id)
       .single();
+    // The 85 % week asks for 3-4: a miss is a set under 3, not under 5.
+    const [repFloor] = repsForWeek(
+      basic!.rep_min,
+      basic!.rep_max,
+      week,
+      phaseEngineConfig(DEFAULT_ENGINE_CONFIG, basicPhase!),
+    );
+    check("the 85 % week drops the basic to 3-4 reps", repFloor === 3, `got ${repFloor}`);
     const { data: basicDay } = await a.client
       .from("program_days")
       .select("day_index")
@@ -473,7 +483,7 @@ async function main() {
     // Flush 1: session start + one missed set. The engine must react.
     const res1 = await postSync(
       envelope({
-        sets: [setEnv(0, basic!.rep_min - 1)],
+        sets: [setEnv(0, repFloor - 1)],
         opKeys: [
           `${localId}:start`,
           `${localId}:set:${basic!.position}:0`,
@@ -510,7 +520,7 @@ async function main() {
       envelope({
         key: null,
         startedAt: null,
-        sets: [setEnv(1, basic!.rep_min + 2)],
+        sets: [setEnv(1, repFloor + 2)],
         finish: { finishedAt: `${scheduledOn}T19:00:00.000Z` },
         opKeys: [
           `${localId}:set:${basic!.position}:1`,
@@ -549,7 +559,7 @@ async function main() {
       envelope({
         key: null,
         startedAt: null,
-        sets: [setEnv(1, basic!.rep_min + 2)],
+        sets: [setEnv(1, repFloor + 2)],
         finish: { finishedAt: `${scheduledOn}T19:00:00.000Z` },
         opKeys: [
           `${localId}:set:${basic!.position}:1`,
@@ -589,7 +599,7 @@ async function main() {
       envelope({
         key: null,
         startedAt: null,
-        sets: [setEnv(0, basic!.rep_min + 1)],
+        sets: [setEnv(0, repFloor + 1)],
         opKeys: [`${localId}:set:${basic!.position}:0`],
       }),
     );

@@ -6,12 +6,18 @@ import {
   isDeloadWeek,
   loadableWeight,
   nextLoadableWeight,
+  repsForWeek,
   setsForWeek,
   waveFactor,
   workingWeight,
   type LiftState,
 } from ".";
-import { phaseEngineConfig, type PhaseRow } from "@/lib/domain/plan";
+import {
+  phaseEngineConfig,
+  repRangeFor,
+  type PhaseRow,
+  type ProgramExerciseRow,
+} from "@/lib/domain/plan";
 
 const squat: LiftState = {
   id: "l1",
@@ -78,6 +84,31 @@ describe("phaseEngineConfig · wave mode", () => {
     );
     expect(waveFactor(3, cfg)).toBe(0.8);
   });
+
+  it("drops the basic to 4×5 and 4×3-4 on F2's 80 and 85 % weeks", () => {
+    // At 85 % a set of 5 is close to failure; the plan asks for 3-4, so a
+    // 4-rep set that week must not read as a range failure.
+    const cfg = phaseEngineConfig(
+      DEFAULT_ENGINE_CONFIG,
+      phase({ wave_reps: [null, [5, 5], [3, 4], null] }),
+    );
+    expect(repsForWeek(5, 6, 1, cfg)).toEqual([5, 6]);
+    expect(repsForWeek(6, 8, 2, cfg)).toEqual([5, 5]);
+    expect(repsForWeek(6, 8, 3, cfg)).toEqual([3, 4]);
+    expect(repsForWeek(5, 6, 4, cfg)).toEqual([5, 6]);
+    // Every cycle repeats the steps: week 7 is the 85 % week again.
+    expect(repsForWeek(5, 6, 7, cfg)).toEqual([3, 4]);
+  });
+
+  it("only the basic follows the step; accessories keep their range", () => {
+    const cfg = phaseEngineConfig(
+      DEFAULT_ENGINE_CONFIG,
+      phase({ wave_reps: [null, [5, 5], [3, 4], null] }),
+    );
+    const row = { is_primary: true, rep_min: 5, rep_max: 6 } as ProgramExerciseRow;
+    expect(repRangeFor(row, 3, cfg)).toEqual([3, 4]);
+    expect(repRangeFor({ ...row, is_primary: false }, 3, cfg)).toEqual([5, 6]);
+  });
 });
 
 describe("phaseEngineConfig · fixed_pct mode", () => {
@@ -98,6 +129,14 @@ describe("phaseEngineConfig · fixed_pct mode", () => {
   it("never halves sets: fixed-% phases have no auto deload", () => {
     const cfg = phaseEngineConfig(DEFAULT_ENGINE_CONFIG, f3);
     expect(setsForWeek(4, 4, cfg)).toBe(4);
+  });
+
+  it("ignores per-step rep ranges: there are no steps", () => {
+    const cfg = phaseEngineConfig(
+      DEFAULT_ENGINE_CONFIG,
+      { ...f3, wave_reps: [null, [5, 5], [3, 4], null] },
+    );
+    expect(repsForWeek(5, 5, 3, cfg)).toEqual([5, 5]);
   });
 
   it("a hold still short-circuits the maths", () => {

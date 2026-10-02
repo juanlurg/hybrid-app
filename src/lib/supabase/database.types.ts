@@ -733,6 +733,7 @@ export type Database = {
           progression_mode: string
           starts_on: string | null
           wave: number[] | null
+          wave_reps: Json | null
           weeks: number
         }
         Insert: {
@@ -750,6 +751,7 @@ export type Database = {
           progression_mode?: string
           starts_on?: string | null
           wave?: number[] | null
+          wave_reps?: Json | null
           weeks: number
         }
         Update: {
@@ -767,6 +769,7 @@ export type Database = {
           progression_mode?: string
           starts_on?: string | null
           wave?: number[] | null
+          wave_reps?: Json | null
           weeks?: number
         }
         Relationships: [

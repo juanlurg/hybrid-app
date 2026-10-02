@@ -174,7 +174,9 @@ installed PWA.
    their real dates, the race does not move.
 6. **The engine speaks phase-local weeks.** Every phase starts at wave[0]
    with its own progression (`program_phases.progression_mode`): F2 waves,
-   F3/F4 hold a fixed %RM. Never feed `absoluteWeek` to the engine.
+   F3/F4 hold a fixed %RM. A wave step can carry the basic's rep range
+   (`wave_reps`, read through `repRangeFor`): F2's 85 % week is 4×3-4, so
+   a 4 there is not a miss. Never feed `absoluteWeek` to the engine.
 7. **One write path for the session.** The runner writes to the local
    queue (IndexedDB) and `/api/sync` replays the engine idempotently
    (`engine_events.dedup_key`). No per-set server actions — ever again.

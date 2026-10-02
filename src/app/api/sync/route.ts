@@ -17,7 +17,11 @@ import {
   replayEngine,
 } from "@/lib/engine/replay";
 import { doubleProgression } from "@/lib/engine/progression";
-import { liftStateFrom, phaseEngineConfig } from "@/lib/domain/plan";
+import {
+  liftStateFrom,
+  phaseEngineConfig,
+  repRangeFor,
+} from "@/lib/domain/plan";
 import { syncRequestSchema } from "@/lib/offline/sync-schema";
 import type { SyncResponse, SyncSessionResult } from "@/lib/offline/queue";
 
@@ -232,7 +236,10 @@ export async function POST(request: Request) {
             rir: s.rir,
             weight_kg: s.weightKg,
             missed_range: exercise
-              ? isRangeFailure(achieved, exercise.rep_min)
+              ? isRangeFailure(
+                  achieved,
+                  repRangeFor(exercise, session.week, phaseConfig)[0],
+                )
               : false,
             logged_at: s.loggedAt,
           };
@@ -333,7 +340,7 @@ export async function POST(request: Request) {
             primary: {
               programExerciseId: primaryRow.id,
               liftKey: primaryRow.lift_key!,
-              repMin: primaryRow.rep_min,
+              repMin: repRangeFor(primaryRow, session.week, phaseConfig)[0],
               sets: setsForWeek(primaryRow.sets, session.week, phaseConfig),
             },
             logs: (dbLogs ?? []).map((l) => ({
