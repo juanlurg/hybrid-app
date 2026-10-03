@@ -186,6 +186,7 @@ export default async function SemanaPage({
       notes: p.notes,
       priority: p.priority,
       weeks: p.weeks,
+      startsLabel: startsOn ? formatDayShort(startsOn) : null,
       rangeLabel: startsOn
         ? formatSeasonRange(
             startsOn,
@@ -429,7 +430,6 @@ export default async function SemanaPage({
           <PhaseBar
             phases={barPhases}
             activeAbsoluteWeek={absoluteWeek}
-            currentWeekOfPhase={week}
           />
           {program.race_on ? (
             <div className="mt-3.5 flex items-center gap-3 border-t border-line pt-3.5">

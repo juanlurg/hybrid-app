@@ -15,6 +15,8 @@ export interface PhaseInfo {
   weeks: number;
   /** "sep – dic" style range, null when the phase has no dates yet. */
   rangeLabel: string | null;
+  /** "28 sep": the caption under its segment, short enough for 4 weeks of 36. */
+  startsLabel: string | null;
   firstAbsoluteWeek: number;
   current: boolean;
 }
@@ -28,13 +30,10 @@ export interface PhaseInfo {
 export function PhaseBar({
   phases,
   activeAbsoluteWeek,
-  currentWeekOfPhase,
 }: {
   phases: PhaseInfo[];
   /** The absolute week the screen is currently showing. */
   activeAbsoluteWeek: number;
-  /** That week, counted inside its own phase. */
-  currentWeekOfPhase: number;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const open = phases.find((p) => p.id === openId) ?? null;
@@ -47,7 +46,8 @@ export function PhaseBar({
           <button
             key={p.id}
             type="button"
-            style={{ flex: p.weeks }}
+            // Proportional, but never so thin a 4-week phase loses its label.
+            style={{ flex: `${p.weeks} 1 0%`, minWidth: 56 }}
             aria-expanded={openId === p.id}
             onClick={() => setOpenId(openId === p.id ? null : p.id)}
             className="flex min-w-0 flex-col gap-1.5"
@@ -66,7 +66,7 @@ export function PhaseBar({
               )}
             >
               <span className="truncate">
-                {p.current ? `${p.key} · ${currentWeekOfPhase}/${p.weeks}` : p.key}
+                {p.key}
               </span>
             </span>
             <span
@@ -75,7 +75,7 @@ export function PhaseBar({
                 p.current ? "font-bold text-clay" : "font-semibold text-mid",
               )}
             >
-              {i < currentIndex ? `${p.weeks} sem` : p.name}
+              {i < currentIndex ? `${p.weeks} sem` : (p.startsLabel ?? p.name)}
             </span>
           </button>
         ))}
