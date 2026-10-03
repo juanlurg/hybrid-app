@@ -202,6 +202,20 @@ export function Fold({
 
 /* ── numbers ─────────────────────────────────────────────────── */
 
+/**
+ * Font size for a lit number that has to fit its box at any length. The
+ * box is an `@container`; the size shrinks with the characters, so
+ * "112,5" sits where "70" does instead of truncating or overlapping.
+ * `reservePx` is what shares the box: the unit and its gap.
+ */
+export function fitFontSize(text: string, maxPx: number, reservePx: number) {
+  // ~0.55 em per digit in the display face at -0.04em tracking.
+  const ems = 0.56 * Math.max(1, text.length);
+  return {
+    fontSize: `min(${maxPx}px, calc((100cqw - ${reservePx}px) / ${ems.toFixed(2)}))`,
+  };
+}
+
 /** The lit number. There is one of these per screen, and only one. */
 export function HeroNumber({
   value,

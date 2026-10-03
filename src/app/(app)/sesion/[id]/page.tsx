@@ -5,6 +5,7 @@ import { requireAthlete } from "@/lib/data/athlete";
 import {
   liftStateFrom,
   phaseEngineConfig,
+  repRangeFor,
   resolveDay,
 } from "@/lib/domain/plan";
 import {
@@ -157,7 +158,7 @@ export default async function SessionPage({
             ? {
                 programExerciseId: primaryRow.id,
                 liftKey: primaryRow.lift_key,
-                repMin: primaryRow.rep_min,
+                repMin: repRangeFor(primaryRow, session.week, phaseConfig)[0],
                 sets: setsForWeek(primaryRow.sets, session.week, phaseConfig),
               }
             : null,

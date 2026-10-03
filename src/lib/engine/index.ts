@@ -157,6 +157,19 @@ export function projectLift(
   );
 }
 
+/** The basic's rep range for a week: its wave step's, or the row's own. */
+export function repsForWeek(
+  repMin: number,
+  repMax: number,
+  week: number,
+  config: EngineConfig = DEFAULT_ENGINE_CONFIG,
+): readonly [number, number] {
+  if (config.progressionMode === "fixed_pct") return [repMin, repMax];
+  return (
+    config.waveReps[weekInCycle(week, config.cycleWeeks)] ?? [repMin, repMax]
+  );
+}
+
 /** Sets prescribed for a week, halved on the deload when auto-deload is on. */
 export function setsForWeek(
   baseSets: number,

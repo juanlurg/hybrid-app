@@ -254,7 +254,7 @@ export default async function HoyPage() {
                 className="h-1.5 w-1.5 rounded-full"
                 style={{ background: accentFor("strength") }}
               />
-              {phase.key} · semana {placement.week} de {phase.weeks}
+              Semana {placement.week} de {phase.weeks}
             </Link>
           )}
         </div>

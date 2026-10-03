@@ -301,32 +301,37 @@ export default async function CarreraPage({
               </p>
             ) : (
               <>
+                {/* The bar is proportional; the labels are not. Z3 is a
+                    sliver of the bar, and its "151–156" has to fit anyway. */}
                 <div className="mt-3.5 flex gap-[3px]">
+                  {zones.map((z) => (
+                    <span
+                      key={z.key}
+                      className="h-3 min-w-0 rounded-md"
+                      style={{
+                        flex: widthPct(z),
+                        background: ZONE_COLOUR[z.key],
+                        boxShadow:
+                          z.key === todayZone
+                            ? `0 0 0 2px var(--surface), 0 0 0 4px ${ZONE_COLOUR[z.key]}`
+                            : undefined,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="mt-2.5 grid grid-cols-5 gap-1">
                   {zones.map((z) => {
                     const lit = z.key === todayZone;
                     return (
-                      <div
-                        key={z.key}
-                        className="flex min-w-0 flex-col gap-1.5"
-                        style={{ flex: widthPct(z) }}
-                      >
+                      <div key={z.key} className="flex flex-col gap-1.5">
                         <span
-                          className="h-3 rounded-md"
-                          style={{
-                            background: ZONE_COLOUR[z.key],
-                            boxShadow: lit
-                              ? `0 0 0 2px var(--surface), 0 0 0 4px ${ZONE_COLOUR[z.key]}`
-                              : undefined,
-                          }}
-                        />
-                        <span
-                          className="truncate text-[11px] leading-none font-extrabold"
+                          className="text-[11px] leading-none font-extrabold"
                           style={lit ? { color: ZONE_COLOUR[z.key] } : undefined}
                         >
                           {z.key}
                           {lit ? " · hoy" : ""}
                         </span>
-                        <span className="num truncate text-[11px] leading-none font-semibold text-mid">
+                        <span className="num text-[11px] leading-none font-semibold whitespace-nowrap text-mid">
                           {bpmRange(z)}
                         </span>
                       </div>

@@ -42,7 +42,7 @@ export function HistoryTabs({
             aria-pressed={tab === t.key}
             onClick={() => setTab(t.key)}
             className={cn(
-              "h-9 min-w-0 flex-1 truncate rounded-full px-1 text-[13px] leading-none font-bold",
+              "h-9 min-w-0 flex-auto truncate rounded-full px-1 text-[13px] leading-none font-bold",
               tab === t.key ? "bg-surface text-ink shadow-raised" : "text-mid",
             )}
           >

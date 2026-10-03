@@ -138,9 +138,9 @@ export function AppShell({
         <main
           className={cn(
             "flex min-h-0 flex-1 flex-col md:pb-0",
-            inRunner
-              ? "pb-[var(--safe-bottom)]"
-              : "pb-[calc(92px+var(--safe-bottom))]",
+            // The runner pins itself to the viewport and pays its own
+            // safe area.
+            inRunner ? "pb-0" : "pb-[calc(92px+var(--safe-bottom))]",
           )}
         >
           <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col md:max-w-none">

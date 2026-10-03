@@ -12,7 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
-import { Card, Note, SessionRow } from "@/components/ui/kit";
+import { Card, Note, SessionRow, fitFontSize } from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
 import { PlateBar, perSideLabel } from "@/components/plate-bar";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
@@ -718,9 +718,18 @@ export function SessionRunner({
     "flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-soft text-ink active:opacity-70";
   const tile = "rounded-xl bg-surface px-3.5 py-3 shadow-raised";
   const finishedAll = totalDone >= totalSets;
+  const heroWeight =
+    exercise.loadMode === "rpe" || currentWeight == null
+      ? "—"
+      : exercise.loadMode === "weighted_bodyweight"
+        ? `+${formatWeight(currentWeight)}`
+        : formatWeight(currentWeight);
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    // Phone: pinned to the viewport like the tab bar, so "Hecho" sits on
+    // the bottom edge whatever the page height — a min-h-dvh column let
+    // the runner grow past the screen and pushed the bar under it.
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-bg max-md:fixed max-md:inset-0 max-md:z-10">
       <div className="flex flex-none items-center gap-3 px-4 pt-4">
         <button
           type="button"
@@ -795,7 +804,7 @@ export function SessionRunner({
                 <Minus aria-hidden size={20} strokeWidth={2.25} />
               </button>
             ) : null}
-            <div className="flex min-w-0 flex-1 items-baseline justify-center gap-1.5">
+            <div className="@container flex min-w-0 flex-1 items-baseline justify-center gap-1.5">
               {weightEditing ? (
                 <input
                   autoFocus
@@ -811,7 +820,8 @@ export function SessionRunner({
                       setWeightEditing(false);
                     }
                   }}
-                  className="num w-full min-w-0 bg-transparent text-center text-[72px] leading-[0.95] font-extrabold tracking-[-0.04em] outline-none"
+                  className="num w-full min-w-0 bg-transparent text-center leading-[0.95] font-extrabold tracking-[-0.04em] outline-none"
+                  style={fitFontSize(weightDraft || "0", 72, 32)}
                 />
               ) : (
                 <button
@@ -823,13 +833,10 @@ export function SessionRunner({
                     setWeightDraft(formatWeight(currentWeight));
                     setWeightEditing(true);
                   }}
-                  className="num min-w-0 truncate text-[80px] leading-[0.95] font-extrabold tracking-[-0.04em] text-ink disabled:opacity-100"
+                  className="num min-w-0 leading-[0.95] font-extrabold tracking-[-0.04em] whitespace-nowrap text-ink disabled:opacity-100"
+                  style={fitFontSize(heroWeight, 80, 32)}
                 >
-                  {exercise.loadMode === "rpe" || currentWeight == null
-                    ? "—"
-                    : exercise.loadMode === "weighted_bodyweight"
-                      ? `+${formatWeight(currentWeight)}`
-                      : formatWeight(currentWeight)}
+                  {heroWeight}
                 </button>
               )}
               <span className="flex-none text-[20px] leading-none font-bold text-mid">
@@ -1103,8 +1110,7 @@ export function SessionRunner({
         )}
       </div>
 
-      {/* AppShell already pays `--safe-bottom` on the runner branch. */}
-      <div className="flex flex-none gap-2.5 px-4 pt-3 pb-7">
+      <div className="flex flex-none gap-2.5 px-4 pt-3 pb-[calc(1.75rem+var(--safe-bottom))]">
         <button
           type="button"
           disabled={pending}

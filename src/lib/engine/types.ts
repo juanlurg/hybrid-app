@@ -65,6 +65,11 @@ export interface LiftState {
 export interface EngineConfig {
   /** Four multipliers, one per week of the cycle. Index = (week − 1) % 4. */
   wave: readonly number[];
+  /**
+   * The basic's rep range per wave step, parallel to `wave`; null keeps
+   * the row's own. F2's 85 % week drops to 3-4 so it stays at RIR 1-2.
+   */
+  waveReps: ReadonlyArray<readonly [number, number] | null>;
   /** Cycle length in weeks. The last week of each cycle is the deload. */
   cycleWeeks: number;
   /** Added to the e1RM at the start of each new cycle — lower body. */
@@ -101,6 +106,7 @@ export const DEFAULT_KETTLEBELLS = [12, 16] as const;
 
 export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
   wave: DEFAULT_WAVE,
+  waveReps: [],
   cycleWeeks: 4,
   incLowerKg: 5,
   incUpperKg: 2.5,

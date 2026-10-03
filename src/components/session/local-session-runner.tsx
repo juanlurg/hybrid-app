@@ -13,6 +13,7 @@ import {
 import {
   liftStateFrom,
   phaseEngineConfig,
+  repRangeFor,
   resolveDay,
   type ResolvedExercise,
 } from "@/lib/domain/plan";
@@ -134,7 +135,7 @@ export function LocalSessionRunner({ sessionId }: { sessionId: string }) {
             ? {
                 programExerciseId: primaryRow.id,
                 liftKey: primaryRow.lift_key,
-                repMin: primaryRow.rep_min,
+                repMin: repRangeFor(primaryRow, local.key.week, phaseConfig)[0],
                 sets: setsForWeek(primaryRow.sets, local.key.week, phaseConfig),
               }
             : null,

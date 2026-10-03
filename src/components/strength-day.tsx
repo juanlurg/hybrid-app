@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
 import { PlateBar, perSideLabel } from "@/components/plate-bar";
-import { SectionLabel } from "@/components/ui/kit";
+import { SectionLabel, fitFontSize } from "@/components/ui/kit";
 import type { ResolvedDay, ResolvedExercise } from "@/lib/domain/plan";
 import { formatWeight } from "@/lib/engine";
 
@@ -68,6 +68,8 @@ export function StrengthDay({
       ? plates.perSide
       : null;
   const why = primary ? whyLine(primary) : null;
+  const heroWeight =
+    primary?.weightKg == null ? "—" : formatWeight(primary.weightKg);
 
   return (
     <>
@@ -82,19 +84,22 @@ export function StrengthDay({
               <div className="mt-2 text-[20px] leading-[1.25] font-bold">
                 {primary.name}
               </div>
-              <div className="mt-1.5 flex items-end gap-3">
-                <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                  <span className="num text-[88px] leading-[0.9] font-extrabold tracking-[-0.04em] sm:text-[96px]">
-                    {primary.weightKg == null
-                      ? "—"
-                      : formatWeight(primary.weightKg)}
+              {/* The plates sit beside the number while both fit and drop
+                  under it when they don't; the number never overlaps them. */}
+              <div className="@container mt-1.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+                <div className="flex flex-none items-baseline gap-1.5">
+                  <span
+                    className="num leading-[0.9] font-extrabold tracking-[-0.04em] whitespace-nowrap"
+                    style={fitFontSize(heroWeight, 88, 34)}
+                  >
+                    {heroWeight}
                   </span>
                   <span className="text-[22px] leading-none font-bold text-panel-soft">
                     kg
                   </span>
                 </div>
                 {perSide ? (
-                  <div className="flex flex-none flex-col items-end gap-2 pb-1">
+                  <div className="ml-auto flex flex-none flex-col items-end gap-2 pb-1">
                     <PlateBar perSide={perSide} onPanel scale={1.2} />
                     <span className="num text-[12px] leading-none font-semibold text-panel-soft">
                       {perSideLabel(perSide)}
