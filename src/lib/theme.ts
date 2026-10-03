@@ -3,7 +3,7 @@ export type ThemePref = "system" | "light" | "dark";
 export const THEME_KEY = "bloques:theme";
 
 /** Page colour per theme — also what the browser chrome is tinted with. */
-export const THEME_COLOR = { light: "#f2f4ef", dark: "#0f1210" } as const;
+export const THEME_COLOR = { light: "#f2e9e3", dark: "#1c1917" } as const;
 
 /**
  * Runs as the first thing in the body, before anything paints: resolves

@@ -5,9 +5,14 @@ import {
   STATUS_LABEL,
   statusTone,
 } from "@/components/day-accents";
-import { Footnote, Framed, Row, RowStack, SectionLabel } from "@/components/ui/kit";
+import { Footnote, Row, RowStack } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
-import { formatDayShort, placeDate, type IsoDate } from "@/lib/domain/calendar";
+import {
+  formatDayShort,
+  formatSeasonRange,
+  placeDate,
+  type IsoDate,
+} from "@/lib/domain/calendar";
 import {
   groupOf,
   phaseEngineConfig,
@@ -43,11 +48,33 @@ const LEGEND: Array<{ label: string; colour?: string }> = [
   { label: "fuerza", colour: accentFor("strength") },
   { label: "carrera", colour: accentFor("run") },
   { label: "movilidad", colour: accentFor("mobility") },
-  { label: "descanso", colour: accentFor("rest") },
-  { label: "parcial", colour: TONE.warn },
-  { label: "sin registrar", colour: TONE.soft },
+  { label: "parcial", colour: "var(--clay-edge)" },
+  { label: "sin registrar", colour: TONE.hairline },
+  { label: "descanso", colour: TONE.soft },
   { label: "por venir" },
 ];
+
+/** The panes' own heading: big, sentence case, a quiet note on the right. */
+function PaneLabel({
+  children,
+  right,
+}: {
+  children: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline gap-2 px-5 pt-5 pb-2.5">
+      <span className="flex-1 text-[17px] leading-tight font-extrabold tracking-[-0.01em]">
+        {children}
+      </span>
+      {right ? (
+        <span className="text-[13px] leading-none font-semibold text-mid">
+          {right}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 const dayKey = (date: string, slotId: string | null) =>
   `${date}|${slotId ?? ""}`;
@@ -528,42 +555,78 @@ export default async function ProgresoPage() {
         adherence == null
           ? "text-faint"
           : adherence >= 90
-            ? "text-lime"
+            ? "text-clay"
             : adherence < 70
               ? "text-warn"
               : "text-ink",
     },
-    { label: "sesiones registradas", value: registered },
-    { label: "tonelaje acumulado", value: tonnage, unit: tonnageUnit },
-    { label: "horas de carrera", value: formatWeight(runHours), unit: "h" },
+    { label: "sesiones", value: registered },
+    { label: "tonelaje", value: tonnage, unit: tonnageUnit },
+    { label: "de carrera", value: formatWeight(runHours), unit: "h" },
   ];
 
+
+  const seasonWeek = Math.min(placement.absoluteWeek, seasonWeeks);
+  const seasonLabel = ctx.program.starts_on
+    ? formatSeasonRange(
+        ctx.program.starts_on as IsoDate,
+        (ctx.program.ends_on ?? ctx.program.starts_on) as IsoDate,
+      )
+    : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex-none px-5 pt-6">
-        <h1 className="font-display text-[26px] leading-[1.1] font-bold">
+        <h1 className="text-[34px] leading-[1.1] font-extrabold tracking-[-0.02em]">
           Progreso
         </h1>
+        <p className="mt-1.5 text-[14px] leading-[1.45] font-medium text-body">
+          {seasonLabel ? `Temporada ${seasonLabel} · ` : ""}semana{" "}
+          <span className="num">{seasonWeek}</span> de{" "}
+          <span className="num">{seasonWeeks}</span>
+        </p>
       </header>
 
-      <div className="flex-1 overflow-auto pb-6">
-        <div className="grid grid-cols-2 gap-1.5 px-5 pt-3.5">
-          {kpis.map((k) => (
-            <div
-              key={k.label}
-              className="rounded-xl border border-line bg-surface px-4 py-3.5"
-            >
-              <div
+      <div className="no-scrollbar flex-1 overflow-auto pb-6">
+        <div className="mx-5 mt-4.5 flex items-center gap-4 rounded-3xl bg-panel px-5 py-4.5 text-on-panel shadow-panel">
+          <div className="flex-none">
+            <div className="flex items-baseline gap-1">
+              <span
                 className={cn(
-                  "num flex items-baseline gap-1 text-[26px] leading-none font-bold tracking-[-0.02em]",
-                  k.tone,
+                  "num text-[64px] leading-[0.95] font-extrabold tracking-[-0.04em]",
+                  adherence != null && adherence < 70 && "text-warn-panel",
                 )}
               >
-                <span>{k.value}</span>
-                {k.unit ? <span className="text-[14px]">{k.unit}</span> : null}
+                {adherence ?? "—"}
+              </span>
+              {adherence == null ? null : (
+                <span className="text-[22px] leading-none font-bold text-panel-soft">
+                  %
+                </span>
+              )}
+            </div>
+            <div className="mt-1.5 text-[11px] leading-none font-bold tracking-[0.13em] text-clay-panel uppercase">
+              Adherencia
+            </div>
+          </div>
+          <div className="flex-1 text-[13px] leading-[1.5] font-medium text-panel-soft">
+            Días de fuerza y carrera ya pasados. Una sesión parcial suma media.
+          </div>
+        </div>
+        <div className="mx-5 mt-2.5 grid grid-cols-3 gap-2">
+          {kpis.slice(1).map((k) => (
+            <div key={k.label} className="rounded-xl bg-surface p-3.5 shadow-raised">
+              <div className="flex items-baseline gap-[3px]">
+                <span className="num text-[26px] leading-none font-extrabold tracking-[-0.02em]">
+                  {k.value}
+                </span>
+                {k.unit ? (
+                  <span className="text-[13px] leading-none font-bold text-mid">
+                    {k.unit}
+                  </span>
+                ) : null}
               </div>
-              <div className="mt-1.5 text-[12px] leading-[1.25] text-mid">
+              <div className="mt-1.5 text-[12px] leading-[1.3] font-semibold text-mid">
                 {k.label}
               </div>
             </div>
@@ -573,107 +636,109 @@ export default async function ProgresoPage() {
         <HistoryTabs
           constancia={
             <>
-              <SectionLabel
-                className="pt-4"
-                right={<span className="text-[12px]">L M X J V S D</span>}
-              >
-                {phase.name} · {phase.weeks} semanas
-              </SectionLabel>
-
-              <div className="mt-2.5 flex flex-col gap-[5px] pb-1">
-                {gridWeeks.map((row) => {
-                  // Weeks the athlete has not reached yet read as a plan, not a score.
-                  const ahead = row.week > placement.week;
-                  return (
-                    <div
-                      key={row.week}
-                      className="flex items-center gap-2 px-5"
-                    >
-                      <span
-                        className={cn(
-                          "font-display w-[30px] flex-none text-[11px] leading-none font-semibold",
-                          ahead ? "text-faint" : "text-mid",
-                        )}
-                        title={row.deload ? "Semana de descarga" : undefined}
-                      >
-                        {row.label}
-                        {row.deload ? (
-                          <span className="text-faint">↓</span>
-                        ) : null}
-                      </span>
-                      <div className="flex flex-1 gap-1">
-                        {row.days.map((d) => {
-                          const colour = cellColour(
-                            d.group,
-                            statusForDay(d),
-                            d.date > today,
-                          );
-                          return (
-                            <div
-                              key={d.date}
-                              title={`${d.dateLabel} · ${d.title}`}
-                              className={cn(
-                                "h-4 flex-1 rounded-[4px] border",
-                                // No fill is how `cellColour` says "still ahead".
-                                colour.background === "transparent" &&
-                                  "border-dashed",
-                              )}
-                              style={{
-                                background: colour.background,
-                                borderColor: colour.border,
-                              }}
-                            />
-                          );
-                        })}
+              <PaneLabel right={phase.name}>Constancia</PaneLabel>
+              <div className="mx-5 rounded-2xl bg-surface px-3.5 pt-3.5 pb-4 shadow-card">
+                <div className="flex items-center gap-2 pb-2">
+                  <span className="w-[30px] flex-none" />
+                  <div className="grid flex-1 grid-cols-7 gap-1 text-center text-[11px] leading-none font-bold text-mid">
+                    {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
+                      <span key={d}>{d}</span>
+                    ))}
+                  </div>
+                  <span className="w-[38px] flex-none" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  {gridWeeks.map((row) => {
+                    // Weeks the athlete has not reached yet read as a plan, not a score.
+                    const ahead = row.week > placement.week;
+                    return (
+                      <div key={row.week} className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "num w-[30px] flex-none text-[11px] leading-none font-bold",
+                            ahead ? "text-faint" : "text-body",
+                          )}
+                          title={row.deload ? "Semana de descarga" : undefined}
+                        >
+                          {row.label}
+                          {row.deload ? "↓" : null}
+                        </span>
+                        <div className="grid flex-1 grid-cols-7 gap-1">
+                          {row.days.map((d) => {
+                            const colour = cellColour(
+                              d.group,
+                              statusForDay(d),
+                              d.date > today,
+                            );
+                            const isToday = d.date === today;
+                            return (
+                              <div
+                                key={d.date}
+                                title={`${d.dateLabel} · ${d.title}`}
+                                className={cn(
+                                  "box-border h-4 rounded-[5px]",
+                                  // No fill is how `cellColour` says "still ahead".
+                                  colour.background === "transparent" &&
+                                    "border border-dashed",
+                                  isToday && "border-2 border-solid",
+                                )}
+                                style={{
+                                  background: isToday
+                                    ? "var(--surface)"
+                                    : colour.background,
+                                  borderColor: isToday
+                                    ? "var(--clay-line)"
+                                    : colour.border,
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                        <span
+                          className={cn(
+                            "num w-[38px] flex-none text-right text-[11px] leading-none font-bold",
+                            ahead ? "text-faint" : "text-body",
+                          )}
+                        >
+                          {row.pct == null ? "—" : `${row.pct} %`}
+                        </span>
                       </div>
-                      <span
-                        className={cn(
-                          "num w-[36px] flex-none text-right text-[11px] leading-none font-semibold",
-                          ahead ? "text-faint" : "text-mid",
-                        )}
-                      >
-                        {row.pct == null ? "—" : `${row.pct}%`}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
 
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-5 pt-3">
-                {LEGEND.map((l) => (
-                  <span key={l.label} className="flex items-center gap-1.5">
-                    {l.colour ? (
-                      /* The hairline outline is what makes the palest fills —
-                         "sin registrar" against the page — visible at 10px. */
-                      <span
-                        className="h-[10px] w-[10px] flex-none rounded-[3px] border border-hairline"
-                        style={{ background: l.colour }}
-                      />
-                    ) : (
-                      <span className="h-[10px] w-[10px] flex-none rounded-[3px] border border-dashed border-hairline" />
-                    )}
-                    <span className="text-[12px] leading-none text-mid">
-                      {l.label}
+                <div className="mt-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2">
+                  {LEGEND.map((l) => (
+                    <span key={l.label} className="flex items-center gap-1.5">
+                      {l.colour ? (
+                        <span
+                          className="h-2.5 w-2.5 flex-none rounded-[3px]"
+                          style={{ background: l.colour }}
+                        />
+                      ) : (
+                        <span className="h-2.5 w-2.5 flex-none rounded-[3px] border border-dashed border-hairline" />
+                      )}
+                      <span className="text-[12px] leading-none font-semibold text-body">
+                        {l.label}
+                      </span>
                     </span>
+                  ))}
+                  <span className="text-[12px] leading-none font-semibold text-body">
+                    ↓ descarga
                   </span>
-                ))}
-                <span className="text-[12px] leading-none text-mid">
-                  ↓ descarga
-                </span>
+                </div>
               </div>
 
               <Footnote>
-                La adherencia cuenta los días de fuerza y carrera ya pasados;
-                una sesión parcial suma media. La movilidad y el descanso no
-                cuentan.
+                La movilidad y el descanso no cuentan para la adherencia.
               </Footnote>
             </>
           }
           records={
             <>
-              <SectionLabel className="pt-4">Tu mejor serie</SectionLabel>
+              <PaneLabel right="RM que sale">Tu mejor serie</PaneLabel>
 
-              <RowStack className="mt-2.5">
+              <RowStack>
                 {records.length === 0 ? (
                   <Row>
                     <p className="text-[13px] leading-[1.55] text-mid">
@@ -685,23 +750,18 @@ export default async function ProgresoPage() {
                   records.map(({ lift, best }) => (
                     <Row key={lift.id} className="flex items-center gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[15px] leading-[1.2] font-semibold">
+                        <div className="truncate text-[15px] leading-[1.25] font-bold">
                           {lift.name}
                         </div>
-                        <div className="mt-0.5 truncate text-[12.5px] leading-[1.35] text-mid">
+                        <div className="num mt-0.5 truncate text-[12.5px] leading-[1.35] font-medium text-mid">
                           {best
-                            ? `${formatDayShort(best.date)} · ${formatWeight(best.weightKg)} kg × ${best.reps}`
+                            ? `${formatWeight(best.weightKg)} kg × ${best.reps} · ${formatDayShort(best.date)}`
                             : "sin series todavía"}
                         </div>
                       </div>
                       {best ? (
-                        <span className="flex-none text-right">
-                          <span className="num block text-[16px] leading-none font-bold text-lime">
-                            {formatWeight(best.epleyKg)} kg
-                          </span>
-                          <span className="mt-1 block text-[11px] leading-none text-mid">
-                            RM que sale
-                          </span>
+                        <span className="num flex-none text-[17px] leading-none font-extrabold text-clay">
+                          {formatWeight(best.epleyKg)} kg
                         </span>
                       ) : null}
                     </Row>
@@ -716,110 +776,104 @@ export default async function ProgresoPage() {
           }
           registro={
             <>
-              <SectionLabel
-                className="pt-4"
+              <PaneLabel
                 right={
-                  entries.length > 0 ? (
-                    <span className="text-[12px]">
-                      últimas {entries.length}
-                    </span>
-                  ) : undefined
+                  entries.length > 0 ? `últimas ${entries.length}` : undefined
                 }
               >
                 Sesiones
-              </SectionLabel>
+              </PaneLabel>
               <HistoryLog entries={entries} />
             </>
           }
           carrera={
-            <div className="px-5 pt-4">
-              <Framed>
-                <div className="flex items-baseline gap-3">
-                  <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
-                    Desacople Pa:HR
-                  </span>
-                  <span className="ml-auto text-[12px] leading-none text-mid">
-                    últimas tiradas
-                  </span>
+            <>
+              <PaneLabel right="tiradas largas">Carrera</PaneLabel>
+              <div className="mx-5 rounded-2xl bg-surface p-4 shadow-card">
+                <div className="text-[15px] leading-tight font-bold">
+                  Desacople Pa:HR
                 </div>
 
                 {decouplings.length > 0 ? (
                   <>
-                    <div className="mt-3.5 flex gap-1.5">
-                      {decouplings.map((d) => (
-                        <div
-                          key={d.id}
-                          className="min-w-0 flex-1 rounded-lg bg-soft px-2.5 py-2.5"
-                        >
+                    <div className="mt-3 grid grid-cols-4 gap-1.5">
+                      {decouplings.map((d) => {
+                        const ok = d.pct < DECOUPLING_LIMIT;
+                        return (
                           <div
+                            key={d.id}
                             className={cn(
-                              "num text-[21px] leading-none font-bold tracking-[-0.02em]",
-                              d.pct < DECOUPLING_LIMIT ? "text-ok" : "text-warn",
+                              "min-w-0 rounded-lg p-2.5",
+                              ok ? "bg-soft" : "bg-warn-soft",
                             )}
                           >
-                            {formatWeight(d.pct)}
-                            <span className="text-[12px] font-semibold"> %</span>
+                            <div
+                              className={cn(
+                                "num text-[20px] leading-none font-extrabold",
+                                ok ? "text-ok" : "text-warn",
+                              )}
+                            >
+                              {formatWeight(d.pct)}
+                              <span className="text-[12px]"> %</span>
+                            </div>
+                            <div className="num mt-1.5 text-[11.5px] leading-none font-semibold text-mid">
+                              {formatDayShort(d.date)}
+                            </div>
                           </div>
-                          <div className="num mt-2 text-[11.5px] leading-none text-mid">
-                            {formatDayShort(d.date)}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     {decouplingSeries.length > 4 ? (
-                      <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
+                      <div className="mt-3.5 flex h-[54px] items-end gap-0.5">
                         {decouplingSeries.map((d) => (
                           <div
                             key={d.id}
-                            className="min-w-0 flex-1 rounded-t-[2px]"
+                            className="min-w-0 flex-1 rounded-t-[3px] rounded-b-[1px]"
                             style={{
                               height: `${Math.max(8, Math.min(100, Math.round((d.pct / 10) * 100)))}%`,
                               background:
-                                d.pct < DECOUPLING_LIMIT ? TONE.ok : TONE.warn,
+                                d.pct < DECOUPLING_LIMIT ? TONE.ok : "var(--warn-dot)",
                             }}
                           />
                         ))}
                       </div>
                     ) : null}
-                    <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">
+                    <p className="mt-3 text-[12.5px] leading-[1.5] font-medium text-mid">
                       Por debajo del {DECOUPLING_LIMIT} % la base aeróbica
                       aguanta la tirada: tu pulso no se dispara en la segunda
                       mitad.
                     </p>
                   </>
                 ) : (
-                  <p className="mt-2.5 text-[13px] leading-[1.55] text-mid">
+                  <p className="mt-2.5 text-[13px] leading-[1.55] font-medium text-mid">
                     Todavía no hay ninguna tirada con desacople anotado. Anótalo
                     al marcar una tirada larga (60′ o más) y aparecerá aquí: por
                     debajo del {DECOUPLING_LIMIT} % la base aeróbica aguanta.
                   </p>
                 )}
-              </Framed>
 
-              <Framed className="mt-3.5">
-                <div className="flex items-baseline gap-3">
-                  <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-run uppercase">
+                <div className="mt-4.5 flex items-baseline gap-2">
+                  <span className="flex-1 text-[15px] leading-tight font-bold">
                     Kilómetros por semana
                   </span>
                   {maxWeekKm > 0 ? (
-                    <span className="num ml-auto text-[12px] leading-none text-mid">
+                    <span className="num text-[12.5px] leading-none font-semibold text-mid">
                       máx {formatWeight(maxWeekKm)} km
                     </span>
                   ) : null}
                 </div>
                 {maxWeekKm > 0 ? (
                   <>
-                    <div className="mt-3.5 flex h-[54px] items-end gap-0.5 border-b border-edge">
+                    <div className="mt-3 flex h-16 items-end gap-0.5">
                       {Array.from({ length: seasonWeeks }, (_, i) => {
                         const km = kmByWeek.get(i + 1) ?? 0;
                         return (
                           <div
                             key={i}
-                            className="min-w-0 flex-1 rounded-t-[2px]"
+                            className="min-w-0 flex-1 rounded-t-[3px] rounded-b-[1px]"
                             style={{
-                              height: `${km > 0 ? Math.max(6, Math.round((km / maxWeekKm) * 100)) : 2}%`,
-                              background:
-                                km > 0 ? accentFor("run") : TONE.hairline,
+                              height: `${km > 0 ? Math.max(8, Math.round((km / maxWeekKm) * 100)) : 6}%`,
+                              background: km > 0 ? accentFor("run") : TONE.quiet,
                             }}
                           />
                         );
@@ -829,7 +883,7 @@ export default async function ProgresoPage() {
                       {Array.from({ length: seasonWeeks }, (_, i) => (
                         <div
                           key={i}
-                          className="num min-w-0 flex-1 text-center text-[11px] leading-none text-mid"
+                          className="num min-w-0 flex-1 text-center text-[11px] leading-none font-semibold text-mid"
                         >
                           {ticks.has(i + 1) ? i + 1 : ""}
                         </div>
@@ -837,18 +891,13 @@ export default async function ProgresoPage() {
                     </div>
                   </>
                 ) : (
-                  <p className="mt-2.5 text-[13px] leading-[1.55] text-mid">
+                  <p className="mt-2.5 text-[13px] leading-[1.55] font-medium text-mid">
                     Anota la distancia al marcar cada carrera y aquí verás el
                     volumen de cada semana.
                   </p>
                 )}
-                <p className="mt-3 text-[12.5px] leading-[1.5] text-mid">
-                  {runHours > 0
-                    ? `${formatWeight(runHours)} h de carrera esta temporada.`
-                    : "Sin horas de carrera todavía."}
-                </p>
-              </Framed>
-            </div>
+              </div>
+            </>
           }
         />
       </div>

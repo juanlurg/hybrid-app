@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="glow" cx="30%" cy="22%" r="85%">
+      <stop offset="0" stop-color="#4a4446"/>
+      <stop offset="1" stop-color="#2a2627"/>
+    </radialGradient>
+    <linearGradient id="clay" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#d76e3f"/>
+      <stop offset="1" stop-color="#b4522b"/>
+    </linearGradient>
+    <linearGradient id="slate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f84a0"/>
+      <stop offset="1" stop-color="#3f6e86"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <!-- The B, in blocks: the stem is the paper, the bowls are the two sports. -->
+  <g transform="translate(-18 0)">
+  <rect x="132" y="108" width="84" height="296" rx="22" fill="#fdfaf7"/>
+  <path d="M244 108h82a66 66 0 0 1 0 132h-82a16 16 0 0 1-16-16V124a16 16 0 0 1 16-16z" fill="url(#clay)"/>
+  <path d="M244 256h98a74 74 0 0 1 0 148h-98a16 16 0 0 1-16-16V272a16 16 0 0 1 16-16z" fill="url(#slate)"/>
+  </g>
+</svg>

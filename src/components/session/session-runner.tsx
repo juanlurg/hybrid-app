@@ -1,17 +1,20 @@
 "use client";
 
+import {
+  Check,
+  List,
+  Minus,
+  Plus,
+  Snowflake,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
-import {
-  Callout,
-  Card,
-  HeroNumber,
-  SessionRow,
-  Stepper,
-  TopBar,
-} from "@/components/ui/kit";
+import { Card, Note, SessionRow } from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
+import { PlateBar, perSideLabel } from "@/components/plate-bar";
 import { RestBar, useRestTimer, useWakeLock } from "@/components/session/rest-timer";
 import {
   restNotificationsEnabled,
@@ -115,6 +118,8 @@ export function SessionRunner({
   const [dismissedFailure, setDismissedFailure] = useState<string | null>(null);
   const [undone, setUndone] = useState(initialUndone);
   const [repsOpen, setRepsOpen] = useState(false);
+  /** The whole-session list, behind the top-right button. */
+  const [listOpen, setListOpen] = useState(false);
   /** Set index being corrected via its pill — overwrites in place. */
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -629,14 +634,17 @@ export function SessionRunner({
     if (exercise.effort === "seconds") {
       // Holds are logged in steps of 5 seconds, well past the top.
       const top = Math.ceil((exercise.repMax + 15) / 5) * 5;
-      for (let n = top; n >= 5; n -= 5) out.push(n);
+      for (let n = 5; n <= top; n += 5) out.push(n);
       return out;
     }
     // AMRAP gets generous headroom; plain reps a little slack over the top.
+    // Short ranges start at 1; long ones start well under the minimum so
+    // the grid stays a couple of rows.
     const top = exercise.effort === "amrap" ? exercise.repMax + 8 : exercise.repMax + 2;
-    for (let n = top; n >= 1; n--) out.push(n);
+    const low = top <= 15 ? 1 : Math.max(1, exercise.repMin - 6);
+    for (let n = low; n <= top; n++) out.push(n);
     return out;
-  }, [exercise.repMax, exercise.effort]);
+  }, [exercise.repMin, exercise.repMax, exercise.effort]);
 
   /**
    * What one tap on "Hecho" logs. Never the top of the range by default:
@@ -659,10 +667,10 @@ export function SessionRunner({
 
   const setNumber = Math.min(nextFreeIndex + 1, exercise.sets);
   const eyebrow = exercise.isPrimary
-    ? `Básico del día · serie ${setNumber}/${exercise.sets}`
+    ? `Básico del día · serie ${setNumber} de ${exercise.sets}`
     : exercise.supersetGroup != null
-      ? `Superserie · serie ${setNumber}/${exercise.sets}`
-      : `Ejercicio ${exIndex + 1} · serie ${setNumber}/${exercise.sets}`;
+      ? `Superserie · serie ${setNumber} de ${exercise.sets}`
+      : `Ejercicio ${exIndex + 1} de ${exercises.length} · serie ${setNumber} de ${exercise.sets}`;
   const load =
     currentWeight == null || !exercise.plates
       ? null
@@ -673,150 +681,227 @@ export function SessionRunner({
   const nextExercise =
     exercises[Math.min(exIndex, exercises.length - 1) + 1] ?? null;
 
+  const editingLogged =
+    editingIndex != null && Boolean(logs[keyOf(exercise.id, editingIndex)]);
+  const unit =
+    exercise.loadMode === "rpe"
+      ? "sensación"
+      : exercise.loadMode === "bodyweight"
+        ? "corporal"
+        : "kg";
+  const loadNote =
+    plates && plates.perSide.length > 0
+      ? perSideLabel(plates.perSide)
+      : exercise.equipment === "barbell"
+        ? "solo la barra"
+        : exercise.equipment === "dumbbell" || exercise.equipment === "kettlebell"
+          ? "por mano"
+          : exercise.equipment === "pulley"
+            ? "en la polea"
+            : exercise.equipment === "machine"
+              ? "en la máquina"
+              : exercise.loadMode === "weighted_bodyweight"
+                ? "de lastre"
+                : exercise.loadMode === "bodyweight"
+                  ? "sin lastre"
+                  : null;
+  const programmed =
+    exercise.weightKg != null &&
+    currentWeight != null &&
+    currentWeight !== exercise.weightKg
+      ? `programado ${formatWeight(exercise.weightKg)}`
+      : null;
+  const canStep = exercise.loadMode !== "rpe" && currentWeight != null;
+  const round =
+    "flex h-10 w-10 flex-none items-center justify-center rounded-full bg-surface text-ink shadow-raised";
+  const stepButton =
+    "flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-soft text-ink active:opacity-70";
+  const tile = "rounded-xl bg-surface px-3.5 py-3 shadow-raised";
+  const finishedAll = totalDone >= totalSets;
+
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-      <TopBar
-        title={label}
-        onBack={() => router.push("/")}
-        right={
-          <span className="num uppercase">
-            {totalDone}/{totalSets} series
-          </span>
-        }
-      />
-
-      <div className="mt-1 flex-none px-5">
-        <div className="h-[5px] rounded-full bg-line">
-          <div
-            className="h-full rounded-full bg-lime-line transition-[width] duration-200"
-            style={{
-              width: `${Math.round((totalDone / Math.max(1, totalSets)) * 100)}%`,
-            }}
-          />
+      <div className="flex flex-none items-center gap-3 px-4 pt-4">
+        <button
+          type="button"
+          aria-label="Salir de la sesión"
+          onClick={() => router.push("/")}
+          className={round}
+        >
+          <X aria-hidden size={18} strokeWidth={2.25} />
+        </button>
+        <div className="min-w-0 flex-1 text-center">
+          <div className="truncate text-[15px] leading-[1.2] font-extrabold">
+            {label}
+          </div>
+          <div className="num mt-0.5 text-[12px] leading-none font-semibold text-mid">
+            {totalDone} de {totalSets} series
+          </div>
         </div>
+        <button
+          type="button"
+          aria-label="Toda la sesión"
+          aria-expanded={listOpen}
+          onClick={() => setListOpen(true)}
+          className={round}
+        >
+          <List aria-hidden size={18} strokeWidth={2.25} />
+        </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-5 pt-6 pb-4">
-        <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+      {/* One segment per exercise, as long as its sets: the bar reads as
+          the session's shape, not just a percentage. */}
+      <div className="mx-5 mt-3.5 flex flex-none gap-1">
+        {exercises.map((e) => (
+          <div
+            key={e.id}
+            className="h-1.5 overflow-hidden rounded-full bg-quiet"
+            style={{ flex: e.sets }}
+          >
+            <div
+              className="h-full rounded-full bg-clay-line transition-[width] duration-200"
+              style={{
+                width: `${Math.round((countDone(logs, e.id, e.sets) / e.sets) * 100)}%`,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="no-scrollbar min-h-0 flex-1 overflow-auto px-5 pt-5.5 pb-4">
+        <div className="text-[11px] leading-none font-bold tracking-[0.13em] text-clay uppercase">
           {eyebrow}
         </div>
-        <h1 className="mt-1.5 text-[20px] leading-[1.2] font-semibold">
+        <h1 className="mt-1.5 text-[26px] leading-[1.15] font-extrabold tracking-[-0.02em]">
           {exercise.name}
         </h1>
 
-        <HeroNumber
-          value={
-            exercise.loadMode === "rpe" || currentWeight == null
-              ? "—"
-              : exercise.loadMode === "weighted_bodyweight"
-                ? `+${formatWeight(currentWeight)}`
-                : formatWeight(currentWeight)
-          }
-          unit={
-            exercise.loadMode === "rpe"
-              ? "sensación"
-              : exercise.loadMode === "bodyweight"
-                ? "corporal"
-                : "kg"
-          }
-        />
-
-        {/* The two numbers read mid-set, with chalk on the hands: the rep
-            target and the plates per side get real rows, not hero fine print. */}
-        <div className="mt-4 flex items-baseline gap-2.5">
-          <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-            Objetivo
-          </span>
-          <span className="text-[15px] leading-[1.3] font-semibold">
-            <span className="num">
-              {exercise.repsLabel}
-              {exercise.effort === "seconds" ? "″" : ""}
-            </span>
-            {exercise.isPrimary ? (
-              <span className="text-mid"> · RIR {targetRir}</span>
-            ) : null}
-            <span className="text-mid"> · desc. {exercise.restLabel}</span>
-          </span>
-        </div>
-
-        {plates ? (
-          <div className="mt-2 flex items-baseline gap-2.5">
-            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-              Por lado
-            </span>
-            <span className="num text-[17px] leading-[1.2] font-semibold">
-              {plates.perSide.map(formatWeight).join(" + ")}
-              {plates.remainderKg ? (
-                <span className="text-[13px] text-fail">
-                  {" "}
-                  +{formatWeight(plates.remainderKg)} sin disco
-                </span>
-              ) : null}
-            </span>
-          </div>
-        ) : null}
-
         {/* The load is the athlete's to change: the plan prescribes, the
             bar decides. Each notch is a weight the equipment can rack. */}
-        {exercise.loadMode !== "rpe" && currentWeight != null ? (
-          <div className="mt-4 flex items-center gap-2.5">
-            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-              {editingIndex != null && logs[keyOf(exercise.id, editingIndex)]
-                ? `Peso serie ${editingIndex + 1}`
-                : "Peso"}
-            </span>
-            <Stepper
-              label="peso"
-              value={
-                weightEditing ? (
-                  <input
-                    autoFocus
-                    inputMode="decimal"
-                    value={weightDraft}
-                    aria-label="Peso en kg"
-                    onChange={(e) => setWeightDraft(e.target.value)}
-                    onBlur={commitWeightDraft}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.currentTarget.blur();
-                      if (e.key === "Escape") {
-                        setWeightDraft("");
-                        setWeightEditing(false);
-                      }
-                    }}
-                    className="num w-[52px] bg-transparent text-center text-[14px] leading-none font-semibold outline-none"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    aria-label="Escribir el peso"
-                    onClick={() => {
-                      setWeightDraft(formatWeight(currentWeight));
-                      setWeightEditing(true);
-                    }}
-                    className="num text-[14px] leading-none font-semibold"
-                  >
-                    {weightLabelFor(exercise.loadMode, currentWeight)}
-                  </button>
-                )
-              }
-              onDecrement={() => nudgeWeight(-1)}
-              onIncrement={() => nudgeWeight(1)}
-            />
-            {exercise.weightKg != null && currentWeight !== exercise.weightKg ? (
-              <span className="num text-[12px] leading-none text-faint">
-                programado {formatWeight(exercise.weightKg)}
+        <div className="mt-4 rounded-3xl bg-surface px-3.5 pt-4.5 pb-4 shadow-card">
+          {editingLogged ? (
+            <div className="mb-2 text-center text-[12px] leading-none font-bold text-clay">
+              Peso de la serie {editingIndex! + 1}
+            </div>
+          ) : null}
+          <div className="flex items-center gap-2">
+            {canStep ? (
+              <button
+                type="button"
+                aria-label="Bajar peso"
+                onClick={() => nudgeWeight(-1)}
+                className={stepButton}
+              >
+                <Minus aria-hidden size={20} strokeWidth={2.25} />
+              </button>
+            ) : null}
+            <div className="flex min-w-0 flex-1 items-baseline justify-center gap-1.5">
+              {weightEditing ? (
+                <input
+                  autoFocus
+                  inputMode="decimal"
+                  value={weightDraft}
+                  aria-label="Peso en kg"
+                  onChange={(e) => setWeightDraft(e.target.value)}
+                  onBlur={commitWeightDraft}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                    if (e.key === "Escape") {
+                      setWeightDraft("");
+                      setWeightEditing(false);
+                    }
+                  }}
+                  className="num w-full min-w-0 bg-transparent text-center text-[72px] leading-[0.95] font-extrabold tracking-[-0.04em] outline-none"
+                />
+              ) : (
+                <button
+                  type="button"
+                  disabled={!canStep}
+                  aria-label={canStep ? "Escribir el peso" : undefined}
+                  onClick={() => {
+                    if (currentWeight == null) return;
+                    setWeightDraft(formatWeight(currentWeight));
+                    setWeightEditing(true);
+                  }}
+                  className="num min-w-0 truncate text-[80px] leading-[0.95] font-extrabold tracking-[-0.04em] text-ink disabled:opacity-100"
+                >
+                  {exercise.loadMode === "rpe" || currentWeight == null
+                    ? "—"
+                    : exercise.loadMode === "weighted_bodyweight"
+                      ? `+${formatWeight(currentWeight)}`
+                      : formatWeight(currentWeight)}
+                </button>
+              )}
+              <span className="flex-none text-[20px] leading-none font-bold text-mid">
+                {unit}
               </span>
+            </div>
+            {canStep ? (
+              <button
+                type="button"
+                aria-label="Subir peso"
+                onClick={() => nudgeWeight(1)}
+                className={stepButton}
+              >
+                <Plus aria-hidden size={20} strokeWidth={2.25} />
+              </button>
             ) : null}
           </div>
-        ) : null}
+          {plates || loadNote || programmed ? (
+            <div className="mt-3 flex min-h-10 items-center justify-center gap-3">
+              {plates && plates.perSide.length > 0 ? (
+                <PlateBar perSide={plates.perSide} scale={40 / 44} />
+              ) : null}
+              <span className="num text-[13px] leading-[1.3] font-semibold text-mid">
+                {[loadNote, programmed].filter(Boolean).join(" · ")}
+                {plates?.remainderKg ? (
+                  <span className="text-fail">
+                    {" "}
+                    · +{formatWeight(plates.remainderKg)} sin disco
+                  </span>
+                ) : null}
+              </span>
+            </div>
+          ) : null}
+        </div>
+
+        {/* The two numbers read mid-set, with chalk on the hands: the rep
+            target and the rest get their own tiles, not hero fine print. */}
+        <div className="mt-2.5 grid grid-cols-3 gap-2">
+          <div className={tile}>
+            <div className="text-[11px] leading-none font-semibold text-mid">
+              Objetivo
+            </div>
+            <div className="num mt-1.5 text-[18px] leading-none font-extrabold">
+              {exercise.repsLabel.replace("-", "–")}
+              {exercise.effort === "seconds" ? "″" : ""}
+            </div>
+          </div>
+          <div className={tile}>
+            <div className="text-[11px] leading-none font-semibold text-mid">
+              RIR
+            </div>
+            <div className="num mt-1.5 text-[18px] leading-none font-extrabold">
+              {exercise.isPrimary ? targetRir.replace("-", "–") : "—"}
+            </div>
+          </div>
+          <div className={tile}>
+            <div className="text-[11px] leading-none font-semibold text-mid">
+              Descanso
+            </div>
+            <div className="num mt-1.5 text-[18px] leading-none font-extrabold">
+              {exercise.restLabel}
+            </div>
+          </div>
+        </div>
 
         {/* One pill per prescribed set. A logged pill re-opens the picker
             for THAT set — a wrong value is never permanent. */}
-        <div className="mt-5 flex flex-wrap gap-2.5">
+        <div className="mt-3.5 flex gap-2">
           {Array.from({ length: exercise.sets }, (_, i) => {
             const entry = logs[keyOf(exercise.id, i)];
             const bad = entry?.missed ?? false;
-            const editing = editingIndex === i;
+            const editing = editingIndex === i && repsOpen;
             const current = !entry && i === nextFreeIndex;
             return (
               <button
@@ -831,52 +916,72 @@ export function SessionRunner({
                   setRepsOpen(true);
                 }}
                 className={cn(
-                  "flex h-[60px] w-[60px] flex-col items-center justify-center gap-0.5 rounded-xl border-[1.5px]",
+                  "flex h-16 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl",
                   entry
                     ? bad
-                      ? "border-fail bg-fail/10"
-                      : "border-lime-edge bg-lime-soft"
+                      ? "bg-fail-soft text-fail"
+                      : "bg-strength text-on-strength"
                     : current
-                      ? "border-2 border-lime-line bg-surface"
-                      : "border-edge bg-surface opacity-55",
-                  editing && (bad ? "border-2" : "border-2 border-lime-line"),
+                      ? "bg-surface text-ink shadow-[inset_0_0_0_2px_var(--clay-line)]"
+                      : "bg-quiet text-mid",
+                  editing && "ring-2 ring-ink ring-offset-2 ring-offset-bg",
                 )}
               >
-                <span
-                  className={cn(
-                    "num text-[22px] leading-none font-bold",
-                    entry
-                      ? bad
-                        ? "text-fail"
-                        : "text-lime"
-                      : current
-                        ? "text-ink"
-                        : "text-faint",
-                  )}
-                >
+                <span className="num text-[22px] leading-none font-extrabold">
                   {entry ? entry.value : i + 1}
                 </span>
                 <span
                   className={cn(
-                    "font-display text-[11px] leading-none font-semibold tracking-[0.1em] uppercase",
-                    entry
-                      ? bad
-                        ? "text-fail"
-                        : "text-lime"
-                      : current
-                        ? "text-mid"
-                        : "text-faint",
+                    "text-[11px] leading-none font-semibold",
+                    entry && !bad && "text-white/85",
+                    current && "text-clay",
                   )}
                 >
-                  {entry ? "hecha" : current ? "ahora" : "queda"}
+                  {entry
+                    ? bad
+                      ? "bajo rango"
+                      : exercise.effort === "seconds"
+                        ? "seg"
+                        : "reps"
+                    : current
+                      ? "ahora"
+                      : "queda"}
                 </span>
               </button>
             );
           })}
         </div>
 
+        {banner ? (
+          <Note
+            className="mt-3.5"
+            tone={banner.tone === "warn" ? "warn" : "clay"}
+            icon={
+              banner.tone === "warn" ? (
+                <Snowflake size={18} />
+              ) : (
+                <TriangleAlert size={18} />
+              )
+            }
+            title={banner.title}
+            action={
+              lastLiveFailure ? (
+                <button
+                  type="button"
+                  onClick={undoFailure}
+                  className="text-[13px] leading-none font-bold text-clay"
+                >
+                  Deshacer
+                </button>
+              ) : null
+            }
+          >
+            {banner.detail}
+          </Note>
+        ) : null}
+
         {rest ? (
-          <div className="mt-5">
+          <div className="mt-3.5">
             <RestBar
               rest={rest}
               onSkip={() => {
@@ -892,14 +997,14 @@ export function SessionRunner({
         ) : null}
 
         {nextExercise ? (
-          <div className="mt-4.5 flex items-center gap-2.5 px-1">
-            <span className="font-display flex-none text-[11px] leading-none font-semibold tracking-[0.12em] text-faint uppercase">
+          <div className="mt-4 flex items-center gap-2.5 px-1">
+            <span className="flex-none text-[12px] leading-none font-semibold text-mid">
               Siguiente
             </span>
-            <span className="flex-1 truncate text-[14px] leading-[1.2] font-medium">
+            <span className="min-w-0 flex-1 truncate text-[14px] leading-[1.2] font-bold">
               {nextExercise.name}
             </span>
-            <span className="num flex-none text-[13.5px] leading-none font-semibold text-mid">
+            <span className="num flex-none text-[13px] leading-none font-semibold text-mid">
               {nextExercise.schemeLabel} ·{" "}
               {weightLabelFor(nextExercise.loadMode, weightAt(nextExercise, null))}
             </span>
@@ -907,211 +1012,61 @@ export function SessionRunner({
         ) : null}
 
         {error ? (
-          <Card className="mt-4 border-fail px-4 py-3.5 text-[12.5px] leading-[1.5]">
+          <Card className="mt-4 bg-fail-soft px-4 py-3.5 text-[12.5px] leading-[1.5] font-medium text-fail shadow-none">
             {error}
           </Card>
         ) : null}
 
-        {banner ? (
-          <Callout
-            className="mt-4"
-            eyebrow={banner.title}
-            eyebrowTone={
-              banner.tone === "warn" ? "text-warn-panel" : "text-fail-panel"
-            }
-            action={
-              lastLiveFailure ? (
-                <button
-                  type="button"
-                  onClick={undoFailure}
-                  className="text-[11.5px] leading-none font-medium underline opacity-70"
-                >
-                  deshacer
-                </button>
-              ) : null
-            }
-          >
-            {banner.detail}
-          </Callout>
-        ) : null}
-
-        {repsOpen ? (
-          <Card className="mt-4 px-4 py-4">
-            <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-              {editingIndex != null
-                ? `Corregir serie ${editingIndex + 1}`
-                : exercise.effort === "seconds"
-                  ? "Segundos aguantados"
-                  : exercise.effort === "amrap"
-                    ? "Reps completadas · AMRAP"
-                    : "Reps completadas"}
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
-                RIR
-              </span>
-              {[0, 1, 2, 3, 4].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setPendingRir((v) => (v === n ? null : n))}
-                  className={cn(
-                    "num flex h-11 w-11 items-center justify-center rounded-md border text-[15px] leading-none font-bold",
-                    pendingRir === n
-                      ? "border-transparent bg-strength text-on-strength"
-                      : "border-edge bg-soft text-mid",
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-              <span className="text-[11px] leading-none text-faint">
-                opcional
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {repOptions.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => record(n, editingIndex)}
-                  className={cn(
-                    "num flex h-11 w-11 items-center justify-center rounded-md border text-[17px] leading-none font-bold",
-                    n < exercise.repMin
-                      ? "border-fail bg-surface text-fail"
-                      : "border-edge bg-soft text-ink",
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <p className="mt-3 text-[12px] leading-[1.5] text-faint">
-              Por debajo de {exercise.repMin}{" "}
-              {exercise.isPrimary
-                ? "el motor reacciona: primero congela el peso, luego recorta la RM."
-                : "no pasa nada: los accesorios no tocan el motor."}
-            </p>
-            {editingIndex != null && logs[keyOf(exercise.id, editingIndex)] ? (
-              <button
-                type="button"
-                onClick={() => unlogSet(editingIndex)}
-                className="mt-3 text-[12px] leading-none font-medium text-fail underline"
-              >
-                borrar serie {editingIndex + 1} — queda sin hacer
-              </button>
-            ) : null}
-          </Card>
-        ) : null}
-
         {exercise.notes ? (
-          <p className="mt-4 text-[12.5px] leading-[1.5] text-mid">
+          <p className="mt-4 px-1 text-[12.5px] leading-[1.5] font-medium text-mid">
             {exercise.notes}
           </p>
         ) : null}
 
-        {/* Mid-set the screen is the set: the whole-session list and the
-            exit fold behind one line, open once every set is logged. */}
-        <details
-          className="group mt-6"
-          open={totalDone >= totalSets || undefined}
-        >
-          <summary className="flex min-h-11 list-none items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-3 [&::-webkit-details-marker]:hidden">
-            <span className="font-display min-w-0 flex-1 text-[12px] leading-none font-semibold tracking-[0.1em] uppercase">
-              Toda la sesión
+        {/* Explicit exit: the gym closes, the shoulder hurts — a session
+            can close as partial without inventing sets. A complete one
+            confirms too: the last set never registers the day by itself. */}
+        {!confirmFinish ? (
+          <button
+            type="button"
+            onClick={() => setConfirmFinish(true)}
+            className="mt-5 flex w-full items-center justify-between rounded-xl border border-dashed border-hairline px-4 py-3.5 text-left"
+          >
+            <span className="text-[14px] leading-none font-bold">
+              Terminar sesión
             </span>
-            <span className="num flex-none text-[12px] leading-none text-faint">
-              {totalDone}/{totalSets} series
+            <span className="num text-[12.5px] leading-none font-semibold text-mid">
+              {totalDone} de {totalSets} series
             </span>
-            <span
-              aria-hidden
-              className="font-display flex-none text-[13px] leading-none text-faint transition-transform group-open:rotate-45"
-            >
-              ＋
-            </span>
-          </summary>
-
-        <div className="mt-2.5 flex flex-col gap-1.5">
-          {exercises.map((e, i) => {
-            const done = countDone(logs, e.id, e.sets);
-            const complete = done >= e.sets;
-            return (
-              <SessionRow
-                key={e.id}
-                accent={
-                  complete || i === exIndex ? TONE.okBright : TONE.hairline
-                }
-                title={e.name}
-                status={complete ? "✓ HECHA" : i === exIndex ? "AHORA" : undefined}
-                statusTone={complete ? "text-ok" : "text-lime"}
-                primary={weightLabelFor(e.loadMode, weightAt(e, null))}
-                secondary={`${done}/${e.sets}`}
-                muted={complete}
-                onClick={() => {
-                  setExIndex(i);
-                  if (failureKey) setDismissedFailure(failureKey);
-                  setRepsOpen(false);
-                  setEditingIndex(null);
-                }}
-              />
-            );
-          })}
-        </div>
-
-          {/* Explicit exit: the gym closes, the shoulder hurts — a session
-              can close as partial without inventing sets. A complete one
-              confirms too: the last set never registers the day by itself. */}
-          {!confirmFinish ? (
-            <button
-              type="button"
-              onClick={() => setConfirmFinish(true)}
-              className="mt-2.5 flex w-full items-center justify-between rounded-xl border border-dashed border-hairline px-4 py-3.5 text-left"
-            >
-              <span className="font-display text-[12px] leading-none font-semibold tracking-[0.06em] uppercase">
-                Terminar sesión
-              </span>
-              <span className="num text-[12px] leading-none text-mid">
-                {totalDone}/{totalSets} series
-              </span>
-            </button>
-          ) : null}
-        </details>
-
-        {confirmFinish ? (
+          </button>
+        ) : (
           <div ref={finishRef}>
             <Card
               className={cn(
                 "mt-4 px-4 py-4",
-                totalDone < totalSets ? "border-fail" : "border-lime-edge",
+                finishedAll ? "" : "shadow-[inset_0_0_0_1.5px_var(--fail)]",
               )}
             >
-              <div className="flex items-center gap-2.5">
-                <span className="flex-1 text-[12.5px] leading-[1.4] font-semibold">
-                  {totalDone < totalSets ? (
-                    <>
-                      ¿Terminar con {totalSets - totalDone}{" "}
-                      {totalSets - totalDone === 1 ? "serie" : "series"} sin
-                      hacer?
-                    </>
-                  ) : (
-                    <>Sesión completa. ¿Terminar y registrar?</>
-                  )}
+              {finishedAll ? (
+                <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-ok-soft text-ok">
+                  <Check aria-hidden size={22} strokeWidth={2.5} />
                 </span>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={finish}
-                  className="font-display flex h-11 items-center rounded-md bg-strength px-3.5 text-[11.5px] leading-none font-bold tracking-[0.06em] text-on-strength uppercase disabled:opacity-40"
-                >
-                  {totalDone < totalSets ? "Sí, terminar" : "Terminar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmFinish(false)}
-                  className="text-[12px] leading-none font-medium text-mid underline"
-                >
-                  seguir
-                </button>
+              ) : null}
+              <div
+                className={cn(
+                  "text-[18px] leading-[1.25] font-extrabold tracking-[-0.01em]",
+                  finishedAll && "mt-3",
+                )}
+              >
+                {finishedAll ? (
+                  <>Sesión completa</>
+                ) : (
+                  <>
+                    ¿Terminar con {totalSets - totalDone}{" "}
+                    {totalSets - totalDone === 1 ? "serie" : "series"} sin
+                    hacer?
+                  </>
+                )}
               </div>
               <textarea
                 value={finishNotes}
@@ -1119,20 +1074,37 @@ export function SessionRunner({
                 rows={2}
                 maxLength={2000}
                 placeholder={
-                  totalDone < totalSets
-                    ? "Por qué cierras antes — «aquíleo molesto», «sin tiempo»… (opcional)"
-                    : "Nota de la sesión — «última serie dura», «buenas sensaciones»… (opcional)"
+                  finishedAll
+                    ? "Nota de la sesión — «última serie dura», «buenas sensaciones»… (opcional)"
+                    : "Por qué cierras antes — «aquíleo molesto», «sin tiempo»… (opcional)"
                 }
                 aria-label="Nota de la sesión"
-                className="mt-3 w-full rounded-md border border-edge bg-soft px-3 py-2.5 text-[12.5px] leading-[1.45] outline-none"
+                className="mt-3 w-full rounded-lg bg-soft px-3.5 py-3 text-[13px] leading-[1.45] font-medium outline-none"
               />
+              <div className="mt-3 flex items-center gap-4">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={finish}
+                  className="flex h-12 flex-1 items-center justify-center rounded-xl bg-strength text-[15px] leading-none font-bold text-on-strength shadow-cta disabled:opacity-40"
+                >
+                  {finishedAll ? "Terminar y registrar" : "Sí, terminar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmFinish(false)}
+                  className="px-2 text-[14px] leading-none font-bold text-mid"
+                >
+                  Seguir
+                </button>
+              </div>
             </Card>
           </div>
-        ) : null}
+        )}
       </div>
 
       {/* AppShell already pays `--safe-bottom` on the runner branch. */}
-      <div className="flex flex-none gap-2.5 px-5 pt-3.5 pb-[30px]">
+      <div className="flex flex-none gap-2.5 px-4 pt-3 pb-7">
         <button
           type="button"
           disabled={pending}
@@ -1144,16 +1116,17 @@ export function SessionRunner({
             }
             record(quickValue);
           }}
-          className="font-display flex h-[68px] flex-1 items-center justify-center gap-2.5 rounded-2xl bg-strength text-[18px] leading-none font-bold tracking-[0.04em] text-on-strength uppercase active:opacity-85 disabled:opacity-40"
+          className="flex h-16 flex-1 items-center justify-center gap-2 rounded-2xl bg-strength text-[17px] leading-none font-bold text-on-strength shadow-cta active:opacity-85 disabled:opacity-40"
         >
+          <Check aria-hidden size={20} strokeWidth={2.5} />
           {exercise.effort === "amrap" ? (
             "Registrar AMRAP"
           ) : (
             <>
-              Hecho ·
+              Hecho ·{" "}
               <span className="num">
                 {quickValue}
-                {exercise.effort === "seconds" ? "″" : ""}
+                {exercise.effort === "seconds" ? "″" : " reps"}
               </span>
             </>
           )}
@@ -1164,21 +1137,183 @@ export function SessionRunner({
             // Always a FRESH set from here — a pill left in edit mode
             // must not make this overwrite an old value.
             setEditingIndex(null);
-            setRepsOpen((v) => !v);
+            setRepsOpen(true);
           }}
-          className="font-display flex h-[68px] w-[104px] items-center justify-center rounded-2xl border-[1.5px] border-edge bg-surface text-[13px] leading-none font-semibold tracking-[0.06em] text-mid uppercase"
+          className="flex h-16 w-24 flex-none items-center justify-center rounded-2xl bg-surface text-[15px] leading-none font-bold text-ink shadow-raised"
         >
           Otras
         </button>
       </div>
 
+      {repsOpen ? (
+        <Sheet
+          onClose={() => {
+            setRepsOpen(false);
+            setEditingIndex(null);
+            setPendingRir(null);
+          }}
+        >
+          <div className="flex items-baseline gap-2">
+            <span className="flex-1 text-[18px] leading-tight font-extrabold tracking-[-0.01em]">
+              {editingLogged
+                ? `Corregir serie ${editingIndex! + 1}`
+                : exercise.effort === "seconds"
+                  ? "Segundos aguantados"
+                  : exercise.effort === "amrap"
+                    ? "Reps completadas · AMRAP"
+                    : "Reps completadas"}
+            </span>
+            <span className="num text-[13px] leading-none font-semibold text-mid">
+              objetivo {exercise.repsLabel.replace("-", "–")}
+              {exercise.effort === "seconds" ? "″" : ""}
+            </span>
+          </div>
+          <div className="mt-3.5 flex items-center gap-1.5">
+            <span className="w-9 flex-none text-[12px] leading-none font-bold text-mid">
+              RIR
+            </span>
+            {[0, 1, 2, 3, 4].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setPendingRir((v) => (v === n ? null : n))}
+                className={cn(
+                  "num h-10 flex-1 rounded-md text-[15px] leading-none font-bold",
+                  pendingRir === n
+                    ? "bg-strength text-on-strength"
+                    : "bg-soft text-ink",
+                )}
+              >
+                {n}
+              </button>
+            ))}
+            <span className="flex-none text-[11px] leading-none font-semibold text-mid">
+              opcional
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-5 gap-2">
+            {repOptions.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => record(n, editingIndex)}
+                className={cn(
+                  "num h-[52px] rounded-lg text-[19px] leading-none font-extrabold",
+                  n < exercise.repMin
+                    ? "bg-fail-soft text-fail"
+                    : "bg-soft text-ink",
+                )}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <p className="mt-3.5 text-[12.5px] leading-[1.5] font-medium text-mid">
+            Por debajo de {exercise.repMin}{" "}
+            {exercise.isPrimary
+              ? "el motor reacciona: primero congela el peso, luego recorta la RM."
+              : "no pasa nada: los accesorios no tocan el motor."}
+          </p>
+          {editingLogged ? (
+            <button
+              type="button"
+              onClick={() => unlogSet(editingIndex!)}
+              className="mt-3 text-[13px] leading-none font-bold text-fail"
+            >
+              Borrar la serie {editingIndex! + 1} — queda sin hacer
+            </button>
+          ) : null}
+        </Sheet>
+      ) : null}
+
+      {listOpen ? (
+        <Sheet onClose={() => setListOpen(false)}>
+          <div className="flex items-baseline gap-2">
+            <span className="flex-1 text-[18px] leading-tight font-extrabold tracking-[-0.01em]">
+              Toda la sesión
+            </span>
+            <span className="num text-[13px] leading-none font-semibold text-mid">
+              {totalDone} de {totalSets} series
+            </span>
+          </div>
+          <div className="-mx-2 mt-2 flex max-h-[55dvh] flex-col gap-0.5 overflow-auto">
+            {exercises.map((e, i) => {
+              const done = countDone(logs, e.id, e.sets);
+              const complete = done >= e.sets;
+              return (
+                <SessionRow
+                  key={e.id}
+                  accent={
+                    complete
+                      ? TONE.okBright
+                      : i === exIndex
+                        ? "var(--clay-line)"
+                        : TONE.hairline
+                  }
+                  title={e.name}
+                  status={complete ? "Hecha" : i === exIndex ? "Ahora" : undefined}
+                  statusTone={complete ? "text-ok" : "text-clay"}
+                  primary={weightLabelFor(e.loadMode, weightAt(e, null))}
+                  secondary={`${done}/${e.sets}`}
+                  muted={complete}
+                  className={i === exIndex ? "bg-clay-soft" : undefined}
+                  onClick={() => {
+                    setExIndex(i);
+                    if (failureKey) setDismissedFailure(failureKey);
+                    setRepsOpen(false);
+                    setEditingIndex(null);
+                    setListOpen(false);
+                  }}
+                />
+              );
+            })}
+          </div>
+          {!confirmFinish ? (
+            <button
+              type="button"
+              onClick={() => {
+                setListOpen(false);
+                setConfirmFinish(true);
+              }}
+              className="mt-3 flex h-12 w-full items-center justify-center rounded-xl bg-soft text-[15px] leading-none font-bold"
+            >
+              Terminar sesión
+            </button>
+          ) : null}
+        </Sheet>
+      ) : null}
+
       {flash ? (
         <div
           aria-hidden
-          className="animate-flash pointer-events-none absolute inset-0 z-10"
+          className="animate-flash pointer-events-none absolute inset-0 z-30"
           style={{ background: TONE.okBright }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/** A panel from the bottom of the screen; tapping the scrim closes it. */
+function Sheet({
+  children,
+  onClose,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col bg-[rgb(31_29_27/0.44)]">
+      <button
+        type="button"
+        aria-label="Cerrar"
+        onClick={onClose}
+        className="flex-1 cursor-default"
+      />
+      <div className="animate-sheet rounded-t-[28px] bg-surface px-5 pt-2.5 pb-8 shadow-float">
+        <div className="mx-auto h-[5px] w-10 rounded-full bg-hairline" />
+        <div className="mt-4">{children}</div>
+      </div>
     </div>
   );
 }

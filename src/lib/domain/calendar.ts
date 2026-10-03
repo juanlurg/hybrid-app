@@ -87,6 +87,37 @@ export function formatDayLong(iso: IsoDate): string {
   return `${DAY_LABELS[dayIndexOf(iso)]} ${d.getDate()} ${MONTHS[d.getMonth()].toUpperCase()}`;
 }
 
+const WEEKDAY_NAMES = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo",
+] as const;
+
+const MONTH_NAMES = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+] as const;
+
+/** "Miércoles, 14 de octubre" */
+export function formatDayFull(iso: IsoDate): string {
+  const d = parseIsoDate(iso);
+  return `${WEEKDAY_NAMES[dayIndexOf(iso)]}, ${d.getDate()} de ${MONTH_NAMES[d.getMonth()]}`;
+}
+
 /** "14 oct" */
 export function formatDayShort(iso: IsoDate): string {
   const d = parseIsoDate(iso);

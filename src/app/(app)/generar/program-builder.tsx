@@ -1,31 +1,42 @@
 "use client";
 
+import { Calendar, CircleAlert, Sparkles, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import {
   ActionBar,
+  Card,
   Footnote,
   Row,
   RowStack,
   ScreenHeader,
-  TopBar,
   SectionLabel,
+  TopBar,
 } from "@/components/ui/kit";
-import { TONE } from "@/components/day-accents";
 import {
   discardGeneratedProgram,
   rebuildProgram,
   type GeneratedPreview,
 } from "@/lib/actions/ai";
 import { activateProgram } from "@/lib/actions/onboarding";
-import { formatDayLong } from "@/lib/domain/calendar";
+import { formatDayFull } from "@/lib/domain/calendar";
+import { cn } from "@/lib/cn";
 
 const EXAMPLES = [
   "Media maratón en 5 meses. Cinco días a la semana, gimnasio en casa con barra y rack. Quiero mantener el físico y bajar de 1h45.",
   "Vuelvo de una lesión de sóleo. Ocho semanas: reconstruir base aeróbica sin impacto alto y mantener fuerza de tren superior.",
   "Bloque de fuerza puro de 12 semanas. Cuatro días, sin carrera salvo un rodaje suelto el domingo.",
 ];
+
+function ErrorNote({ children }: { children: string }) {
+  return (
+    <div className="mx-5 mt-4 flex items-start gap-2.5 rounded-2xl bg-fail-soft px-4 py-3 text-[13px] leading-[1.45] font-medium text-fail">
+      <CircleAlert aria-hidden size={16} className="mt-0.5 flex-none" />
+      <span className="min-w-0 flex-1">{children}</span>
+    </div>
+  );
+}
 
 export function ProgramBuilder({
   hasApiKey,
@@ -63,33 +74,60 @@ export function ProgramBuilder({
           className="pt-2"
           eyebrow="Programa generado"
           title={preview.name}
-          subtitle={`ARRANCA EL ${formatDayLong(preview.startsOn).toUpperCase()} · AÚN SIN ACTIVAR`}
-        />
+        >
+          <div className="mt-2.5 flex">
+            <span className="flex h-7 items-center gap-1.5 rounded-full bg-warn-soft px-3 text-[12.5px] leading-none font-bold">
+              <span className="h-1.5 w-1.5 rounded-full bg-warn-dot" />
+              {`Arranca el ${formatDayFull(preview.startsOn).toLowerCase()} · aún sin activar`}
+            </span>
+          </div>
+        </ScreenHeader>
 
         <div className="min-h-0 flex-1 overflow-auto">
-          <SectionLabel>Fases</SectionLabel>
+          <SectionLabel
+            right={
+              <span className="num">
+                {preview.phases.reduce((n, p) => n + p.weeks, 0)} semanas
+              </span>
+            }
+          >
+            Fases
+          </SectionLabel>
           <RowStack className="mt-2.5">
             {preview.phases.map((p) => (
               <Row key={p.key}>
-                <div className="flex items-baseline gap-2.5">
-                  <span className="font-display text-[13.5px] leading-[1.2] font-semibold">
-                    {p.key} — {p.name}
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-soft text-[12px] leading-none font-extrabold text-body">
+                    {p.key}
                   </span>
-                  <span className="num ml-auto text-[11px] leading-none text-mid">
+                  <span className="min-w-0 flex-1 text-[15px] leading-[1.25] font-bold">
+                    {p.name}
+                  </span>
+                  <span className="num flex-none text-[13px] leading-none font-bold text-body">
                     {p.weeks} sem
                   </span>
                 </div>
                 {p.warnings.map((w, i) => (
-                  <p
+                  <div
                     key={i}
-                    className="mt-2 rounded-r-sm border-l-[4px] py-0.5 pl-2.5 text-[11px] leading-[1.45] text-mid"
-                    style={{
-                      borderColor: w.tone === "fail" ? TONE.fail : TONE.warn,
-                    }}
+                    className={cn(
+                      "mt-2.5 ml-12 flex gap-2.5 rounded-lg px-3 py-2.5",
+                      w.tone === "fail" ? "bg-fail-soft" : "bg-warn-soft",
+                    )}
                   >
-                    <span className="font-semibold text-ink">{w.title}.</span>{" "}
-                    {w.detail}
-                  </p>
+                    <TriangleAlert
+                      aria-hidden
+                      size={15}
+                      className={cn(
+                        "mt-px flex-none",
+                        w.tone === "fail" ? "text-fail" : "text-clay-dim",
+                      )}
+                    />
+                    <p className="min-w-0 flex-1 text-[12.5px] leading-[1.45] font-medium text-body">
+                      <span className="font-bold text-ink">{w.title}.</span>{" "}
+                      {w.detail}
+                    </p>
+                  </div>
                 ))}
               </Row>
             ))}
@@ -98,45 +136,43 @@ export function ProgramBuilder({
           {preview.newLiftKeys.length > 0 ? (
             <>
               <SectionLabel>RM de los básicos nuevos</SectionLabel>
-              <p className="px-5 pt-2 text-[11.5px] leading-[1.5] text-mid">
+              <p className="px-6 pt-2 text-[13px] leading-[1.5] font-medium text-body">
                 El plan sigue {preview.newLiftKeys.length === 1 ? "un básico" : "básicos"}{" "}
                 que aún no trackeas. El motor no inventa una RM: pon la tuya
                 (vale la estimada con la calculadora de Programa).
               </p>
-              <RowStack className="mt-2.5">
+              <div className="mx-5 mt-2.5 flex flex-col gap-2">
                 {preview.newLiftKeys.map((k) => (
                   <label
                     key={k}
-                    className="flex items-center gap-3 rounded-lg border border-line bg-surface px-3.5 py-3"
+                    className="flex items-center gap-3 rounded-2xl bg-surface py-3 pr-3 pl-4 shadow-card"
                   >
-                    <span className="flex-1 text-[13px] leading-[1.2] font-semibold capitalize">
+                    <span className="min-w-0 flex-1 text-[15px] leading-[1.25] font-bold capitalize">
                       {k}
                     </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={rms[k] ?? ""}
-                      placeholder="—"
-                      onChange={(e) =>
-                        setRms((prev) => ({ ...prev, [k]: e.target.value }))
-                      }
-                      aria-label={`RM estimada de ${k}`}
-                      className="num h-10 w-24 rounded-sm border border-edge bg-soft px-2 text-right text-[15px] font-semibold outline-none"
-                    />
-                    <span className="font-display text-[11px] leading-none font-semibold text-mid">
-                      kg
+                    <span className="flex h-11 w-24 flex-none items-center gap-1.5 rounded-lg border-2 border-clay bg-soft px-3.5">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={rms[k] ?? ""}
+                        placeholder="—"
+                        onChange={(e) =>
+                          setRms((prev) => ({ ...prev, [k]: e.target.value }))
+                        }
+                        aria-label={`RM estimada de ${k}`}
+                        className="num h-full w-full min-w-0 bg-transparent text-right text-[16px] font-extrabold outline-none"
+                      />
+                      <span className="text-[13px] leading-none font-bold text-mid">
+                        kg
+                      </span>
                     </span>
                   </label>
                 ))}
-              </RowStack>
+              </div>
             </>
           ) : null}
 
-          {error ? (
-            <div className="mx-5 mt-4 rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[12px] leading-[1.5]">
-              {error}
-            </div>
-          ) : null}
+          {error ? <ErrorNote>{error}</ErrorNote> : null}
 
           <Footnote>
             Al activar, «{currentProgramName}» queda archivado con todo su
@@ -148,7 +184,7 @@ export function ProgramBuilder({
         <div className="flex flex-none items-stretch">
           <ActionBar
             tone="strength"
-            className="min-w-0 flex-1 pr-1.5"
+            className="min-w-0 flex-1 pr-2.5"
             disabled={pending || blocking.length > 0 || rmsMissing.length > 0}
             onClick={() =>
               startTransition(async () => {
@@ -175,7 +211,7 @@ export function ProgramBuilder({
                   ? "Faltan RM por poner"
                   : "Activar este programa"}
           </ActionBar>
-          <div className="flex-none pt-3.5 pr-5 pb-3">
+          <div className="flex-none pt-3.5 pr-4 pb-3">
             <button
               type="button"
               disabled={pending}
@@ -186,7 +222,7 @@ export function ProgramBuilder({
                   setRms({});
                 })
               }
-              className="font-display flex h-15 w-[104px] items-center justify-center rounded-xl border border-edge bg-surface text-[12px] leading-none font-bold tracking-[0.06em] text-mid uppercase disabled:opacity-40"
+              className="flex h-14 items-center justify-center rounded-xl bg-surface px-[18px] text-[14px] leading-none font-bold text-body shadow-raised disabled:opacity-40"
             >
               Descartar
             </button>
@@ -204,73 +240,80 @@ export function ProgramBuilder({
         className="pt-2"
         eyebrow="Otra temporada"
         title="Un plan nuevo, desde cero"
-        subtitle="LA IA LO DISEÑA · TÚ LO REVISAS Y ACTIVAS"
+        subtitle={
+          <>
+            Describe el objetivo, la fecha, cuántos días puedes entrenar y qué
+            material tienes. La IA monta las fases, la semana tipo y las
+            prescripciones de carrera. Las RM que ya sigues se conservan —{" "}
+            {liftNames.length > 0 ? liftNames.join(", ") : "las que vayas creando"} —
+            porque el motor de pesos es tuyo, no del plan.
+          </>
+        }
       />
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="px-5 pt-5">
-          <p className="text-[12.5px] leading-[1.55] text-mid">
-            Describe el objetivo, la fecha, cuántos días puedes entrenar y qué
-            material tienes. La IA monta las fases, la semana tipo y las
-            prescripciones de carrera. Las RM que ya sigues se conservan
-            —{" "}
-            {liftNames.length > 0 ? liftNames.join(", ") : "las que vayas creando"} —
-            porque el motor de pesos es tuyo, no del plan.
-          </p>
-        </div>
-
         {!hasApiKey ? (
-          <div className="mx-5 mt-4 rounded-r-sm border-l-[4px] border-warn py-1 pl-3 text-[12px] leading-[1.55]">
-            Falta <code className="font-semibold">GEMINI_API_KEY</code> en{" "}
-            <code className="font-semibold">.env.local</code>. Sin ella no se
-            puede generar un plan; el editor manual sigue funcionando.
+          <div className="mx-5 mt-4 flex items-start gap-2.5 rounded-2xl bg-warn-soft px-4 py-3 text-[13px] leading-[1.45] font-medium text-body">
+            <TriangleAlert
+              aria-hidden
+              size={16}
+              className="mt-0.5 flex-none text-clay-dim"
+            />
+            <span className="min-w-0 flex-1">
+              Falta <code className="font-bold text-ink">GEMINI_API_KEY</code> en{" "}
+              <code className="font-bold text-ink">.env.local</code>. Sin ella no
+              se puede generar un plan; el editor manual sigue funcionando.
+            </span>
           </div>
         ) : null}
 
         <SectionLabel>El encargo</SectionLabel>
-        <div className="mx-5 mt-3">
+        <Card className="mx-5 mt-2.5 rounded-2xl px-4 py-3.5">
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
-            rows={6}
+            rows={5}
             disabled={!hasApiKey || pending}
             placeholder="Ej: media maratón el 25 de abril, cinco días a la semana, rack y barra en casa…"
             aria-label="Descripción del programa"
-            className="w-full rounded-xl border border-edge bg-surface px-3.5 py-3 text-[13px] leading-[1.5] outline-none disabled:opacity-50"
+            className="block w-full resize-none bg-transparent text-[14.5px] leading-[1.55] font-medium outline-none disabled:opacity-50"
           />
-        </div>
+        </Card>
 
-        <div className="mx-5 mt-3 flex flex-wrap gap-1.5">
+        <div className="mx-5 mt-2.5 flex flex-col gap-1.5">
           {EXAMPLES.map((e) => (
             <button
               key={e}
               type="button"
               disabled={!hasApiKey || pending}
               onClick={() => setBrief(e)}
-              className="rounded-sm border border-edge bg-soft px-2.5 py-2 text-left text-[11px] leading-[1.3] font-semibold disabled:opacity-40"
+              className={cn(
+                "flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left shadow-raised disabled:opacity-40",
+                brief === e ? "bg-clay-soft" : "bg-surface",
+              )}
             >
-              {e.slice(0, 40)}…
+              <Sparkles aria-hidden size={14} className="flex-none text-clay" />
+              <span className="min-w-0 flex-1 text-[13px] leading-[1.4] font-medium text-body">
+                {e.slice(0, 40)}…
+              </span>
             </button>
           ))}
         </div>
 
         <SectionLabel>Primer lunes</SectionLabel>
-        <div className="mx-5 mt-3">
+        <label className="mx-5 mt-2.5 flex h-13 items-center gap-2.5 rounded-xl bg-surface px-4 shadow-raised">
+          <Calendar aria-hidden size={18} className="flex-none text-mid" />
           <input
             type="date"
             value={startsOn}
             onChange={(e) => setStartsOn(e.target.value)}
             disabled={pending}
             aria-label="Fecha de inicio"
-            className="num h-12 w-full rounded-xl border border-edge bg-surface px-3.5 text-[14px] font-medium outline-none"
+            className="num h-full min-w-0 flex-1 bg-transparent text-[14.5px] font-bold outline-none"
           />
-        </div>
+        </label>
 
-        {error ? (
-          <div className="mx-5 mt-4 rounded-r-sm border-l-[4px] border-fail py-1 pl-3 text-[12px] leading-[1.5]">
-            {error}
-          </div>
-        ) : null}
+        {error ? <ErrorNote>{error}</ErrorNote> : null}
 
         <Footnote>
           Generar no cambia nada todavía: el plan sale sin activar, lo revisas
@@ -294,7 +337,14 @@ export function ProgramBuilder({
           })
         }
       >
-        {pending ? "Diseñando el plan…" : "Generar programa"}
+        {pending ? (
+          "Diseñando el plan…"
+        ) : (
+          <>
+            <Sparkles aria-hidden size={18} />
+            Generar programa
+          </>
+        )}
       </ActionBar>
     </div>
   );

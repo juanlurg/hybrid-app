@@ -1,8 +1,12 @@
 # Bloques — design spec
 
-**Foco.** One thing is lit per screen — the lime number — and everything else
-recedes into cards on the page colour. The engine's reasoning folds behind a
-single line. Dark and light are peers: the palette flips, the hierarchy does not.
+**The notebook.** Warm paper, clay for strength, slate for running, and one
+dark panel per screen for the thing that matters right now — the basic's
+weight on Hoy, the rest clock in the runner, adherence on Progreso.
+Everything else is a light card floating on a soft warm shadow. The engine's
+reasoning folds behind a single line. Light is the designed theme; dark is a
+warm mirror of it: the palette flips, and the panel inverts — paper is the one
+light thing on a dark screen.
 
 **Plain words by default, the mechanism on demand.** A screen says what the
 athlete does and what changed — "80 % de tu RM", "peso congelado", "sin
@@ -25,89 +29,74 @@ Every token is a CSS custom property, so inline styles follow the theme too —
 use `var(--…)`, never a literal. `@theme inline` is what keeps the utilities
 pointing at the variable instead of copying its value at build time.
 
-| Token | Dark | Light | Use |
+| Token | Light | Dark | Use |
 |---|---|---|---|
-| `bg` | `#0f1210` | `#f2f4ef` | the page |
-| `surface` | `#171b18` | `#ffffff` | cards and rows |
-| `soft` | `#22271f` | `#eef2e8` | chips, wells, tracks inside cards |
-| `sunk` | `#131711` | `#f7f9f3` | today / expanded row |
-| `chrome` | `#131714` | `#ffffff` | desktop rail, mobile tab bar |
-| `panel` / `on-panel` | `#171b18` | `#171b16` | the engine's box — light inverts, dark just cards |
-| `edge` | `#262b27` | `#dde3da` | card border |
-| `line` | `#232824` | `#e2e7df` | row border, dividers |
-| `hairline` | `#3a403b` | `#cfd8ca` | dashed borders, inert spines |
-| `ink` | `#eef2ec` | `#171b16` | primary text |
-| `mid` | `#9aa39b` | `#5f6a60` | secondary text |
-| `faint` | `#7a847b` | `#6c776d` | tertiary text — ≥ 4:1 on every surface |
-| `ghost` | `#5d665e` | `#98a299` | decoration only: struck-through, inert — never information |
-| `strength` / `on-strength` | `#b8ee3c` | `#b8ee3c` | the lime **fill** — same in both themes |
-| `lime` | `#b8ee3c` | `#4c7d1a` | lime as **ink**: eyebrows, hero numbers |
-| `lime-line` | `#b8ee3c` | `#6cb520` | lime as a **stroke**: spines, progress, selection |
-| `lime-soft` / `lime-edge` | `#1c2b12` | `#e9f5d6` | the "done" pill, the active rail item |
-| `lime-dim` | `#7fa14a` | `#6f994a` | lime turned down — a sub-label beside a lime figure (`/15`, `EPLEY`) |
-| `run` | `#6fd3e8` | `#1f7f96` | **carrera** — the cyan |
-| `quiet` | `#2b302c` | `#dde3d2` | mobility accent, inert chips |
-| `ok` / `ok-bright` | = `lime` / `lime-line` | | done, rest timer |
-| `warn` | `#e8c65a` | `#8a5d00` | partial, engine hold |
-| `fail` | `#f08a7a` | `#b4382a` | skipped, RM cut |
-| `tint` | `#241f14` | `#f8f1e2` | "touched by AI" wash |
-| `ink-2` / `ink-3` | fixed | fixed | tracks and inactive text **inside** a panel |
+| `bg` | `#f2e9e3` | `#1c1917` | the paper |
+| `surface` | `#fdfaf7` | `#27221f` | cards, sheets, the tab bar |
+| `soft` | `#f2e9e3` | `#322c28` | wells inside cards: inputs, number badges, chips |
+| `quiet` | `#e7dad1` | `#3a332f` | inert fills: rest days, tracks, sets still to do |
+| `panel` / `on-panel` | `#3d3e40` / white | `#f2e9e3` / `#1f1d1b` | the one featured panel per screen — dark on paper, paper on dark |
+| `edge` / `line` / `hairline` | `#e7dad1` / `#efe6df` / `#d9c8bc` | | dividers and dashed outlines — cards have no border |
+| `ink` / `body` / `mid` / `faint` | `#1f1d1b` / `#4a423c` / `#6b6058` / `#75685f` | | title, prose, secondary, tertiary |
+| `ghost` | `#b9a597` | `#6e625a` | decoration only, never information |
+| `strength` / `on-strength` | `#c25e33` / white | same | the clay **fill**: actions, today, done sets |
+| `clay` | `#b4522b` | `#e8936b` | clay as **ink**: eyebrows, active labels, records |
+| `clay-soft` / `clay-edge` / `clay-dim` | `#fbefe8` / `#efc3ae` / `#92411f` | | today's row, partial cells, frozen-weight ink |
+| `run` / `run-soft` / `run-mist` | `#3f6e86` / `#e3ecf0` / `#a9c3cf` | | **carrera** — slate; Z2 / tiles / Z1 |
+| `ok` / `ok-soft` | `#4e7a52` / `#e7efe4` | | done |
+| `warn` / `warn-soft` / `warn-dot` | `#92411f` / `#fdf0dc` / `#e88c22` | | partial, engine hold |
+| `fail` / `fail-soft` | `#b23a2b` / `#f8e3df` | | skipped, below range, RM cut |
+| `panel-soft` / `panel-well` / `panel-line` | white 70 % / 8 % / 10 % | `#4a423c` / `#e7dad1` / ink 8 % | secondary text, chips and dividers **on** the panel |
+| `clay-panel` / `warn-panel` / `fail-panel` / `ok-panel` | `#e39b78` / `#f8c07a` / `#f0a08f` / `#8dbf8f` | `#b4522b` / `#92411f` / `#b23a2b` / `#4e7a52` | eyebrows and figures **on** the panel |
 
-`strength` is the lit surface and never moves; `lime` is that same green used as
-ink, which light has to darken to stay legible. Text on a `strength` fill is
-always `on-strength`. Accents by session group live in
-`src/components/day-accents.ts` — always use `accentFor(group)`.
+Accents by session group live in `src/components/day-accents.ts` — always use
+`accentFor(group)`; the glyph for a kind of day is `DayIcon`.
 
 ## Type
 
-Chakra Petch (`font-display`, 500/600/700) carries labels, actions and numbers.
-Barlow (`font-sans`, 400–700) carries prose and is the body default. Neither
-face ships 800 or 900, so `font-extrabold` and `font-black` are banned — the
-browser would fake them.
+Plus Jakarta Sans, 400–800, everywhere (`font-sans` and `font-display` are the
+same face). Weight carries hierarchy; uppercase is for eyebrows only.
 
 | Role | Class |
 |---|---|
-| Section label | `font-display text-[12px] font-semibold tracking-[0.12em] text-mid uppercase` |
-| Header eyebrow | `font-display text-[12px] font-semibold tracking-[0.12em] uppercase` |
-| Card eyebrow | `font-display text-[11px] font-semibold tracking-[0.14em] text-lime uppercase` |
-| Screen title | `font-display text-[26px] leading-[1.1] font-bold` |
-| Hero number | `num text-[88px] sm:text-[108px] leading-[0.95] font-bold tracking-[-0.02em] text-lime` |
-| KPI number | `num text-[28px] leading-none font-bold tracking-[-0.02em]` |
-| Row title | `text-[15px] leading-[1.2] font-semibold` |
-| Row subtitle | `text-[12.5px] leading-[1.35] text-mid` |
-| Right-hand figure | `num text-[14px] font-semibold` |
-| Action | `font-display h-15 rounded-xl text-[16px] font-bold tracking-[0.06em] uppercase` |
+| Eyebrow | `text-[11px] font-bold tracking-[0.13em] uppercase text-clay` |
+| Screen title | `text-[32px]–[34px] leading-[1.1] font-extrabold tracking-[-0.02em]` |
+| Section label | `text-[17px] font-extrabold tracking-[-0.01em]` + 13px `mid` note on the right |
+| Hero number | `num text-[88px]–[96px] leading-[0.9] font-extrabold tracking-[-0.04em]` |
+| KPI number | `num text-[26px] leading-none font-extrabold` |
+| Row title | `text-[15px] leading-[1.25] font-bold` |
+| Row subtitle | `text-[12.5px] leading-[1.35] font-medium text-mid` |
+| Action | `h-14 rounded-xl text-[16px] font-bold`, sentence case, with an icon |
 
-Put `num` on anything numeric — it turns on tabular figures **and** the display
-face. That one class is what makes numbers read as Chakra Petch app-wide.
-
-Nothing smaller than 11px, and 11px only for uppercase labels; anything the
-athlete has to read is 12.5px or more, in `mid` rather than `faint`.
+Put `num` on anything numeric — tabular figures. Nothing smaller than 11px.
 
 ## Layout idioms
 
-- **Radii**: `sm` 8, `md` 10, `lg` 12, `xl` 14, `2xl` 18, `3xl` 22. Cards are
-  `rounded-2xl`, rows `rounded-lg`/`rounded-xl`, chips `rounded-sm`, actions
-  `rounded-xl`. Nothing is square any more, and nothing has a shadow.
-- **Header**: on the page, no band. Eyebrow + title + subtitle. `ScreenHeader`.
-- **Card**: `rounded-2xl border border-edge bg-surface`. `Card` in the kit. The
-  lit card carries a lime eyebrow, the hero number, `Tag` chips for the
-  prescription, then a divider and one line of engine reasoning.
-- **Row stacks**: `RowStack` is a `gap-1.5` column; each `Row` is its own
-  bordered rounded surface. The page shows through the gap.
-- **Grouped list card**: one card, internal dividers — `<Card className="divide-y
-  divide-line px-4 py-1">` with plain `py-[11px]` rows inside. Ajustes' groups,
-  Editar's exercise list, the engine breakdown. Use `divide-y`, not hand-rolled
-  borders. A `SectionLabel` sits above it.
-- **Coloured spine**: `<div className="h-8 w-[3px] rounded-full" style={{background: accent}} />`
-  at the left of a row. `SessionRow` does this.
-- **Steppers**: `−` / value / `+`, 32px `rounded-sm border-edge bg-surface`.
-- **Chips**: `rounded-sm border-edge bg-soft`, filled `bg-strength
-  text-on-strength` when active. `Tag` is the read-only variant.
-- **Action**: inset `px-5`, 60px, `rounded-xl`, lime. Pinned at the bottom.
-- **Callout**: `bg-panel text-on-panel`, coloured eyebrow. The engine speaking —
-  a dark box in the light theme, an ordinary card in the dark one.
-- **Language**: Spanish, lower-case sentences, decimal comma (`formatWeight`).
+- **Radii**: `sm` 10, `md` 12, `lg` 14, `xl` 18, `2xl` 20, `3xl` 24. Cards
+  `rounded-2xl`, hero cards and panels `rounded-3xl`, chips and nav pills
+  `rounded-full`.
+- **Shadows** (tokens, warm in light): `shadow-card` for cards, `shadow-raised`
+  for small floating buttons and tiles, `shadow-panel` for the dark panel,
+  `shadow-cta` / `shadow-cta-run` under the primary action, `shadow-float` for
+  the tab bar and sheets.
+- **Card**: `rounded-3xl bg-surface shadow-card`, no border. `Card` in the kit.
+- **Panel**: `bg-panel text-on-panel shadow-panel rounded-3xl`, a `clay-panel`
+  eyebrow, the hero number in `on-panel`, `panel-well` chips, a `panel-line` divider and
+  one line of engine reasoning. `Callout` is the text-only variant.
+- **Note**: a card with a tinted 36px icon tile, a bold line and one sentence —
+  frozen weight, deload, missed session. `Note` in the kit.
+- **Row stacks**: `RowStack` is one card with `p-1.5`; each `Row` inside is a
+  padded `rounded-lg` hit area. Lists of days and exercises lead with a 36px
+  icon tile or a numbered badge.
+- **Steppers**: one `bg-soft` pill, − / + icons either side of the figure.
+- **Action**: pinned at the bottom, `px-4`, 56px (64px in the runner), clay with
+  `shadow-cta`; a white secondary ("Hoy no entreno", "Otras", "Saltar") sits
+  beside it.
+- **Tab bar**: floating, `inset-x-4 bottom-4`, 68px, icon in a 46×30 pill that
+  fills clay when active. Hidden in the runner.
+- **Sheet**: the runner's "Otras" and session list rise from the bottom over a
+  scrim; tapping the scrim closes them.
+- **Language**: Spanish, sentence case, decimal comma (`formatWeight`).
 
 ## Copy voice
 
@@ -132,7 +121,7 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 | `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
-| `/carrera/[fecha]` | Semana | Run blocks, zones (folded), mark done, skip |
+| `/carrera/[fecha]` | Semana | Run blocks, zone ruler, watch data, mark done, skip |
 | `/progreso` | Progreso | Adherence, records, the log, running trend (Pa:HR, km) |
 | `/programa` | Plan | Phases and what each is for, links, RMs, calculadora |
 | `/editor` | Plan | Semana tipo — weekly template editor + AI refinement |

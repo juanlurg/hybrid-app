@@ -1,9 +1,18 @@
+import {
+  BatteryLow,
+  CalendarClock,
+  ChevronRight,
+  HeartPulse,
+  History,
+  Info,
+  Snowflake,
+} from "lucide-react";
 import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
 import {
   DAY_INITIALS,
-  formatDayLong,
+  formatDayFull,
   formatDayShort,
   type IsoDate,
 } from "@/lib/domain/calendar";
@@ -17,14 +26,15 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { formatWeight } from "@/lib/engine";
 import { cn } from "@/lib/cn";
-import { Callout, Card, ScreenHeader } from "@/components/ui/kit";
+import { Note } from "@/components/ui/kit";
+import { DayIcon } from "@/components/day-icon";
 import {
   SkipDayButton,
   StartSessionButton,
 } from "@/components/session/start-session-button";
 import { StrengthDay } from "@/components/strength-day";
 import { SyncStatus } from "@/components/sync-status";
-import { accentFor, GROUP_LABEL, TONE } from "@/components/day-accents";
+import { accentFor, GROUP_LABEL } from "@/components/day-accents";
 
 const WEEKDAY = [
   "el lunes",
@@ -115,7 +125,6 @@ export default async function HoyPage() {
   const todaySession = (sessions ?? []).find(
     (s) => s.scheduled_on === effectiveOn && s.slot_id === day.slot?.id,
   );
-  const accent = accentFor(day.group);
   const held = (heldLifts ?? []).filter((l) => l.hold && l.hold_at_kg);
 
   /* ── the week around today ───────────────────────────────────── */
@@ -158,109 +167,215 @@ export default async function HoyPage() {
         ? "Descansar es parte del plan."
         : null;
 
+  /* ── what the athlete should know before starting ────────────── */
+
+  const notes = (
+    <>
+      {day.isDeload ? (
+        <Note
+          className="mx-5 mt-3"
+          tone="quiet"
+          icon={<BatteryLow size={18} />}
+          title="Semana de descarga"
+        >
+          Mitad de series y pesos más bajos, a propósito. La carrera también
+          baja. El objetivo es llegar fresco a la semana que viene.
+        </Note>
+      ) : null}
+
+      {held.map((lift) => (
+        <Note
+          key={lift.id}
+          className="mx-5 mt-3"
+          icon={<Snowflake size={18} />}
+          title={`${lift.name} · peso congelado en ${formatWeight(Number(lift.hold_at_kg))} kg`}
+        >
+          La última vez no llegaste al mínimo del rango, así que el peso no
+          sube hasta una sesión limpia. Otro fallo y la RM baja.
+        </Note>
+      ))}
+
+      {test && test.date !== day.date ? (
+        <Note
+          className="mx-5 mt-3"
+          tone="run"
+          icon={<HeartPulse size={18} />}
+          title="Esta semana hay test"
+        >
+          Test de umbral {WEEKDAY[test.dayIndex]}: de él salen tus zonas de
+          pulso. Llega descansado.
+        </Note>
+      ) : null}
+
+      {loggedEver === 0 && !preSeason ? (
+        <Note
+          className="mx-5 mt-3"
+          tone="clay"
+          icon={<Info size={18} />}
+          title="Cómo funciona"
+        >
+          El motor calcula cada peso a partir de tus RM; tú solo marcas lo que
+          haces. Si una serie del básico se queda por debajo del rango, el peso
+          se congela en vez de subir. Los accesorios suben solos cuando haces
+          el tope del rango en todas las series.
+        </Note>
+      ) : null}
+    </>
+  );
+
+  const skipTarget =
+    day.slot && !clamped && trains(day) && statusOf(day) === "planned"
+      ? {
+          phaseId: phase.id,
+          slotId: day.slot.id,
+          scheduledOn: day.date,
+          week: placement.week,
+          dayIndex: day.dayIndex,
+          sessionType: day.sessionType,
+          title: day.title,
+          group: day.group,
+        }
+      : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader
-        eyebrow={formatDayLong(today)}
-        title={heading.title}
-        subtitle={heading.subtitle}
-      />
+      <header className="flex-none px-5 pt-6">
+        <div className="flex items-center gap-3">
+          <span className="min-w-0 flex-1 truncate text-[14px] leading-none font-semibold text-mid">
+            {formatDayFull(today)}
+          </span>
+          {clamped ? null : (
+            <Link
+              href="/semana"
+              className="flex h-[30px] flex-none items-center gap-1.5 rounded-full bg-surface px-3 text-[12px] leading-none font-bold text-ink shadow-raised"
+            >
+              <span
+                aria-hidden
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: accentFor("strength") }}
+              />
+              {phase.key} · semana {placement.week} de {phase.weeks}
+            </Link>
+          )}
+        </div>
+        <h1 className="mt-2.5 text-[34px] leading-[1.1] font-extrabold tracking-[-0.02em]">
+          {heading.title}
+        </h1>
+        {heading.subtitle ? (
+          <p className="mt-1.5 text-[14px] leading-[1.45] font-medium text-body">
+            {heading.subtitle}
+          </p>
+        ) : null}
+      </header>
 
-      <div className="flex-1 overflow-auto pt-3 pb-6">
+      <div className="no-scrollbar flex-1 overflow-auto pt-5 pb-6">
         <SyncStatus />
 
         {week.length > 0 ? (
-          <Link href="/semana" className="mb-3.5 block px-5">
-            <div className="flex items-baseline gap-2">
-              <span className="min-w-0 flex-1 truncate text-[12.5px] leading-none text-mid">
-                {phase.name} · semana {placement.week} de {phase.weeks}
-              </span>
-              <span aria-hidden className="text-[13px] leading-none text-mid">
-                ›
-              </span>
-            </div>
-            <div className="mt-2 flex gap-1">
-              {week.map((d) => {
-                const status = statusOf(d);
-                const isToday = d.date === today;
-                const done = status === "done" || status === "partial";
-                const lost =
-                  trains(d) &&
-                  !isToday &&
-                  d.date < today &&
-                  (status === "planned" || status === "skipped");
-                return (
-                  <div
-                    key={d.date}
-                    aria-label={`${d.dayLabel} · ${d.title}`}
+          <Link
+            href="/semana"
+            aria-label={`${phase.name} · semana ${placement.week} de ${phase.weeks}`}
+            className="mb-5 grid grid-cols-7 gap-1 px-5"
+          >
+            {week.map((d) => {
+              const status = statusOf(d);
+              const isToday = d.date === today;
+              const done = status === "done";
+              const partial = status === "partial";
+              const lost =
+                trains(d) &&
+                !isToday &&
+                d.date < today &&
+                (status === "planned" || status === "skipped");
+              const quietDay = d.group === "rest" || d.group === "mobility";
+              return (
+                <div
+                  key={d.date}
+                  aria-label={`${d.dayLabel} · ${d.title}`}
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <span
                     className={cn(
-                      "flex h-9 flex-1 flex-col items-center justify-center gap-[3px] rounded-md border",
-                      isToday
-                        ? "border-[1.5px] border-lime-line bg-sunk"
-                        : trains(d)
-                          ? "border-line bg-surface"
-                          : "border-dashed border-hairline",
+                      "text-[11px] leading-none",
+                      isToday ? "font-extrabold text-clay" : "font-bold text-mid",
                     )}
                   >
-                    <span
-                      className={cn(
-                        "font-display text-[11px] leading-none font-semibold",
-                        isToday ? "text-lime" : "text-mid",
-                      )}
-                    >
-                      {DAY_INITIALS[d.dayIndex]}
-                    </span>
-                    <span
-                      aria-hidden
-                      className="h-[4px] w-3 rounded-full"
-                      style={{
-                        background: done
-                          ? accentFor(d.group)
-                          : lost
-                            ? TONE.warn
-                            : "transparent",
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+                    {DAY_INITIALS[d.dayIndex]}
+                  </span>
+                  <span
+                    className={cn(
+                      "flex h-[38px] w-[38px] items-center justify-center rounded-full",
+                      isToday
+                        ? "bg-surface text-clay-line shadow-[inset_0_0_0_2px_var(--clay-line)]"
+                        : done
+                          ? "text-white"
+                          : partial
+                            ? "bg-clay-soft text-clay-dim"
+                            : lost
+                              ? "bg-fail-soft text-fail"
+                              : quietDay
+                                ? "bg-quiet text-mid"
+                                : "bg-surface text-mid",
+                    )}
+                    style={
+                      done && !isToday
+                        ? { background: accentFor(d.group) }
+                        : undefined
+                    }
+                  >
+                    <DayIcon group={d.group} />
+                  </span>
+                  <span
+                    className={cn(
+                      "num text-[12px] leading-none",
+                      isToday ? "font-extrabold text-clay" : "font-bold text-body",
+                    )}
+                  >
+                    {Number(d.date.slice(8))}
+                  </span>
+                </div>
+              );
+            })}
           </Link>
         ) : null}
 
         {preSeason ? (
-          <div className="mb-3.5 px-5">
-            <Callout eyebrow="El plan aún no ha empezado">
-              Empieza el lunes{" "}
-              {formatDayShort(ctx.program.starts_on as IsoDate)}. Esto es un
-              adelanto de ese día: lo que entrenes antes se guarda en tu
-              progreso con su fecha real y no marca ningún día del plan.
-            </Callout>
-          </div>
+          <Note
+            className="mx-5 mb-3"
+            tone="clay"
+            icon={<CalendarClock size={18} />}
+            title="El plan aún no ha empezado"
+          >
+            Empieza el lunes{" "}
+            {formatDayShort(ctx.program.starts_on as IsoDate)}. Esto es un
+            adelanto de ese día: lo que entrenes antes se guarda en tu progreso
+            con su fecha real y no marca ningún día del plan.
+          </Note>
         ) : null}
 
         {suggestRecover && recover ? (
-          <div className="mb-3.5 px-5">
-            <Callout
-              eyebrow={
-                missed.length === 1
-                  ? "Te falta una sesión"
-                  : `Te faltan ${missed.length} sesiones`
-              }
-              action={
-                <Link
-                  href={dayHref(recover)}
-                  className="font-display -my-2 py-2 text-[12px] leading-none font-semibold tracking-[0.08em] text-lime uppercase"
-                >
-                  ver ›
-                </Link>
-              }
-            >
-              {recover.title} ({WEEKDAY[recover.dayIndex]}) va antes que{" "}
-              {trains(day) ? day.title : "el resto"}. Si hoy solo entrenas una,
-              que sea esa.
-            </Callout>
-          </div>
+          <Note
+            className="mx-5 mb-3"
+            tone="warn"
+            icon={<History size={18} />}
+            title={
+              missed.length === 1
+                ? "Te falta una sesión"
+                : `Te faltan ${missed.length} sesiones`
+            }
+            action={
+              <Link
+                href={dayHref(recover)}
+                className="-my-2 py-2 text-[13px] leading-none font-bold text-clay"
+              >
+                Ver
+              </Link>
+            }
+          >
+            {recover.title} ({WEEKDAY[recover.dayIndex]}) va antes que{" "}
+            {trains(day) ? day.title : "el resto"}. Si hoy solo entrenas una,
+            que sea esa.
+          </Note>
         ) : null}
 
         {day.group === "strength" ? (
@@ -269,135 +384,101 @@ export default async function HoyPage() {
             eyebrow="Básico del día"
             targetRir={ctx.profile.target_rir}
             showPlates={ctx.profile.show_plate_breakdown}
-          />
+          >
+            {notes}
+          </StrengthDay>
         ) : (
-          <div className="px-5">
-            <Card className="flex gap-4">
-              <span
-                aria-hidden
-                className="w-[3px] flex-none rounded-full"
-                style={{ background: accent }}
-              />
-              <div className="min-w-0 flex-1">
+          <>
+            <div className="px-5">
+              <div
+                className={cn(
+                  "rounded-3xl p-5",
+                  quiet
+                    ? "bg-surface shadow-card"
+                    : "bg-panel text-on-panel shadow-panel",
+                )}
+              >
                 <div className="flex items-baseline gap-2">
-                  <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-mid uppercase">
+                  <span
+                    className={cn(
+                      "text-[11px] leading-none font-bold tracking-[0.13em] uppercase",
+                      quiet ? "text-mid" : "text-run-mist",
+                    )}
+                  >
                     {day.label}
                   </span>
-                  {day.group === "run" && day.estimatedMinutes ? (
-                    <span className="num ml-auto text-[12px] leading-none text-mid">
-                      {day.estimatedMinutes}′ aprox
-                    </span>
-                  ) : null}
                 </div>
                 {quiet ? null : (
-                  <div className="mt-2 text-[18px] leading-[1.25] font-semibold">
-                    {day.prescription || day.title}
-                  </div>
+                  <>
+                    <div className="mt-2 text-[20px] leading-[1.25] font-bold">
+                      {day.prescription || day.title}
+                    </div>
+                    {day.estimatedMinutes ? (
+                      <div className="mt-1.5 flex items-baseline gap-2">
+                        <span className="num text-[88px] leading-[0.9] font-extrabold tracking-[-0.04em]">
+                          {day.estimatedMinutes}
+                        </span>
+                        <span className="text-[20px] leading-none font-bold text-panel-soft">
+                          min aprox
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
                 )}
                 {dayNote ? (
-                  <p className="mt-2 text-[13px] leading-[1.55] text-mid">
+                  <p className="mt-2 text-[13px] leading-[1.55] font-medium text-mid">
                     {dayNote}
                   </p>
                 ) : null}
               </div>
-            </Card>
-          </div>
+            </div>
+            {notes}
+          </>
         )}
-
-        {day.isDeload ? (
-          <div className="mt-3.5 px-5">
-            <Callout eyebrow="Semana de descarga">
-              Mitad de series y pesos más bajos, a propósito. La carrera también
-              baja. El objetivo es llegar fresco a la semana que viene.
-            </Callout>
-          </div>
-        ) : null}
-
-        {held.map((lift) => (
-          <div key={lift.id} className="mt-3.5 px-5">
-            <Callout
-              eyebrow={`${lift.name} · peso congelado en ${formatWeight(Number(lift.hold_at_kg))} kg`}
-            >
-              La última vez no llegaste al mínimo del rango, así que el peso no
-              sube hasta una sesión limpia. Otro fallo y la RM baja.
-            </Callout>
-          </div>
-        ))}
-
-        {test && test.date !== day.date ? (
-          <div className="mt-3.5 px-5">
-            <Callout eyebrow="Esta semana hay test" eyebrowTone="text-run">
-              Test de umbral {WEEKDAY[test.dayIndex]}: de él salen tus zonas de
-              pulso. Llega descansado.
-            </Callout>
-          </div>
-        ) : null}
-
-        {loggedEver === 0 && !preSeason ? (
-          <div className="mt-3.5 px-5">
-            <Callout eyebrow="Cómo funciona" eyebrowTone="text-lime">
-              El motor calcula cada peso a partir de tus RM; tú solo marcas lo
-              que haces. Si una serie del básico se queda por debajo del
-              rango, el peso se congela en vez de subir. Los accesorios suben
-              solos cuando haces el tope del rango en todas las series.
-            </Callout>
-          </div>
-        ) : null}
 
         {day.group !== "mobility" ? (
           <Link
             href="/movilidad"
-            className="mt-3.5 flex items-center gap-2.5 px-6 py-2"
+            className="mx-5 mt-3 flex items-center gap-3 rounded-2xl bg-surface px-4 py-3.5 shadow-card"
           >
-            <span
-              aria-hidden
-              className="h-2 w-2 flex-none rounded-full"
-              style={{ background: accentFor("mobility") }}
-            />
-            <span className="flex-1 text-[13px] leading-[1.4] text-mid">
-              Movilidad 20′ · diaria
+            <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-quiet text-mid">
+              <DayIcon group="mobility" />
             </span>
-            <span aria-hidden className="text-[13px] leading-none text-mid">
-              ›
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] leading-[1.3] font-bold">
+                Movilidad y correctivos
+              </span>
+              <span className="mt-0.5 block text-[12.5px] leading-[1.35] font-medium text-mid">
+                20′ · diaria · no cuenta como entrenamiento
+              </span>
             </span>
+            <ChevronRight aria-hidden size={18} className="flex-none text-faint" />
           </Link>
         ) : null}
       </div>
 
-      {day.slot && !clamped && trains(day) && statusOf(day) === "planned" ? (
-        <div className="flex flex-none justify-center">
-          <SkipDayButton
+      {day.slot ? (
+        <div className="flex flex-none gap-2.5 px-4 pt-3 pb-3">
+          {skipTarget ? (
+            <SkipDayButton day={skipTarget} label="Hoy no entreno" pill />
+          ) : null}
+          <StartSessionButton
+            className="min-w-0 flex-1 p-0"
             day={{
               phaseId: phase.id,
               slotId: day.slot.id,
-              scheduledOn: day.date,
+              scheduledOn: effectiveOn,
               week: placement.week,
               dayIndex: day.dayIndex,
               sessionType: day.sessionType,
               title: day.title,
               group: day.group,
             }}
-            label="Hoy no entreno · saltar"
+            existingSessionId={todaySession?.id ?? null}
+            existingStatus={todaySession?.status ?? null}
+            groupLabel={GROUP_LABEL[day.group]}
           />
         </div>
-      ) : null}
-
-      {day.slot ? (
-        <StartSessionButton
-          day={{
-            phaseId: phase.id,
-            slotId: day.slot.id,
-            scheduledOn: effectiveOn,
-            week: placement.week,
-            dayIndex: day.dayIndex,
-            sessionType: day.sessionType,
-            title: day.title,
-            group: day.group,
-          }}
-          existingSessionId={todaySession?.id ?? null}
-          existingStatus={todaySession?.status ?? null}
-          groupLabel={GROUP_LABEL[day.group]}
-        />
       ) : null}
     </div>
   );

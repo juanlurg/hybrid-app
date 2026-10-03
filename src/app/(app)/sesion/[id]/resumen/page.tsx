@@ -15,7 +15,7 @@ import {
   TopBar,
 } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
-import { formatDayLong } from "@/lib/domain/calendar";
+import { formatDayShort } from "@/lib/domain/calendar";
 import {
   groupOf,
   liftStateFrom,
@@ -50,18 +50,18 @@ const STATUS_EYEBROW: Record<SessionStatus, string> = {
   planned: "Sesión sin empezar",
 };
 
-/* Read on the page, not on a dark band: `lime-dim`/`warn`/`fail` rather
+/* Read on the page, not on a dark band: `clay-dim`/`warn`/`fail` rather
    than the stroke and fill greens, which wash out on light. */
 const STATUS_TONE: Record<SessionStatus, string> = {
-  done: "text-lime-dim",
+  done: "text-clay-dim",
   partial: "text-warn",
   skipped: "text-fail",
-  in_progress: "text-lime",
+  in_progress: "text-clay",
   planned: "text-faint",
 };
 
 /* A KPI tile. Inline rather than `StatGrid`: series is the headline and
-   carries a lime figure with a dimmed `/n` suffix, which the grid has no
+   carries a clay figure with a dimmed `/n` suffix, which the grid has no
    slot for. */
 function Kpi({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -86,7 +86,7 @@ function SetPill({ value, missed }: { value: string | null; missed: boolean }) {
           ? "border-edge bg-surface text-faint opacity-55"
           : missed
             ? "border-fail bg-fail/10 text-fail"
-            : "border-lime-edge bg-lime-soft text-lime",
+            : "border-clay-edge bg-clay-soft text-clay",
       )}
     >
       {value ?? "—"}
@@ -133,7 +133,7 @@ export default async function ResumenPage({
   const engineEvents = events ?? [];
 
   const slot = ctx.slots.find((s) => s.id === session.slot_id) ?? null;
-  const title = slot?.label || session.title.toUpperCase() || "SESIÓN";
+  const title = slot?.label || session.title || "Sesión";
   const group = groupOf(session.session_type);
 
   const duration = formatMinutes(session.duration_seconds);
@@ -361,13 +361,8 @@ export default async function ResumenPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <TopBar
-        title="Resumen"
+        title={`${title} · ${formatDayShort(session.scheduled_on)}`}
         href="/"
-        right={
-          <span className="uppercase">
-            {title} · {formatDayLong(session.scheduled_on)}
-          </span>
-        }
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
@@ -396,9 +391,9 @@ export default async function ResumenPage({
 
           <div className="mt-4 grid grid-cols-2 gap-1.5">
             <Kpi label="Series">
-              <span className="text-lime">{logs.length}</span>
+              <span className="text-clay">{logs.length}</span>
               {plannedSets > 0 ? (
-                <span className="text-[14px] text-lime-dim">
+                <span className="text-[14px] text-clay-dim">
                   /{plannedSets}
                 </span>
               ) : null}
@@ -528,7 +523,7 @@ export default async function ResumenPage({
         <div className="mt-3.5 px-5">
           <Card className="px-4 py-4">
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-lime uppercase">
+              <span className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-clay uppercase">
                 Qué cambia
               </span>
               {reverted.length > 0 ? (
@@ -575,7 +570,7 @@ export default async function ResumenPage({
             <Callout
               eyebrow="La próxima vez"
               eyebrowTone={
-                next.breakdown.isHeld ? "text-warn-panel" : "text-ok-bright"
+                next.breakdown.isHeld ? "text-warn-panel" : "text-ok-panel"
               }
             >
               {next.breakdown.isHeld ? (
@@ -612,7 +607,7 @@ export default async function ResumenPage({
 
         {!inPhase && sessionPhase ? (
           <div className="mx-5 mt-3.5">
-            <Callout eyebrow="La próxima vez" eyebrowTone="text-ok-bright">
+            <Callout eyebrow="La próxima vez" eyebrowTone="text-ok-panel">
               {nextPhase ? (
                 <>
                   Última semana de {sessionPhase.name.toLowerCase()}. La semana

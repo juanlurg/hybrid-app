@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
-import { Chip } from "@/components/ui/kit";
+import { cn } from "@/lib/cn";
 
 const TABS = [
   { key: "constancia", label: "Constancia" },
@@ -34,16 +34,20 @@ export function HistoryTabs({
 
   return (
     <>
-      <div className="flex flex-wrap gap-1.5 px-5 pt-4">
+      <div className="mx-5 mt-5 flex gap-1 rounded-full bg-quiet p-1">
         {TABS.map((t) => (
-          <Chip
+          <button
             key={t.key}
-            active={tab === t.key}
+            type="button"
             aria-pressed={tab === t.key}
             onClick={() => setTab(t.key)}
+            className={cn(
+              "h-9 min-w-0 flex-1 truncate rounded-full px-1 text-[13px] leading-none font-bold",
+              tab === t.key ? "bg-surface text-ink shadow-raised" : "text-mid",
+            )}
           >
             {t.label}
-          </Chip>
+          </button>
         ))}
       </div>
       {TABS.map((t) => (
