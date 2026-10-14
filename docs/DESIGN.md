@@ -117,7 +117,7 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 |---|---|---|
 | `/` | Hoy | Today's session, week strip, what to recover, big weight, start bar |
 | `/movilidad` | Hoy | Guided / list mobility block |
-| `/sesion/[id]` | — | Live runner — set pills, weight stepper, rest timer, regression banner |
+| `/sesion/[id]` | — | Live runner — set pills, weight stepper, rest timer, regression banner, technique GIF |
 | `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
@@ -133,6 +133,10 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 `scripts/walkthrough.ts` holds each screen to a density budget — controls and
 words in the first viewport. A change that adds to a screen takes something
 away or raises its budget in the same diff.
+
+Technique GIFs (`gifFor(slug)` in `catalog.ts`, files in `public/ejercicios/`)
+come from hasaneyldrm/exercises-dataset; the media is © Gym visual, kept at
+180×180 and credited wherever it opens. The repo must stay private.
 
 Session notifications are client-side only: one tray card per session
 (`tag`), the rest line carries an absolute end time so a frozen tab still

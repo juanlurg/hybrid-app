@@ -151,7 +151,7 @@ export default async function ResumenPage({
     .filter((e) => e.slot_id === session.slot_id)
     .sort((a, b) => a.position - b.position);
   const planned = slotExercises.map((e) =>
-    resolveExercise(e, session.week, phaseConfig, liftsByKey),
+    resolveExercise(e, session.week, phaseConfig, liftsByKey, ctx.exerciseSlugs),
   );
   const plannedSets = planned.reduce((acc, e) => acc + e.sets, 0);
 
@@ -240,7 +240,13 @@ export default async function ResumenPage({
   const inPhase = sessionPhase == null || session.week + 1 <= sessionPhase.weeks;
   const next =
     primaryRow && inPhase
-      ? resolveExercise(primaryRow, session.week + 1, phaseConfig, liftsByKey)
+      ? resolveExercise(
+          primaryRow,
+          session.week + 1,
+          phaseConfig,
+          liftsByKey,
+          ctx.exerciseSlugs,
+        )
       : null;
   const nextPhase =
     !inPhase && sessionPhase
