@@ -45,7 +45,7 @@ export const loadAthlete = cache(async (): Promise<LoadedAthlete | null> => {
   // One parallel round trip: the whole plan comes embedded through the
   // FKs (phases → slots → exercises, days, run sessions) instead of a
   // four-stage waterfall.
-  const [profileRes, programRes, liftsRes] = await Promise.all([
+  const [profileRes, programRes, liftsRes, catalogRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase
       .from("programs")
@@ -56,6 +56,7 @@ export const loadAthlete = cache(async (): Promise<LoadedAthlete | null> => {
       .eq("is_active", true)
       .maybeSingle(),
     supabase.from("lifts").select("*").eq("user_id", user.id).order("key"),
+    supabase.from("exercises").select("id, slug"),
   ]);
 
   const profile = profileRes.data as ProfileRow | null;
@@ -76,6 +77,9 @@ export const loadAthlete = cache(async (): Promise<LoadedAthlete | null> => {
     exercises: slots.flatMap((s) => s.program_exercises).sort(byPosition),
     prescriptions: phases.flatMap((p) => p.program_run_sessions),
     lifts: (liftsRes.data ?? []) as AthleteContext["lifts"],
+    exerciseSlugs: Object.fromEntries(
+      (catalogRes.data ?? []).map((e) => [e.id, e.slug]),
+    ),
   };
 
   const today = todayIso();

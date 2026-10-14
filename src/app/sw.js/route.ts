@@ -16,6 +16,8 @@
  *  · navigations go network-first with a short timeout, falling back
  *    to the shell — per-user HTML is NEVER cached;
  *  · hashed /_next/static assets are cache-first (immutable);
+ *  · exercise GIFs are cache-first in MEDIA, which outlives deploys —
+ *    their names never change, and the runner must show them offline;
  *  · POSTs, /api/*, /auth/* and RSC prefetches are never touched.
  */
 
@@ -28,6 +30,7 @@ const WORKER_SOURCE = /* js */ (
   'const CACHE_VERSION = "' + CACHE_VERSION + '";\n' +
   `const PRECACHE = "bloques-pre-" + CACHE_VERSION;
 const RUNTIME = "bloques-run-" + CACHE_VERSION;
+const MEDIA = "bloques-media";
 
 const SHELL_URL = "/~offline";
 const STATIC_URLS = [
@@ -79,7 +82,13 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => k.indexOf("bloques-") === 0 && k !== PRECACHE && k !== RUNTIME)
+            .filter(
+              (k) =>
+                k.indexOf("bloques-") === 0 &&
+                k !== PRECACHE &&
+                k !== RUNTIME &&
+                k !== MEDIA,
+            )
             .map((k) => caches.delete(k)),
         ),
       )
@@ -116,12 +125,12 @@ function networkFirstNavigation(request) {
   });
 }
 
-async function cacheFirst(request) {
+async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request);
   if (cached) return cached;
   const response = await fetch(request);
   if (response.ok) {
-    const cache = await caches.open(RUNTIME);
+    const cache = await caches.open(cacheName);
     cache.put(request, response.clone());
   }
   return response;
@@ -149,7 +158,12 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/icons/") ||
     url.pathname === "/manifest.webmanifest"
   ) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(cacheFirst(request, RUNTIME));
+    return;
+  }
+
+  if (url.pathname.startsWith("/ejercicios/")) {
+    event.respondWith(cacheFirst(request, MEDIA));
   }
 });
 

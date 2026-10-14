@@ -40,6 +40,7 @@ import {
   type IsoDate,
   type PhaseSpan,
 } from "./calendar";
+import { gifFor } from "./catalog";
 
 type Tables = Database["public"]["Tables"];
 
@@ -78,6 +79,8 @@ export interface AthleteContext {
   exercises: ProgramExerciseRow[];
   prescriptions: RunPrescriptionRow[];
   lifts: LiftRow[];
+  /** Catalogue exercise id → slug, for what keys off the catalogue (GIFs). */
+  exerciseSlugs: Record<string, string>;
 }
 
 export function phaseSpans(phases: PhaseRow[]): PhaseSpan[] {
@@ -187,6 +190,8 @@ export interface ResolvedExercise {
   effort: Effort;
   supersetGroup: number | null;
   equipment: Equipment | null;
+  /** Technique GIF, when the catalogue entry has one. */
+  gif: string | null;
 }
 
 export interface ResolvedDay {
@@ -258,6 +263,7 @@ export function resolveExercise(
   week: number,
   config: EngineConfig,
   liftsByKey: Map<string, LiftState>,
+  exerciseSlugs: Record<string, string>,
 ): ResolvedExercise {
   const plannedSets = row.sets;
   const sets = setsForWeek(plannedSets, week, config);
@@ -317,6 +323,7 @@ export function resolveExercise(
     effort: (row.effort ?? "reps") as Effort,
     supersetGroup: row.superset_group ?? null,
     equipment,
+    gif: gifFor(row.exercise_id ? exerciseSlugs[row.exercise_id] : undefined),
   };
 }
 
@@ -362,7 +369,9 @@ export function resolveDay(
       ? ctx.exercises
           .filter((e) => e.slot_id === slot.id)
           .sort((a, b) => a.position - b.position)
-          .map((e) => resolveExercise(e, week, phaseConfig, liftsByKey))
+          .map((e) =>
+            resolveExercise(e, week, phaseConfig, liftsByKey, ctx.exerciseSlugs),
+          )
       : [];
 
   const prescriptionRow = slot

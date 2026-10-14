@@ -9,6 +9,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
@@ -29,6 +30,7 @@ import {
   type LiftState,
 } from "@/lib/engine";
 import { replayEngine, type ReplayPrimary } from "@/lib/engine/replay";
+import { GIF_CREDIT, GIF_CREDIT_URL } from "@/lib/domain/catalog";
 import { weightLabelFor, type ResolvedExercise } from "@/lib/domain/plan";
 import {
   createLocalSession,
@@ -120,6 +122,8 @@ export function SessionRunner({
   const [repsOpen, setRepsOpen] = useState(false);
   /** The whole-session list, behind the top-right button. */
   const [listOpen, setListOpen] = useState(false);
+  /** The technique GIF, full size, behind the thumbnail by the title. */
+  const [gifOpen, setGifOpen] = useState(false);
   /** Set index being corrected via its pill — overwrites in place. */
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -131,6 +135,12 @@ export function SessionRunner({
       finishRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }, [confirmFinish]);
+
+  // Load every GIF of the session up front: the worker keeps them, so the
+  // later exercises still show their technique if the gym drops signal.
+  useEffect(() => {
+    for (const e of exercises) if (e.gif) new window.Image().src = e.gif;
+  }, [exercises]);
 
   const [logs, setLogs] = useState<LogMap>(() => {
     const map: LogMap = {};
@@ -781,9 +791,27 @@ export function SessionRunner({
         <div className="text-[11px] leading-none font-bold tracking-[0.13em] text-clay uppercase">
           {eyebrow}
         </div>
-        <h1 className="mt-1.5 text-[26px] leading-[1.15] font-extrabold tracking-[-0.02em]">
-          {exercise.name}
-        </h1>
+        <div className="mt-1.5 flex items-start gap-3">
+          <h1 className="min-w-0 flex-1 text-[26px] leading-[1.15] font-extrabold tracking-[-0.02em]">
+            {exercise.name}
+          </h1>
+          {exercise.gif ? (
+            <button
+              type="button"
+              aria-label="Ver la técnica"
+              onClick={() => setGifOpen(true)}
+              className="flex-none overflow-hidden rounded-lg shadow-raised"
+            >
+              <Image
+                src={exercise.gif}
+                alt=""
+                width={56}
+                height={56}
+                unoptimized
+              />
+            </button>
+          ) : null}
+        </div>
 
         {/* The load is the athlete's to change: the plan prescribes, the
             bar decides. Each notch is a weight the equipment can rack. */}
@@ -1286,6 +1314,30 @@ export function SessionRunner({
               Terminar sesión
             </button>
           ) : null}
+        </Sheet>
+      ) : null}
+
+      {gifOpen && exercise.gif ? (
+        <Sheet onClose={() => setGifOpen(false)}>
+          <div className="text-[18px] leading-tight font-extrabold tracking-[-0.01em]">
+            {exercise.name}
+          </div>
+          <Image
+            src={exercise.gif}
+            alt={`Técnica de ${exercise.name}`}
+            width={180}
+            height={180}
+            unoptimized
+            className="mx-auto mt-3 rounded-2xl"
+          />
+          <a
+            href={GIF_CREDIT_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 block text-center text-[11px] leading-none font-semibold text-faint"
+          >
+            {GIF_CREDIT}
+          </a>
         </Sheet>
       ) : null}
 
