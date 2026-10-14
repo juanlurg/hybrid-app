@@ -48,6 +48,7 @@ const EXERCISE_GIFS: Record<string, string> = {
   "face-pull": "0203-wqNPGCg", // rope rear-delt row
   "rotacion-externa-banda": "0235-FWdVhcW", // cable, not band
   "curl-triceps": "0868-G08RZcQ", // the curl half
+  "triceps-polea": "0201-3ZflifB",
   "curl-martillo": "0313-slDvUAU",
   "extension-triceps": "0194-2IxROQ1",
   "elevaciones-laterales": "0334-DsgkuIt",
