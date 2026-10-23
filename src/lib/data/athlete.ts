@@ -3,7 +3,10 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient, getUser } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/database.types";
 import type { EngineConfig } from "@/lib/engine";
 import {
   engineConfigFrom,
@@ -39,8 +42,17 @@ export interface LoadedAthlete {
 export const loadAthlete = cache(async (): Promise<LoadedAthlete | null> => {
   const user = await getUser();
   if (!user) return null;
+  return loadAthleteFor(await createClient(), user);
+});
 
-  const supabase = await createClient();
+/**
+ * The same load for a caller that already knows who the athlete is —
+ * `/api/mcp` with the service-role client, where there is no cookie.
+ */
+export async function loadAthleteFor(
+  supabase: SupabaseClient<Database>,
+  user: { id: string; email: string | null },
+): Promise<LoadedAthlete | null> {
 
   // One parallel round trip: the whole plan comes embedded through the
   // FKs (phases → slots → exercises, days, run sessions) instead of a
@@ -95,7 +107,7 @@ export const loadAthlete = cache(async (): Promise<LoadedAthlete | null> => {
     placement,
     seasonWeeks: totalWeeks(phaseSpans(phases)),
   };
-});
+}
 
 /** Guard for every app page: signed in and onboarded, or bounce. */
 export async function requireAthlete(): Promise<LoadedAthlete> {

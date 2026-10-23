@@ -24,10 +24,30 @@ export const CHANGE_OPS = [
   "set_rest",
   "set_day_slot",
   "set_wave",
+  "set_run",
   "note",
 ] as const;
 
 export type ChangeOpKind = (typeof CHANGE_OPS)[number];
+
+/** `program_run_sessions.structure` — typed blocks, mirrors `RunBlockSpec`. */
+export const runStructureSchema = z
+  .array(
+    z.object({
+      kind: z.enum([
+        "steady", "interval", "hills", "strides",
+        "test", "race", "walk", "rest",
+      ]),
+      repeat: z.number().int().min(1).max(30).nullish(),
+      workMin: z.number().min(0).max(300).nullish(),
+      workKm: z.number().min(0).max(50).nullish(),
+      workSec: z.number().int().min(0).max(120).nullish(),
+      zone: z.enum(["Z1", "Z2", "Z3", "Z4", "Z5", "RM"]).nullish(),
+      recMin: z.number().min(0).max(15).nullish(),
+      note: z.string().max(160).nullish(),
+    }),
+  )
+  .max(12);
 
 export const changeOpSchema = z
   .object({
@@ -55,6 +75,10 @@ export const changeOpSchema = z
     dayIndex: z.number().int().min(0).max(6).nullish(),
     waveIndex: z.number().int().min(0).max(7).nullish(),
     waveValue: z.number().min(0.5).max(1).nullish(),
+    /** set_run: phase-local week, the label, and the typed blocks. */
+    week: z.number().int().min(1).max(24).nullish(),
+    prescription: z.string().min(1).max(200).nullish(),
+    structure: runStructureSchema.min(1).nullish(),
   })
   .superRefine((op, ctx) => {
     const needsExercise: ChangeOpKind[] = [
@@ -95,6 +119,12 @@ export const changeOpSchema = z
     }
     if (op.op === "set_wave" && (op.waveIndex == null || op.waveValue == null)) {
       fail("set_wave necesita waveIndex y waveValue");
+    }
+    if (
+      op.op === "set_run" &&
+      (!op.slotId || op.week == null || !op.prescription || !op.structure)
+    ) {
+      fail("set_run necesita slotId, week, prescription y structure");
     }
   });
 
@@ -155,7 +185,8 @@ const PROPOSAL_JSON_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          op: { type: "string", enum: [...CHANGE_OPS] },
+          // set_run is the MCP coach's: this brief carries no run blocks.
+          op: { type: "string", enum: CHANGE_OPS.filter((o) => o !== "set_run") },
           title: {
             type: "string",
             description:
@@ -279,24 +310,7 @@ export const generatedProgramSchema = z.object({
               week: z.number().int().min(1).max(24),
               prescription: z.string().min(1).max(200),
               /** Typed blocks — what the Carrera screen renders from. */
-              structure: z
-                .array(
-                  z.object({
-                    kind: z.enum([
-                      "steady", "interval", "hills", "strides",
-                      "test", "race", "walk", "rest",
-                    ]),
-                    repeat: z.number().int().min(1).max(30).nullish(),
-                    workMin: z.number().min(0).max(300).nullish(),
-                    workKm: z.number().min(0).max(50).nullish(),
-                    workSec: z.number().int().min(0).max(120).nullish(),
-                    zone: z.enum(["Z1", "Z2", "Z3", "Z4", "Z5", "RM"]).nullish(),
-                    recMin: z.number().min(0).max(15).nullish(),
-                    note: z.string().max(160).nullish(),
-                  }),
-                )
-                .max(12)
-                .nullish(),
+              structure: runStructureSchema.nullish(),
               targetMinutes: z.number().int().min(0).max(600).nullish(),
               notes: z.string().max(240).default(""),
             }),

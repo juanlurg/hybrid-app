@@ -18,6 +18,10 @@ import {
   buildPlanContext,
 } from "@/lib/ai/prompt";
 import {
+  filterOwnedChanges,
+  loadCatalog,
+} from "@/lib/ai/proposal";
+import {
   changeOpSchema,
   generatedProgramSchema,
   programJsonSchema,
@@ -28,38 +32,14 @@ import {
 import { seedWeightKg, TIMED_SLUGS } from "@/lib/domain/catalog";
 import { newBlockingTitles, planWarnings } from "@/lib/domain/plan-rules";
 import type { Database } from "@/lib/supabase/database.types";
-import type { ProgramExerciseRow } from "@/lib/domain/plan";
+import type {
+  ProgramExerciseRow,
+  RunPrescriptionRow,
+} from "@/lib/domain/plan";
 import { addDays, startOfWeek, todayIso } from "@/lib/domain/calendar";
 import type { z } from "zod";
 
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
-
-/* ── catalogue ───────────────────────────────────────────────── */
-
-interface CatalogRow {
-  id: string;
-  slug: string;
-  name: string;
-  modality: Database["public"]["Enums"]["load_mode"];
-  equipment: Database["public"]["Enums"]["equipment_kind"];
-  default_rest_seconds: number;
-  pattern: string | null;
-}
-
-/** The exercises this athlete can actually rack, keyed by slug. */
-async function loadCatalog(
-  supabase: SupabaseServer,
-  available: readonly string[],
-): Promise<Map<string, CatalogRow>> {
-  const { data } = await supabase
-    .from("exercises")
-    .select("id, slug, name, modality, equipment, default_rest_seconds, pattern")
-    .order("name");
-  const rows = (data ?? []).filter((c) =>
-    available.includes(String(c.equipment)),
-  );
-  return new Map(rows.map((r) => [r.slug, r as CatalogRow]));
-}
 
 /* ── one repair retry ────────────────────────────────────────── */
 
@@ -168,6 +148,8 @@ interface PlanSnapshot {
   phaseWave?: number[] | null;
   exercises: ProgramExerciseRow[];
   days: Array<{ day_index: number; slot_id: string }>;
+  /** Absent on snapshots taken before set_run existed. */
+  runs?: RunPrescriptionRow[];
 }
 
 function snapshotOf(athlete: LoadedAthlete, phaseId: string): PlanSnapshot {
@@ -183,6 +165,7 @@ function snapshotOf(athlete: LoadedAthlete, phaseId: string): PlanSnapshot {
     days: athlete.ctx.days
       .filter((d) => d.phase_id === phaseId)
       .map((d) => ({ day_index: d.day_index, slot_id: d.slot_id })),
+    runs: athlete.ctx.prescriptions.filter((r) => r.phase_id === phaseId),
   };
 }
 
@@ -238,6 +221,22 @@ async function restoreSnapshot(
     }
     await strayDays;
   }
+  if (snapshot.runs) {
+    if (snapshot.runs.length > 0) {
+      await supabase
+        .from("program_run_sessions")
+        .upsert(snapshot.runs, { onConflict: "id" });
+    }
+    const keepRuns = snapshot.runs.map((r) => r.id);
+    let strayRuns = supabase
+      .from("program_run_sessions")
+      .delete()
+      .eq("phase_id", snapshot.phaseId);
+    if (keepRuns.length > 0) {
+      strayRuns = strayRuns.not("id", "in", `(${keepRuns.join(",")})`);
+    }
+    await strayRuns;
+  }
   const programWave = snapshot.programWave ?? snapshot.wave;
   if (programWave) {
     await supabase
@@ -251,72 +250,6 @@ async function restoreSnapshot(
       .update({ wave: snapshot.phaseWave })
       .eq("id", snapshot.phaseId);
   }
-}
-
-export interface DroppedChange {
-  op: ChangeOp;
-  reason: string;
-}
-
-/**
- * The ownership/sanity filter, shared by propose AND apply: apply must
- * re-check because the plan can change between the two. Drops anything
- * that points outside this athlete's phase, names an exercise off the
- * catalogue, or touches the regression trigger (the primary) — and says
- * WHY, so a change the rationale narrates never just vanishes.
- */
-function filterOwnedChanges(
-  changes: ChangeOp[],
-  athlete: LoadedAthlete,
-  phaseId: string,
-  catalog: Map<string, CatalogRow>,
-): { kept: ChangeOp[]; dropped: DroppedChange[] } {
-  const validSlots = new Set(
-    athlete.ctx.slots.filter((s) => s.phase_id === phaseId).map((s) => s.id),
-  );
-  const exercisesById = new Map(
-    athlete.ctx.exercises
-      .filter((e) => validSlots.has(e.slot_id))
-      .map((e) => [e.id, e]),
-  );
-
-  const reasonFor = (c: ChangeOp): string | null => {
-    if (c.exerciseId && !exercisesById.has(c.exerciseId)) {
-      return "el ejercicio ya no está en esta fase del plan";
-    }
-    if (c.slotId && !validSlots.has(c.slotId)) {
-      return "la sesión no pertenece a esta fase";
-    }
-    if (c.targetSlotId && !validSlots.has(c.targetSlotId)) {
-      return "la sesión de destino no pertenece a esta fase";
-    }
-    if (
-      (c.op === "add_exercise" || c.op === "rename_exercise") &&
-      (!c.exerciseSlug || !catalog.has(c.exerciseSlug))
-    ) {
-      return "el ejercicio no está en el catálogo disponible";
-    }
-    // Never let a proposal orphan or mutate the regression trigger.
-    if (
-      (c.op === "remove_exercise" ||
-        c.op === "move_exercise" ||
-        c.op === "rename_exercise") &&
-      c.exerciseId &&
-      exercisesById.get(c.exerciseId)?.is_primary
-    ) {
-      return "el básico no se toca: es el que dispara la regresión";
-    }
-    return null;
-  };
-
-  const kept: ChangeOp[] = [];
-  const dropped: DroppedChange[] = [];
-  for (const c of changes) {
-    const reason = reasonFor(c);
-    if (reason) dropped.push({ op: c, reason });
-    else kept.push(c);
-  }
-  return { kept, dropped };
 }
 
 /* ── propose ─────────────────────────────────────────────────── */
@@ -378,6 +311,7 @@ export async function proposeChanges(
 
   const catalog = await loadCatalog(
     supabase,
+    athlete.userId,
     (athlete.ctx.profile.available_equipment ?? []).map(String),
   );
   const planContext = buildPlanContext(athlete, phase);
@@ -514,6 +448,7 @@ export async function applyProposal(
   const phaseId = proposal.phase_id ?? athlete.placement.phase.id;
   const catalog = await loadCatalog(
     supabase,
+    athlete.userId,
     (athlete.ctx.profile.available_equipment ?? []).map(String),
   );
   // The plan can have changed since propose: re-run the same filter.
@@ -679,6 +614,23 @@ export async function applyProposal(
           wave[op.waveIndex!] = op.waveValue!;
           waveTouched = true;
         }
+        break;
+      }
+
+      case "set_run": {
+        // The whole session is replaced: label and blocks together, and
+        // target_minutes cleared so the minutes come from the blocks.
+        ({ error } = await supabase.from("program_run_sessions").upsert(
+          {
+            phase_id: phaseId,
+            slot_id: op.slotId!,
+            week: op.week!,
+            prescription: op.prescription!,
+            structure: op.structure! as unknown as Json,
+            target_minutes: null,
+          },
+          { onConflict: "phase_id,slot_id,week" },
+        ));
         break;
       }
 
@@ -937,6 +889,7 @@ export async function rebuildProgram(input: {
   const startsOn = startOfWeek(input.startsOn || todayIso());
   const catalog = await loadCatalog(
     supabase,
+    athlete.userId,
     (athlete.ctx.profile.available_equipment ?? []).map(String),
   );
   const catalogContext = buildCatalogContext(

@@ -16,7 +16,7 @@ direction: one lit number per screen, dark and light as peers.
 | App | Next.js 16 (App Router), React 19, TypeScript | Server Components for the first paint, Server Actions for every mutation, one codebase for phone and desktop |
 | Styling | Tailwind v4 with a custom `@theme inline` | The palette lives in CSS variables that flip between the dark and light themes; no component library to fight |
 | Data | Supabase (Postgres + Auth + RLS), local via Docker | Row-level security means multi-athlete isolation is enforced by the database, not by app code |
-| AI | Gemini (`@google/genai`) with structured output | The model returns a typed diff; the server validates and applies it |
+| AI | Gemini (`@google/genai`) with structured output, or a Claude chat through `/api/mcp` | Either coach returns a typed diff; the athlete ticks it and the server validates and applies it |
 | Tests | Vitest | The engine and the calendar are pure and fully covered |
 
 ## Getting started
@@ -35,6 +35,18 @@ starter plan into a private programme.
 Add a `GEMINI_API_KEY` from [AI Studio](https://aistudio.google.com/apikey) to
 `.env.local` to enable "Refinar con IA" and programme generation. Everything
 else works without it.
+
+### Claude as the coach
+
+`/api/mcp/<MCP_TOKEN>` is a remote MCP server. Set `MCP_TOKEN` to a long
+random string (`openssl rand -hex 32`) in the deployment's env, then in the
+Claude app add a custom connector with the URL
+`https://<site>/api/mcp/<MCP_TOKEN>`. Claude can then read both athletes'
+whole season (`get_plan`), what was planned against what was done
+(`get_sessions`), the catalogue and past proposals, and leave one pending
+proposal (`propose_changes`). The athlete still ticks and applies it in
+Editor → Refinar con IA. The token is the only thing guarding the route, so
+treat the URL as a password. Without `MCP_TOKEN` the route returns 404.
 
 Supabase Studio runs at http://127.0.0.1:54323 and the local inbox (for
 confirmation emails) at http://127.0.0.1:54324.
@@ -100,7 +112,8 @@ src/
   lib/domain/          calendar and plan resolution (pure)
   lib/data/            request-scoped loaders
   lib/actions/         server actions — the only writers
-  lib/ai/              prompt, schema, Gemini client
+  lib/ai/              prompt, schema, proposal filter, Gemini client
+  lib/mcp/             the tools /api/mcp serves to a Claude chat
 supabase/migrations/   schema, RLS, reference data
 docs/DESIGN.md         the visual spec
 ```

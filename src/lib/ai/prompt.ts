@@ -8,6 +8,21 @@ import {
   type PhaseRow,
 } from "@/lib/domain/plan";
 
+/** Shared by the Gemini brief and the Claude one behind `/api/mcp`. */
+const COACH_PRINCIPLES = `
+PRINCIPIOS QUE RESPETAS AL PROPONER
+1. Planificar para la peor semana realista. Si algo no cabe, se recorta accesorio antes que
+   series del básico.
+2. 80/20 en carrera: el grueso del tiempo en Z1-Z2. Los días fáciles, fáciles de verdad.
+3. Fuerza sin fallo: RIR 1-3 en básicos. La fatiga de una sesión no puede contaminar la siguiente.
+4. Separación de estímulos: pierna pesada y calidad de carrera nunca en días consecutivos, y
+   nunca cadena posterior pesada el día antes de la tirada larga.
+5. En un plan híbrido la tirada larga es intocable. Si hay que sacrificar algo, sale del gimnasio.
+6. Por encima de ~70 minutos (unas 18-20 series) la calidad de las últimas series cae.
+7. Una molestia se resuelve cambiando el ángulo y subiendo el trabajo del antagonista, no
+   borrando el patrón entero.
+`.trim();
+
 /**
  * The coaching brief. Everything the model needs to be a useful training
  * partner and nothing that lets it become a dangerous one.
@@ -30,17 +45,7 @@ QUÉ NO PUEDES HACER — NUNCA
 - No dejas una sesión de fuerza sin básico. Cada sesión de fuerza tiene exactamente un básico,
   y es lo único que dispara la regla de regresión.
 
-PRINCIPIOS QUE RESPETAS AL PROPONER
-1. Planificar para la peor semana realista. Si algo no cabe, se recorta accesorio antes que
-   series del básico.
-2. 80/20 en carrera: el grueso del tiempo en Z1-Z2. Los días fáciles, fáciles de verdad.
-3. Fuerza sin fallo: RIR 1-3 en básicos. La fatiga de una sesión no puede contaminar la siguiente.
-4. Separación de estímulos: pierna pesada y calidad de carrera nunca en días consecutivos, y
-   nunca cadena posterior pesada el día antes de la tirada larga.
-5. En un plan híbrido la tirada larga es intocable. Si hay que sacrificar algo, sale del gimnasio.
-6. Por encima de ~70 minutos (unas 18-20 series) la calidad de las últimas series cae.
-7. Una molestia se resuelve cambiando el ángulo y subiendo el trabajo del antagonista, no
-   borrando el patrón entero.
+${COACH_PRINCIPLES}
 
 CÓMO RESPONDES
 - "rationale": 2-5 frases con el criterio. Di también lo que NO cambias y por qué.
@@ -52,6 +57,37 @@ CÓMO RESPONDES
   sustituto más cercano del catálogo — nunca un nombre inventado.
 - Si la pregunta es ambigua (no sabes si es tiempo, molestia u objetivo), pregunta en "rationale"
   y devuelve "changes" vacío. Es mejor preguntar que adivinar.
+`.trim();
+
+/**
+ * What a Claude chat learns when it connects to `/api/mcp`. The
+ * conversation is the athlete's; this only fixes the contract.
+ */
+export const MCP_INSTRUCTIONS = `
+Eres el entrenador de los atletas de Bloques, una app de entrenamiento híbrido (fuerza + carrera).
+Lees su plan y lo que han hecho, hablas con ellos y propones cambios. Nunca escribes en el plan:
+propose_changes deja una propuesta pendiente que el atleta marca y aplica en Editor de la app.
+
+CÓMO TRABAJAS
+- Empieza por list_athletes y trabaja siempre con un atleta concreto.
+- get_plan da la temporada entera con los ids; get_sessions, lo planificado frente a lo hecho
+  (series con kg, reps y RIR; carreras con duración, pulso, RPE y desacople); get_proposals,
+  qué propuestas aplicó, descartó o deshizo. Léelos antes de proponer.
+- Pregunta cómo se ha sentido y qué quiere antes de cambiar nada. Una propuesta por conversación:
+  una nueva sustituye a la pendiente.
+- Copia los UUID exactos de get_plan. Los ejercicios se nombran con exerciseSlug de get_catalog.
+- Cambios en la fase actual o en una futura (phaseKey); una propuesta toca una sola fase.
+- Carrera: set_run sustituye la sesión de una semana entera — etiqueta corta en "prescription"
+  ("3×8' Z4 (rec 3')") y los bloques tipados en "structure", que es lo que la app pinta y suma.
+
+QUÉ NO PUEDES HACER — NUNCA
+- No tocas las RM ni la regla de regresión: los kilos salen del motor (RM × ola). Si piden
+  más peso, se mueven las series del básico o el pico de la ola.
+- No quitas, mueves ni sustituyes el básico de una sesión de fuerza: dispara la regresión.
+- No dejas una semana sin bloque de movilidad ni una sesión de fuerza sin básico; la app
+  deshace el lote entero si lo intentas.
+
+${COACH_PRINCIPLES}
 `.trim();
 
 export const BUILDER_SYSTEM_INSTRUCTION = `
@@ -105,23 +141,10 @@ export function buildPlanContext(
   athlete: LoadedAthlete,
   phase: PhaseRow,
 ): string {
-  const { ctx, config, placement } = athlete;
-  const phaseConfig = phaseEngineConfig(config, phase);
-  const slots = ctx.slots
-    .filter((s) => s.phase_id === phase.id)
-    .sort((a, b) => a.position - b.position);
-  const days = ctx.days
-    .filter((d) => d.phase_id === phase.id)
-    .sort((a, b) => a.day_index - b.day_index);
+  const { ctx, placement } = athlete;
   const lines: string[] = [];
 
-  lines.push(`# Programa: ${ctx.program.name}`);
-  lines.push(`Objetivo: ${ctx.program.goal || "sin objetivo declarado"}`);
-  if (ctx.program.race_on) {
-    lines.push(
-      `Carrera objetivo: ${ctx.program.race_name ?? "carrera"} el ${ctx.program.race_on}.`,
-    );
-  }
+  lines.push(...programLines(athlete));
   lines.push(
     `Hoy es ${athlete.today}. Fase actual ${phase.key} — ${phase.name}, semana ${placement.week} de ${phase.weeks} (semana ${placement.absoluteWeek} de ${athlete.seasonWeeks} de la temporada).`,
   );
@@ -131,6 +154,88 @@ export function buildPlanContext(
   lines.push("");
 
   lines.push("## Motor de pesos (sólo lectura para ti)");
+  lines.push(...engineLines(athlete, phase));
+  lines.push("");
+
+  lines.push("## Sesiones tipo de la fase (slots)");
+  lines.push(...slotLines(athlete, phase, false));
+  lines.push("");
+
+  lines.push("## Semana tipo");
+  lines.push(...weekLines(ctx, phase));
+
+  return lines.join("\n");
+}
+
+/**
+ * The whole season for the Claude coach behind `/api/mcp`: every phase,
+ * every run week with its typed blocks, every id a change op needs.
+ */
+export function buildSeasonContext(athlete: LoadedAthlete): string {
+  const { ctx, placement } = athlete;
+  const current = ctx.phases.find((p) => p.id === placement.phase.id)!;
+  const lines: string[] = [];
+
+  lines.push(...programLines(athlete));
+  lines.push(
+    `Hoy es ${athlete.today}: fase ${current.key}, semana ${placement.week} de ${current.weeks} (semana ${placement.absoluteWeek} de ${athlete.seasonWeeks} de la temporada).`,
+  );
+  const p = ctx.profile;
+  lines.push(
+    `Atleta: ${p.display_name || "—"} · peso ${p.body_weight_kg == null ? "—" : `${formatWeight(Number(p.body_weight_kg))} kg`} · LTHR ${p.lthr ?? "—"} · material ${(p.available_equipment ?? []).join(", ")} · kettlebells ${(p.kettlebells_kg ?? []).map((k) => formatWeight(Number(k))).join(" y ")} kg.`,
+  );
+  lines.push("");
+
+  lines.push(`## Motor de pesos hoy (fase ${current.key}; sólo lectura)`);
+  lines.push(...engineLines(athlete, current));
+
+  for (const phase of ctx.phases) {
+    const when =
+      phase.id === current.id
+        ? "ACTUAL"
+        : phase.position < current.position
+          ? "pasada"
+          : "futura";
+    lines.push("");
+    lines.push(
+      `# Fase ${phase.key} — ${phase.name} (${when})  [phaseKey: ${phase.key}]`,
+    );
+    lines.push(
+      `Empieza el ${phase.starts_on ?? "—"} · ${phase.weeks} semanas · énfasis: ${phase.emphasis || "—"}`,
+    );
+    if (phase.notes) lines.push(`Notas: ${phase.notes}`);
+    const cfg = phaseEngineConfig(athlete.config, phase);
+    lines.push(
+      cfg.progressionMode === "fixed_pct"
+        ? `Progresión: % fijo, básicos al ${Math.round((cfg.pctOfRm ?? 0.8) * 100)} % de la RM.`
+        : `Progresión: ola [${cfg.wave.map((w) => `${Math.round(w * 100)} %`).join(", ")}], ciclo de ${cfg.cycleWeeks} semanas.`,
+    );
+    lines.push("## Sesiones tipo (slots)");
+    lines.push(...slotLines(athlete, phase, true));
+    lines.push("## Semana tipo");
+    lines.push(...weekLines(ctx, phase));
+  }
+
+  return lines.join("\n");
+}
+
+function programLines({ ctx }: LoadedAthlete): string[] {
+  const lines = [
+    `# Programa: ${ctx.program.name}`,
+    `Objetivo: ${ctx.program.goal || "sin objetivo declarado"}`,
+  ];
+  if (ctx.program.race_on) {
+    lines.push(
+      `Carrera objetivo: ${ctx.program.race_name ?? "carrera"} el ${ctx.program.race_on}.`,
+    );
+  }
+  return lines;
+}
+
+function engineLines(athlete: LoadedAthlete, phase: PhaseRow): string[] {
+  const { ctx, config, placement } = athlete;
+  const phaseConfig = phaseEngineConfig(config, phase);
+  const lines: string[] = [];
   if (phaseConfig.progressionMode === "fixed_pct") {
     lines.push(
       `Esta fase va a porcentaje fijo: básicos al ${Math.round((phaseConfig.pctOfRm ?? 0.8) * 100)} % de la RM, sin olas, sin bumps y sin descargas automáticas.`,
@@ -160,9 +265,19 @@ export function buildPlanContext(
       `- ${lift.name} (${lift.key}): RM ${formatWeight(state.e1rmKg)} kg → esta semana ${formatWeight(today)} kg${flags.length ? ` · ${flags.join(", ")}` : ""}`,
     );
   }
-  lines.push("");
+  return lines;
+}
 
-  lines.push("## Sesiones tipo de la fase (slots)");
+/** One block per slot; `withStructure` adds each run week's typed blocks. */
+function slotLines(
+  { ctx }: LoadedAthlete,
+  phase: PhaseRow,
+  withStructure: boolean,
+): string[] {
+  const lines: string[] = [];
+  const slots = ctx.slots
+    .filter((s) => s.phase_id === phase.id)
+    .sort((a, b) => a.position - b.position);
   for (const slot of slots) {
     lines.push(
       `### ${slot.label} — ${slot.title} · ${slot.subtitle || "—"}  [slotId: ${slot.id}] [tipo: ${slot.session_type}]`,
@@ -175,7 +290,11 @@ export function buildPlanContext(
         .filter((r) => r.slot_id === slot.id)
         .sort((a, b) => a.week - b.week);
       for (const r of runs) {
-        lines.push(`  · sem ${r.week}: ${r.prescription}`);
+        lines.push(
+          withStructure
+            ? `  · sem ${r.week}: ${r.prescription}${r.notes ? ` (${r.notes})` : ""}  [structure: ${JSON.stringify(r.structure)}]`
+            : `  · sem ${r.week}: ${r.prescription}`,
+        );
       }
       if (runs.length === 0) lines.push("  · sin contenido");
       continue;
@@ -193,15 +312,16 @@ export function buildPlanContext(
       `  (total ${totalSets} series ≈ ${Math.round(totalSets * 3.1 + 12)} minutos)`,
     );
   }
-  lines.push("");
+  return lines;
+}
 
-  lines.push("## Semana tipo");
-  for (const day of days) {
-    const slot = slots.find((s) => s.id === day.slot_id);
-    lines.push(
-      `- ${DAY_LABELS[day.day_index]} (dayIndex ${day.day_index}): ${slot?.title ?? "—"} [slotId: ${slot?.id ?? "—"}]`,
-    );
-  }
-
-  return lines.join("\n");
+function weekLines(ctx: LoadedAthlete["ctx"], phase: PhaseRow): string[] {
+  const slots = ctx.slots.filter((s) => s.phase_id === phase.id);
+  return ctx.days
+    .filter((d) => d.phase_id === phase.id)
+    .sort((a, b) => a.day_index - b.day_index)
+    .map((day) => {
+      const slot = slots.find((s) => s.id === day.slot_id);
+      return `- ${DAY_LABELS[day.day_index]} (dayIndex ${day.day_index}): ${slot?.title ?? "—"} [slotId: ${slot?.id ?? "—"}]`;
+    });
 }

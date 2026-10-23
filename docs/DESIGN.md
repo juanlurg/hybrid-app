@@ -155,7 +155,9 @@ installed PWA.
    a regression — say so in the UI where it matters.
 3. **The AI proposes, the athlete disposes.** Changes are a diff to tick.
    The AI never edits `lifts`. It picks exercises from the catalogue by
-   slug — it never invents a name.
+   slug — it never invents a name. Both coaches, Gemini in Editor and a Claude
+   chat through `/api/mcp`, only ever write a pending `ai_proposals` row;
+   `applyProposal` is the one path into the plan.
 4. **Every engine action is undoable and logged** in `engine_events`.
 5. **The calendar rules.** The plan lives on dates; a missed day is lost
    once its week ends — inside the current week any day can be trained
