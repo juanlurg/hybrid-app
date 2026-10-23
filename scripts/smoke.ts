@@ -27,8 +27,8 @@ import {
   repsForWeek,
 } from "../src/lib/engine";
 import { parseStructure } from "../src/lib/engine/run";
-import { addDays } from "../src/lib/domain/calendar";
-import { phaseEngineConfig } from "../src/lib/domain/plan";
+import { addDays, placeDate, todayIso } from "../src/lib/domain/calendar";
+import { phaseEngineConfig, phaseSpans } from "../src/lib/domain/plan";
 
 /* ── env ─────────────────────────────────────────────────────── */
 
@@ -111,6 +111,7 @@ async function cleanup(ids: string[]) {
 
 const APP_PORT = 3111;
 const APP_URL = `http://127.0.0.1:${APP_PORT}`;
+const MCP_TOKEN = "smoke-mcp-token";
 
 let appServer: ChildProcess | null = null;
 
@@ -130,7 +131,7 @@ async function startAppServer(): Promise<void> {
   appServer = spawn(process.execPath, [bin, "dev", "-p", String(APP_PORT)], {
     cwd: process.cwd(),
     stdio: "ignore",
-    env: process.env,
+    env: { ...process.env, MCP_TOKEN },
   });
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
@@ -649,6 +650,143 @@ async function main() {
       .from("ai_proposals")
       .select("id");
     check("B cannot see A's proposals", bSeesProposals?.length === 0);
+
+    section("Claude coach — POST /api/mcp");
+    let rpcId = 0;
+    const mcp = async (method: string, params?: object, token = MCP_TOKEN) =>
+      fetch(`${APP_URL}/api/mcp/${token}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++rpcId, method, params }),
+      });
+    const tool = async (name: string, args: object) => {
+      const body = await (await mcp("tools/call", { name, arguments: args })).json();
+      return body.result as { isError: boolean; content: Array<{ text: string }> };
+    };
+
+    check(
+      "a wrong token is a 404",
+      (await mcp("tools/list", {}, "wrong")).status === 404,
+    );
+    const init = await (
+      await mcp("initialize", { protocolVersion: "2025-06-18", capabilities: {} })
+    ).json();
+    check(
+      "initialize hands over the coach brief",
+      init.result?.instructions?.includes("propose_changes"),
+      JSON.stringify(init).slice(0, 200),
+    );
+
+    const athletes = await tool("list_athletes", {});
+    check(
+      "list_athletes finds Atleta A",
+      !athletes.isError && athletes.content[0].text.includes(a.id),
+      athletes.content[0].text.slice(0, 200),
+    );
+
+    const plan = await tool("get_plan", { athlete: "atleta a" });
+    check(
+      "get_plan carries every phase, with ids and run blocks",
+      !plan.isError &&
+        plan.content[0].text.match(/\[phaseKey: /g)?.length === 4 &&
+        plan.content[0].text.includes("[structure: [{"),
+      plan.content[0].text.slice(0, 200),
+    );
+
+    const sessionsRes = await tool("get_sessions", { athlete: a.id });
+    const sessionsBody = sessionsRes.isError ? null : JSON.parse(sessionsRes.content[0].text);
+    check(
+      "get_sessions walks the last 4 weeks, plan against done",
+      sessionsBody?.days?.length === 28 &&
+        sessionsBody.days.every((d: { plan?: string }) => d.plan),
+      sessionsRes.content[0].text.slice(0, 200),
+    );
+    const tooLong = await tool("get_sessions", {
+      athlete: a.id,
+      from: "2026-01-01",
+      to: "2026-06-30",
+    });
+    check("get_sessions refuses an oversized window", tooLong.isError);
+
+    const { data: phasesForMcp } = await admin
+      .from("program_phases")
+      .select("*, program_slots(*, program_exercises(*)), program_run_sessions(*)")
+      .eq("program_id", programAId!)
+      .order("position");
+    const currentKey = placeDate(phaseSpans(phasesForMcp!), todayIso())!.phase.key;
+    const currentPhase = phasesForMcp!.find((p) => p.key === currentKey)!;
+    const runSlot = currentPhase.program_slots.find((s) => s.session_type.startsWith("run_"))!;
+    const accessory = currentPhase.program_slots
+      .flatMap((s) => s.program_exercises)
+      .find((e) => !e.is_primary)!;
+    const primary = currentPhase.program_slots
+      .flatMap((s) => s.program_exercises)
+      .find((e) => e.is_primary)!;
+
+    const proposed = await tool("propose_changes", {
+      athlete: a.id,
+      request: "Noto las piernas cargadas; quiero la calidad algo más corta.",
+      rationale: "Recorto un poco el volumen de la sesión de calidad y una serie de accesorio.",
+      changes: [
+        {
+          op: "set_run",
+          title: "Calidad más corta",
+          slotId: runSlot.id,
+          week: 1,
+          prescription: "40' Z2",
+          structure: [{ kind: "steady", workMin: 40, zone: "Z2" }],
+        },
+        { op: "set_sets", title: "Una serie menos", exerciseId: accessory.id, sets: 2 },
+        { op: "remove_exercise", title: "Quitar el básico", exerciseId: primary.id },
+      ],
+    });
+    const proposedBody = proposed.isError ? null : JSON.parse(proposed.content[0].text);
+    check(
+      "propose_changes keeps the valid ops and drops the basic",
+      proposedBody?.pending?.length === 2 &&
+        proposedBody.dropped?.[0]?.reason?.includes("básico"),
+      proposed.content[0].text.slice(0, 300),
+    );
+
+    const { data: aProposals } = await admin
+      .from("ai_proposals")
+      .select("id, status, phase_id, thread_id, changes")
+      .eq("user_id", a.id)
+      .order("created_at");
+    const mcpProposal = aProposals?.find((p) => p.id === proposedBody?.proposalId);
+    check(
+      "the proposal waits, pending, on the current phase",
+      mcpProposal?.status === "pending" && mcpProposal.phase_id === currentPhase.id,
+      JSON.stringify(mcpProposal)?.slice(0, 200),
+    );
+    check(
+      "the older pending proposal is discarded, not orphaned",
+      aProposals?.filter((p) => p.status === "pending").length === 1,
+      JSON.stringify(aProposals?.map((p) => p.status)),
+    );
+    const { data: mcpMessages } = await admin
+      .from("ai_messages")
+      .select("role")
+      .eq("thread_id", mcpProposal?.thread_id ?? "");
+    check(
+      "Editor gets the athlete's words and the rationale as a thread",
+      mcpMessages?.map((m) => m.role).join(",") === "user,assistant",
+    );
+
+    const { data: runAfter } = await admin
+      .from("program_run_sessions")
+      .select("prescription")
+      .eq("slot_id", runSlot.id)
+      .eq("week", 1)
+      .maybeSingle();
+    check(
+      "proposing writes nothing to the plan",
+      runAfter?.prescription !== "40' Z2",
+      runAfter?.prescription,
+    );
 
     section("Primer 10K template");
     const { data: tenK } = await admin

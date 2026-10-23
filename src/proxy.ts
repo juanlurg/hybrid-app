@@ -57,6 +57,11 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  // Neither has a Claude connector: the route checks MCP_TOKEN itself.
+  if (pathname.startsWith("/api/mcp/")) {
+    return response;
+  }
+
   if (!user && !isPublic) {
     // API callers (the sync queue, the export link fetched by a script)
     // need to tell "no session" apart from "here is the login page HTML".
