@@ -16,6 +16,7 @@ import {
   type IsoDate,
 } from "@/lib/domain/calendar";
 import { phaseSpans } from "@/lib/domain/plan";
+import { pushToAthlete } from "@/lib/push";
 import type { Json } from "@/lib/supabase/database.types";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -507,6 +508,11 @@ export const MCP_TOOLS: McpTool[] = [
         .neq("id", proposal.id);
 
       revalidatePath("/editor");
+      await pushToAthlete(a.userId, {
+        title: "Bloques",
+        body: `claude propone ${kept.length === 1 ? "1 cambio" : `${kept.length} cambios`} en ${phase.key} · míralos en editor`,
+        url: "/editor",
+      });
       return json({
         proposalId: proposal.id,
         phase: phase.key,

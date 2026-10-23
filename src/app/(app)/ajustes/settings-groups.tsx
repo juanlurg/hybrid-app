@@ -3,6 +3,7 @@
 import { ChevronRight, Download, LogOut, SlidersHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
+  useEffect,
   useState,
   useSyncExternalStore,
   useTransition,
@@ -35,6 +36,10 @@ import {
   togglePlate,
   updateProfile,
 } from "@/lib/actions/profile";
+import {
+  removePushSubscription,
+  savePushSubscription,
+} from "@/lib/actions/push";
 import { cn } from "@/lib/cn";
 import {
   addDays,
@@ -466,6 +471,7 @@ export function SettingsGroups({
           />
         </SettingRow>
         <RestNotificationsRow />
+        <CoachPushRow />
         <SettingRow
           name="Mantener la pantalla encendida"
           sub="Mientras la sesión esté abierta"
@@ -1179,6 +1185,97 @@ function RestNotificationsRow() {
       />
     </SettingRow>
   );
+}
+
+/**
+ * The coach-push toggle. Per device like the rest notifications: the
+ * browser's push subscription is the device, and its row in
+ * `push_subscriptions` is what the server pushes to when Claude leaves a
+ * proposal in Editor. Hidden where push is absent or the VAPID key is unset.
+ */
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+function CoachPushRow() {
+  const [state, setState] = useState<"unknown" | "off" | "on">("unknown");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!VAPID_PUBLIC_KEY || !notificationsSupported() || !("PushManager" in window)) {
+      return;
+    }
+    void navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setState(sub ? "on" : "off"))
+      .catch(() => {});
+  }, []);
+
+  // Stays "unknown" — hidden — wherever push or its key is missing.
+  if (state === "unknown") return null;
+
+  const sub =
+    typeof Notification !== "undefined" && Notification.permission === "denied"
+      ? "Bloqueado por el navegador: actívalo en los ajustes del sitio"
+      : isIOS() && !isStandalone()
+        ? "En iPhone hace falta instalar la app en la pantalla de inicio"
+        : "Un aviso cuando Claude deje cambios propuestos en Editor";
+
+  async function toggle(next: boolean) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (!next) {
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+          await removePushSubscription(existing.endpoint);
+          await existing.unsubscribe();
+        }
+        setState("off");
+        return;
+      }
+      // The permission prompt must ride the tap that asked for it.
+      if ((await Notification.requestPermission()) !== "granted") return;
+      const pushSub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToBytes(VAPID_PUBLIC_KEY!),
+      });
+      const json = pushSub.toJSON();
+      const saved = await savePushSubscription({
+        endpoint: pushSub.endpoint,
+        p256dh: json.keys?.p256dh ?? "",
+        auth: json.keys?.auth ?? "",
+      });
+      if (!saved.ok) {
+        await pushSub.unsubscribe();
+        return;
+      }
+      setState("on");
+    } catch {
+      // Denied, blocked or offline: the toggle just stays where it was.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SettingRow name="Avisos del coach" sub={sub}>
+      <Toggle
+        label="Avisos del coach"
+        checked={state === "on"}
+        onChange={(next) => void toggle(next)}
+      />
+    </SettingRow>
+  );
+}
+
+function urlBase64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
+  const padded = (base64 + "=".repeat((4 - (base64.length % 4)) % 4))
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const raw = atob(padded);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
 }
 
 function ChipRow<T extends string | number>({

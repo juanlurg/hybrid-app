@@ -140,8 +140,10 @@ come from hasaneyldrm/exercises-dataset; the media is © Gym visual, kept at
 
 Session notifications are client-side only: one tray card per session
 (`tag`), the rest line carries an absolute end time so a frozen tab still
-tells the truth; no push server, no background countdown, iOS only as an
-installed PWA.
+tells the truth; no background countdown, iOS only as an installed PWA.
+The one server push is the coach's: `propose_changes` calls `pushToAthlete`
+(`lib/push.ts`, Web Push/VAPID) for every device in `push_subscriptions`;
+a tap opens Editor.
 
 ## Non-negotiables
 

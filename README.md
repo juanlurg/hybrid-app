@@ -48,6 +48,13 @@ proposal (`propose_changes`). The athlete still ticks and applies it in
 Editor → Refinar con IA. The token is the only thing guarding the route, so
 treat the URL as a password. Without `MCP_TOKEN` the route returns 404.
 
+To get a phone notification when Claude leaves a proposal, generate VAPID keys
+(`npx web-push generate-vapid-keys`) and set `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (`mailto:you@example.com`) in the
+deployment. Each athlete then turns on Ajustes → Sesión → Avisos del coach on
+their own device (on iPhone, from the installed home-screen app). Without the
+keys the toggle is hidden and nothing is sent.
+
 Supabase Studio runs at http://127.0.0.1:54323 and the local inbox (for
 confirmation emails) at http://127.0.0.1:54324.
 

@@ -167,16 +167,37 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
-// Tapping the session notification brings the open tab back — the
-// runner is almost certainly the screen that posted it.
+// A coach push (see lib/push.ts). userVisibleOnly: every push must show
+// a notification, so a malformed payload still gets a generic one.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {}
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Bloques", {
+      body: data.body || "tienes cambios propuestos en editor",
+      tag: "bloques-propuesta",
+      renotify: true,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: data.url || "/editor" },
+    }),
+  );
+});
+
+// Tapping a notification brings the open tab back — for the session
+// card that is the runner already on screen; a push carries its own url.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const url = event.notification.data && event.notification.data.url;
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((list) => {
         const client = list.find((c) => "focus" in c);
-        return client ? client.focus() : self.clients.openWindow("/");
+        if (!client) return self.clients.openWindow(url || "/");
+        return client.focus().then((c) => (url && c.navigate ? c.navigate(url) : c));
       }),
   );
 });
