@@ -86,6 +86,26 @@ export const syncRequestSchema = z.object({
         avgHr: z.number().int().min(0).max(250).nullable(),
         decouplingPct: z.number().min(-50).max(50).nullable(),
         perceivedEffort: z.number().int().min(1).max(10).nullish(),
+        // Optional-with-default: queues from before per-rep logging drain.
+        splits: z
+          .array(
+            z.object({
+              block: z.number().int().min(0).max(20),
+              label: z.string().max(120),
+              targetPaceSec: z.number().int().min(100).max(1200).nullable(),
+              reps: z
+                .array(
+                  z.object({
+                    paceSec: z.number().int().min(100).max(1200).nullable(),
+                    meters: z.number().int().min(0).max(50000).nullable(),
+                  }),
+                )
+                .max(30),
+            }),
+          )
+          .max(12)
+          .optional()
+          .default([]),
         notes: z.string().max(2000),
         opKey: z.string().max(200),
       }),

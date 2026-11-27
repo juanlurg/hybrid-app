@@ -4,10 +4,11 @@ import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 
-import { SectionLabel } from "@/components/ui/kit";
+import { Fold, SectionLabel } from "@/components/ui/kit";
 import { cn } from "@/lib/cn";
 import { enqueueAndFlush } from "@/lib/offline/syncer";
 import type { SessionType } from "@/lib/domain/plan";
+import { formatPace, parsePace, type RunSplit } from "@/lib/engine/run";
 
 export interface RunTarget {
   phaseId: string;
@@ -34,6 +35,32 @@ export interface LoggedRun {
   avgHr: number | null;
   decouplingPct: number | null;
   perceivedEffort: number | null;
+  splits: RunSplit[];
+}
+
+/** A quality block of the day, logged rep by rep. */
+export interface RepBlock {
+  block: number;
+  reps: number;
+  paceSec: number | null;
+  title: string;
+  /** "a 5:05/km", or "". */
+  pace: string;
+}
+
+const repKey = (block: number, rep: number, field: "pace" | "m") =>
+  `${block}:${rep}:${field}`;
+
+/** Saved splits back into the text the rep inputs hold. */
+function repFields(splits: RunSplit[] | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const s of splits ?? []) {
+    s.reps.forEach((r, i) => {
+      if (r.paceSec != null) out[repKey(s.block, i, "pace")] = formatPace(r.paceSec);
+      if (r.meters != null) out[repKey(s.block, i, "m")] = String(r.meters);
+    });
+  }
+  return out;
 }
 
 const asField = (v: number | null) =>
@@ -44,12 +71,14 @@ const WELL = "flex h-12 items-center gap-1.5 rounded-lg bg-soft px-3.5";
 export function LogRunForm({
   day,
   targetMinutes,
+  repBlocks,
   done,
   logged,
   skip,
 }: {
   day: RunTarget;
   targetMinutes: number;
+  repBlocks: RepBlock[];
   done: boolean;
   logged: LoggedRun | null;
   /** The quiet "saltar" beside the action, when the day still allows it. */
@@ -77,6 +106,7 @@ export function LogRunForm({
   const [rpe, setRpe] = useState<number | null>(
     logged?.perceivedEffort ?? null,
   );
+  const [repValues, setRepValues] = useState(() => repFields(logged?.splits));
 
   // Freshest first: what this device queued beats the server render.
   const shown = justQueued ?? logged;
@@ -135,6 +165,38 @@ export function LogRunForm({
       return;
     }
 
+    // Only blocks with something typed are stored; a blank rep stays null.
+    const splits: RunSplit[] = [];
+    for (const b of repBlocks) {
+      const reps: RunSplit["reps"] = [];
+      for (let i = 0; i < b.reps; i++) {
+        const where = `${b.title}, repetición ${i + 1}`;
+        const paceSec = parsePace(repValues[repKey(b.block, i, "pace")] ?? "");
+        if (paceSec != null && !(paceSec >= 100 && paceSec <= 1200)) {
+          setError(`${where}: el ritmo va en min/km, como 4:30.`);
+          return;
+        }
+        const metersText = repValues[repKey(b.block, i, "m")] ?? "";
+        const meters = toNumber(metersText);
+        if (metersText.trim() !== "" && (meters == null || meters > 50000)) {
+          setError(`${where}: los metros, un número o en blanco.`);
+          return;
+        }
+        reps.push({
+          paceSec,
+          meters: meters == null ? null : Math.round(meters),
+        });
+      }
+      if (reps.some((r) => r.paceSec != null || r.meters != null)) {
+        splits.push({
+          block: b.block,
+          label: b.title,
+          targetPaceSec: b.paceSec,
+          reps,
+        });
+      }
+    }
+
     start(async () => {
       const values: LoggedRun = {
         durationMinutes: toNumber(minutes),
@@ -142,6 +204,7 @@ export function LogRunForm({
         avgHr: toNumber(avgHr),
         decouplingPct: toNumber(decouplingPct),
         perceivedEffort: rpe,
+        splits,
       };
       // Write-ahead: the run is registered on this device instantly and
       // lands in the database whenever there is network.
@@ -162,6 +225,7 @@ export function LogRunForm({
         avgHr: values.avgHr,
         decouplingPct: values.decouplingPct,
         perceivedEffort: values.perceivedEffort,
+        splits: values.splits,
         notes: "",
         loggedAt: new Date().toISOString(),
       });
@@ -177,15 +241,27 @@ export function LogRunForm({
   // arrives at home, after the "hecha" tap. Same op key, same upsert.
   const registered = (done || queued) && !editing;
 
+  const totalReps = repBlocks.reduce((acc, b) => acc + b.reps, 0);
+  const savedSplits = shown?.splits ?? [];
+  const filledReps = savedSplits.reduce(
+    (acc, s) =>
+      acc + s.reps.filter((r) => r.paceSec != null || r.meters != null).length,
+    0,
+  );
+  const savedRep = (block: number, rep: number) =>
+    savedSplits.find((s) => s.block === block)?.reps[rep];
+
   const summary = [
     shown?.durationMinutes != null ? `${shown.durationMinutes}′` : null,
     shown?.distanceKm != null ? `${asField(shown.distanceKm)} km` : null,
     shown?.avgHr != null ? `${shown.avgHr} ppm` : null,
     shown?.decouplingPct != null ? `${asField(shown.decouplingPct)} %` : null,
     shown?.perceivedEffort != null ? `RPE ${shown.perceivedEffort}` : null,
+    filledReps > 0 ? `${filledReps}/${totalReps} reps` : null,
   ]
     .filter(Boolean)
     .join(" · ");
+
 
   return (
     <>
@@ -269,6 +345,104 @@ export function LogRunForm({
         )}
       </div>
 
+      {repBlocks.length > 0 && (!registered || filledReps > 0) ? (
+        <Fold
+          className="mt-3"
+          title="Ritmo por repetición"
+          summary={
+            registered
+              ? `${filledReps} de ${totalReps} repeticiones con datos`
+              : "Ritmo y metros de cada una, del reloj. Opcional."
+          }
+        >
+          <div className="flex flex-col gap-4">
+            {repBlocks.map((b) => (
+              <div key={b.block} className="flex flex-col gap-2">
+                <div className="flex items-baseline gap-2">
+                  <span className="min-w-0 flex-1 text-[14px] leading-tight font-bold">
+                    {b.title}
+                  </span>
+                  <span className="num flex-none text-[12px] leading-none font-semibold text-mid">
+                    {b.pace || "min/km · m"}
+                  </span>
+                </div>
+                {Array.from({ length: b.reps }, (_, i) => {
+                  const saved = savedRep(b.block, i);
+                  const cells: Array<{
+                    field: "pace" | "m";
+                    unit: string;
+                    placeholder: string;
+                    shown: string | null;
+                  }> = [
+                    {
+                      field: "pace",
+                      unit: "/km",
+                      placeholder:
+                        b.paceSec != null ? formatPace(b.paceSec) : "4:30",
+                      shown:
+                        saved?.paceSec == null ? null : formatPace(saved.paceSec),
+                    },
+                    {
+                      field: "m",
+                      unit: "m",
+                      placeholder: "—",
+                      shown: saved?.meters == null ? null : String(saved.meters),
+                    },
+                  ];
+                  return (
+                    <div
+                      key={i}
+                      className="grid grid-cols-[28px_1fr_1fr] items-center gap-2"
+                    >
+                      <span className="num flex h-7 items-center justify-center rounded-md bg-run-soft text-[12px] leading-none font-extrabold text-run">
+                        {i + 1}
+                      </span>
+                      {cells.map((c) =>
+                        registered ? (
+                          <span key={c.field} className={WELL}>
+                            <span
+                              className={cn(
+                                "num min-w-0 flex-1 truncate text-[17px] leading-none font-bold",
+                                c.shown == null && "text-faint",
+                              )}
+                            >
+                              {c.shown ?? "—"}
+                            </span>
+                            <span className="flex-none text-[13px] leading-none font-semibold text-mid">
+                              {c.unit}
+                            </span>
+                          </span>
+                        ) : (
+                          <label key={c.field} className={WELL}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              aria-label={`${b.title}, repetición ${i + 1}, ${c.field === "pace" ? "ritmo" : "metros"}`}
+                              value={repValues[repKey(b.block, i, c.field)] ?? ""}
+                              placeholder={c.placeholder}
+                              onChange={(e) =>
+                                setRepValues((v) => ({
+                                  ...v,
+                                  [repKey(b.block, i, c.field)]: e.target.value,
+                                }))
+                              }
+                              className="num w-full min-w-0 bg-transparent text-[17px] leading-none font-bold outline-none"
+                            />
+                            <span className="flex-none text-[13px] leading-none font-semibold text-mid">
+                              {c.unit}
+                            </span>
+                          </label>
+                        ),
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </Fold>
+      ) : null}
+
       {error ? (
         <p className="mx-5 mt-3 rounded-lg bg-fail-soft px-3.5 py-2.5 text-[12.5px] leading-[1.4] font-semibold text-fail">
           {error}
@@ -293,6 +467,7 @@ export function LogRunForm({
                 setAvgHr(asField(shown?.avgHr ?? null));
                 setDecouplingPct(asField(shown?.decouplingPct ?? null));
                 setRpe(shown?.perceivedEffort ?? null);
+                setRepValues(repFields(shown?.splits));
                 setEditing(true);
               }}
               className="-my-3 flex h-11 flex-none items-center text-[13px] leading-none font-bold text-clay"

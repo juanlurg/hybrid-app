@@ -630,6 +630,80 @@ async function main() {
       JSON.stringify(eventsAfter4),
     );
 
+    section("Run log with per-rep splits — through POST /api/sync");
+    const { data: runDays } = await a.client
+      .from("program_days")
+      .select("day_index, slot_id, program_slots!inner(title, session_type)")
+      .eq("phase_id", basicPhase!.id)
+      .order("day_index");
+    const runDay = runDays?.find((d) => d.program_slots.session_type.startsWith("run"));
+    check("the basic's phase has a run day", Boolean(runDay));
+    const runOn = addDays(basicPhase!.starts_on!, (week - 1) * 7 + runDay!.day_index);
+    const runOpKey = `run:${runOn}:${runDay!.slot_id}`;
+    const splits = [
+      {
+        block: 1,
+        label: "6 × stride 20″",
+        targetPaceSec: null,
+        reps: [
+          { paceSec: 215, meters: 93 },
+          { paceSec: 212, meters: null },
+        ],
+      },
+    ];
+    const runEnvelope = {
+      protocolVersion: 1,
+      deviceId: "smoke",
+      sessions: [],
+      runLogs: [
+        {
+          key: {
+            phaseId: basicPhase!.id,
+            slotId: runDay!.slot_id,
+            scheduledOn: runOn,
+            week,
+            dayIndex: runDay!.day_index,
+            sessionType: runDay!.program_slots.session_type,
+            title: runDay!.program_slots.title,
+          },
+          prescription: "40' Z2 + 6 strides",
+          durationMinutes: 48,
+          distanceKm: 8.1,
+          avgHr: 142,
+          decouplingPct: null,
+          perceivedEffort: 4,
+          splits,
+          notes: "",
+          opKey: runOpKey,
+        },
+      ],
+      mobilityLogs: [],
+    };
+    const runRes = await postSync(runEnvelope);
+    const runBody = await runRes.json();
+    check(
+      "the run log lands and acks",
+      runRes.status === 200 && runBody.ackedKeys?.includes(runOpKey),
+      JSON.stringify(runBody).slice(0, 200),
+    );
+    const runRepeat = await postSync(runEnvelope);
+    check("a repeated run flush lands too", (await runRepeat.json()).ok === true);
+    const { data: runRows } = await a.client
+      .from("run_logs")
+      .select("splits, sessions!inner(scheduled_on, slot_id)")
+      .eq("sessions.scheduled_on", runOn)
+      .eq("sessions.slot_id", runDay!.slot_id);
+    const stored = runRows?.[0]?.splits as typeof splits | undefined;
+    check(
+      "the splits are stored once, as sent",
+      runRows?.length === 1 &&
+        stored?.[0]?.label === splits[0].label &&
+        stored[0].reps[0].paceSec === 215 &&
+        stored[0].reps[0].meters === 93 &&
+        stored[0].reps[1].meters === null,
+      JSON.stringify(runRows),
+    );
+
     section("AI proposal storage");
     const { data: thread } = await a.client
       .from("ai_threads")
@@ -710,6 +784,17 @@ async function main() {
       to: "2026-06-30",
     });
     check("get_sessions refuses an oversized window", tooLong.isError);
+    const runSessions = await tool("get_sessions", {
+      athlete: a.id,
+      from: runOn,
+      to: runOn,
+    });
+    check(
+      "get_sessions shows the strides rep by rep",
+      !runSessions.isError &&
+        runSessions.content[0].text.includes('"reps":["3:35/km · 93 m","3:32/km"]'),
+      runSessions.content[0].text.slice(0, 400),
+    );
 
     const { data: phasesForMcp } = await admin
       .from("program_phases")

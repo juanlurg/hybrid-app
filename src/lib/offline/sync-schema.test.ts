@@ -155,4 +155,38 @@ describe("buildEnvelopes output vs the /api/sync schema", () => {
     const parsed = syncRequestSchema.safeParse(request(buildEnvelopes(q)));
     expect(parsed.success).toBe(true);
   });
+
+  it("per-rep splits ride the run envelope; an op from before them drains with none", () => {
+    const withSplits = enqueue(EMPTY_QUEUE, {
+      kind: "run_log",
+      key: KEY,
+      prescription: "40' Z2 + 6 cuestas 20\"",
+      durationMinutes: 50,
+      distanceKm: null,
+      avgHr: null,
+      decouplingPct: null,
+      splits: [
+        {
+          block: 1,
+          label: "6 × cuesta 20″",
+          targetPaceSec: null,
+          reps: [
+            { paceSec: 245, meters: 98 },
+            { paceSec: null, meters: 101 },
+          ],
+        },
+      ],
+      notes: "",
+      loggedAt: "t",
+    });
+    const parsed = syncRequestSchema.safeParse(request(buildEnvelopes(withSplits)));
+    expect(parsed.success && parsed.data.runLogs[0].splits[0].reps).toHaveLength(2);
+
+    const raw = JSON.parse(JSON.stringify(request(buildEnvelopes(withSplits)))) as {
+      runLogs: Array<Record<string, unknown>>;
+    };
+    delete raw.runLogs[0].splits;
+    const legacy = syncRequestSchema.safeParse(raw);
+    expect(legacy.success && legacy.data.runLogs[0].splits).toEqual([]);
+  });
 });

@@ -44,6 +44,7 @@ export const runStructureSchema = z
       workSec: z.number().int().min(0).max(120).nullish(),
       zone: z.enum(["Z1", "Z2", "Z3", "Z4", "Z5", "RM"]).nullish(),
       recMin: z.number().min(0).max(15).nullish(),
+      paceSec: z.number().int().min(150).max(600).nullish(),
       note: z.string().max(160).nullish(),
     }),
   )
@@ -365,7 +366,8 @@ const RUN_STRUCTURE_JSON = {
     "La sesión como bloques tipados. steady = rodaje continuo (workMin o workKm + zone), " +
     "interval = repeticiones (repeat × workMin|workKm en zone, rec recMin), hills/strides = " +
     "repeat × workSec, test = test LTHR de workMin, race = carrera, walk = caminata, rest = descanso. " +
-    "zone RM = ritmo objetivo de media maratón.",
+    "zone RM = ritmo objetivo de media maratón. paceSec = ritmo objetivo del bloque en " +
+    "segundos por km (305 = 5:05/km), opcional: solo cuando hay una referencia real.",
   items: {
     type: "object",
     properties: {
@@ -379,6 +381,7 @@ const RUN_STRUCTURE_JSON = {
       workSec: { type: "integer" },
       zone: { type: "string", enum: ["Z1", "Z2", "Z3", "Z4", "Z5", "RM"] },
       recMin: { type: "number" },
+      paceSec: { type: "integer" },
       note: { type: "string" },
     },
     required: ["kind"],

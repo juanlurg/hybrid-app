@@ -16,6 +16,7 @@ import {
   type IsoDate,
 } from "@/lib/domain/calendar";
 import { phaseSpans } from "@/lib/domain/plan";
+import { formatPace, type RunSplit } from "@/lib/engine/run";
 import type { Json } from "@/lib/supabase/database.types";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -97,6 +98,27 @@ function compact<T extends Record<string, unknown>>(row: T): Partial<T> {
   ) as Partial<T>;
 }
 
+/** Per-rep splits as the coach reads them: "4:58/km · 105 m" per rep. */
+function splitsView(raw: Json): unknown[] | null {
+  const splits = (Array.isArray(raw) ? raw : []) as unknown as RunSplit[];
+  if (splits.length === 0) return null;
+  return splits.map((b) =>
+    compact({
+      block: b.label,
+      target: b.targetPaceSec == null ? null : `${formatPace(b.targetPaceSec)}/km`,
+      reps: b.reps.map(
+        (r) =>
+          [
+            r.paceSec == null ? null : `${formatPace(r.paceSec)}/km`,
+            r.meters == null ? null : `${r.meters} m`,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "sin datos",
+      ),
+    }),
+  );
+}
+
 export const MCP_TOOLS: McpTool[] = [
   tool({
     name: "list_athletes",
@@ -174,7 +196,7 @@ export const MCP_TOOLS: McpTool[] = [
     name: "get_sessions",
     title: "Sesiones: plan frente a hecho",
     description:
-      `Día a día entre dos fechas: qué tocaba según el plan y qué se hizo — series (kg, reps, RIR, segundos, si quedó por debajo del rango), carreras (duración, distancia, pulso, desacople, RPE, notas), movilidad, eventos del motor (subidas, regresiones, descargas) y mediciones. Por defecto, las 4 últimas semanas; como mucho ${MAX_SESSION_DAYS} días por llamada.`,
+      `Día a día entre dos fechas: qué tocaba según el plan y qué se hizo — series (kg, reps, RIR, segundos, si quedó por debajo del rango), carreras (duración, distancia, pulso, desacople, RPE, ritmo y metros de cada repetición de strides, cuestas e intervalos frente al objetivo, notas), movilidad, eventos del motor (subidas, regresiones, descargas) y mediciones. Por defecto, las 4 últimas semanas; como mucho ${MAX_SESSION_DAYS} días por llamada.`,
     input: z.object({
       athlete: athleteArg,
       from: isoDate.optional().describe("Primer día, YYYY-MM-DD."),
@@ -284,6 +306,7 @@ export const MCP_TOOLS: McpTool[] = [
                 decouplingPct: run.decoupling_pct,
                 zone: run.dominant_zone,
                 rpe: run.perceived_effort,
+                splits: splitsView(run.splits),
                 notes: run.notes,
               })
             : null,

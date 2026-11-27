@@ -121,7 +121,7 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 | `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
-| `/carrera/[fecha]` | Semana | Run blocks, zone ruler, watch data, mark done, skip |
+| `/carrera/[fecha]` | Semana | Run blocks (target pace when set), zone ruler, watch data, pace and metres per rep of quality blocks (`run_logs.splits`), mark done, skip |
 | `/progreso` | Progreso | Adherence, records, the log, running trend (Pa:HR, km) |
 | `/programa` | Plan | Phases and what each is for, links, RMs, calculadora |
 | `/editor` | Plan | Semana tipo — weekly template editor + AI refinement |

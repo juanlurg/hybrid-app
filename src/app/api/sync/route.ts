@@ -760,6 +760,7 @@ export async function POST(request: Request) {
           avg_hr: r.avgHr,
           decoupling_pct: r.decouplingPct,
           perceived_effort: r.perceivedEffort ?? null,
+          splits: r.splits,
           notes: r.notes,
         },
         { onConflict: "session_id" },

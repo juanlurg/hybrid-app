@@ -15,6 +15,7 @@ import {
   parseStructure,
   prescriptionMinutes,
   type RunBlock,
+  type RunSplit,
   type Zone,
   type ZoneKey,
 } from "@/lib/engine/run";
@@ -111,7 +112,7 @@ export default async function CarreraPage({
           await supabase
             .from("run_logs")
             .select(
-              "duration_seconds, distance_km, avg_hr, decoupling_pct, perceived_effort",
+              "duration_seconds, distance_km, avg_hr, decoupling_pct, perceived_effort, splits",
             )
             .eq("session_id", session.id)
             .maybeSingle()
@@ -253,7 +254,9 @@ export default async function CarreraPage({
                         {block.title}
                       </div>
                       <div className="num mt-0.5 text-[12.5px] leading-[1.35] font-medium text-mid">
-                        {[block.duration, block.hr].filter(Boolean).join(" · ")}
+                        {[block.duration, block.pace, block.hr]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </div>
                       {block.note ? (
                         <p className="mt-1 text-[12.5px] leading-[1.45] font-medium text-mid">
@@ -363,6 +366,9 @@ export default async function CarreraPage({
             prescription: day.prescription,
           }}
           targetMinutes={day.estimatedMinutes}
+          repBlocks={day.runBlocks.flatMap((b) =>
+            b.log ? [{ ...b.log, title: b.title, pace: b.pace ?? "" }] : [],
+          )}
           done={done}
           skip={
             skippable ? (
@@ -399,6 +405,7 @@ export default async function CarreraPage({
                       ? null
                       : Number(runLog.decoupling_pct),
                   perceivedEffort: runLog.perceived_effort,
+                  splits: runLog.splits as unknown as RunSplit[],
                 }
               : null
           }

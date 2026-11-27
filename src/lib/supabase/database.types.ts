@@ -948,6 +948,7 @@ export type Database = {
           perceived_effort: number | null
           prescription: string
           session_id: string
+          splits: Json
           user_id: string
         }
         Insert: {
@@ -963,6 +964,7 @@ export type Database = {
           perceived_effort?: number | null
           prescription?: string
           session_id: string
+          splits?: Json
           user_id: string
         }
         Update: {
@@ -978,6 +980,7 @@ export type Database = {
           perceived_effort?: number | null
           prescription?: string
           session_id?: string
+          splits?: Json
           user_id?: string
         }
         Relationships: [

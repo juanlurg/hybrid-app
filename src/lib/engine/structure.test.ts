@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parsePace,
   parseStructure,
   structuredBlocks,
   structureMinutes,
@@ -145,5 +146,49 @@ describe("structureMinutes", () => {
 
   it("hills and strides cost about a minute and a half each", () => {
     expect(structureMinutes([{ kind: "hills", repeat: 6, workSec: 20 }])).toBe(9);
+  });
+});
+
+describe("target pace and per-rep logging", () => {
+  it("prints the target pace and marks quality blocks for rep-by-rep logging", () => {
+    const s: RunStructure = [
+      { kind: "steady", workMin: 40, zone: "Z2" },
+      { kind: "strides", repeat: 6, workSec: 20 },
+      { kind: "interval", repeat: 3, workKm: 2, zone: "RM", recMin: 2, paceSec: 305 },
+    ];
+    const blocks = structuredBlocks(s, LTHR);
+    const steady = blocks.find((b) => b.title === "Rodaje continuo");
+    expect(steady?.log).toBeUndefined();
+    expect(blocks.find((b) => b.title === "6 × stride 20″")?.log).toEqual({
+      block: 1,
+      reps: 6,
+      paceSec: null,
+    });
+    const rm = blocks.find((b) => b.title === "3 × 2 km a RM");
+    expect(rm?.pace).toBe("a 5:05/km");
+    expect(rm?.log).toEqual({ block: 2, reps: 3, paceSec: 305 });
+  });
+
+  it("an easy run with a target pace is still logged", () => {
+    const blocks = structuredBlocks(
+      [{ kind: "steady", workKm: 6, zone: "Z2", paceSec: 330 }],
+      LTHR,
+    );
+    expect(blocks[0].log).toEqual({ block: 0, reps: 1, paceSec: 330 });
+  });
+});
+
+describe("parsePace", () => {
+  it("reads the colon and the decimal pad's comma alike", () => {
+    expect(parsePace("4:30")).toBe(270);
+    expect(parsePace("4,05")).toBe(245);
+    expect(parsePace(" 5.10 ")).toBe(310);
+  });
+
+  it("blank is null, nonsense is NaN", () => {
+    expect(parsePace("")).toBeNull();
+    expect(parsePace("4:75")).toBeNaN();
+    expect(parsePace("rápido")).toBeNaN();
+    expect(parsePace("4,5")).toBeNaN();
   });
 });

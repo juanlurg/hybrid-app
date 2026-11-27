@@ -81,6 +81,10 @@ export interface RunBlock {
   note: string;
   /** Which accent the coloured rule uses. */
   tone: "easy" | "threshold" | "hard";
+  /** Target pace, "a 5:05/km", when the plan sets one. */
+  pace?: string;
+  /** Set on blocks logged rep by rep: their index in the structure, reps and target. */
+  log?: { block: number; reps: number; paceSec: number | null };
 }
 
 /**
@@ -263,6 +267,8 @@ export interface RunBlockSpec {
   workSec?: number;
   zone?: StructureZone;
   recMin?: number;
+  /** Target pace in seconds per km (305 = 5:05/km). */
+  paceSec?: number | null;
   note?: string;
 }
 
@@ -359,7 +365,8 @@ export function structuredBlocks(
   };
 
   const core: RunBlock[] = [];
-  for (const b of structure) {
+  for (const [index, b] of structure.entries()) {
+    const before = core.length;
     switch (b.kind) {
       case "rest":
         break;
@@ -441,6 +448,13 @@ export function structuredBlocks(
         });
         break;
     }
+    if (core.length > before) {
+      const block = core[core.length - 1];
+      if (b.paceSec != null) block.pace = `a ${formatPace(b.paceSec)}/km`;
+      if (isRepLogged(b)) {
+        block.log = { block: index, reps: b.repeat ?? 1, paceSec: b.paceSec ?? null };
+      }
+    }
   }
 
   if (core.length === 0) return [];
@@ -488,6 +502,17 @@ export function structuredBlocks(
     });
   }
   return out;
+}
+
+/** Quality work worth a pace and a distance per rep; easy running is not. */
+function isRepLogged(b: RunBlockSpec): boolean {
+  if (b.kind === "interval" || b.kind === "hills" || b.kind === "strides") {
+    return true;
+  }
+  return (
+    b.kind === "steady" &&
+    (b.paceSec != null || (b.zone != null && b.zone !== "Z1" && b.zone !== "Z2"))
+  );
 }
 
 function formatKm(km: number): string {
@@ -544,4 +569,29 @@ export function formatPace(secPerKm: number): string {
   const m = Math.floor(secPerKm / 60);
   const s = Math.round(secPerKm % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * "4:30", "4.30", "4,30" or "4'30" → 270 s/km. The phone's decimal pad
+ * has no colon, so the comma counts. Empty → null; garbage → NaN.
+ */
+export function parsePace(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const m = trimmed.match(/^(\d{1,2})\s*[:.,'′]\s*(\d{2})$/);
+  if (!m || Number(m[2]) >= 60) return NaN;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/**
+ * What the athlete ran in one quality block, rep by rep — stored in
+ * `run_logs.splits`. The label and target are snapshots of the plan on
+ * the day, so the weekly review reads them even after the plan moves.
+ */
+export interface RunSplit {
+  /** Index of the block in the day's structure. */
+  block: number;
+  label: string;
+  targetPaceSec: number | null;
+  reps: Array<{ paceSec: number | null; meters: number | null }>;
 }

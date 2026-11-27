@@ -8,6 +8,8 @@
  * problem (an IndexedDB adapter in the app, a Map in the tests).
  */
 
+import type { RunSplit } from "@/lib/engine/run";
+
 export interface SessionKey {
   phaseId: string;
   slotId: string;
@@ -68,6 +70,8 @@ export type QueueOp =
       decouplingPct: number | null;
       /** RPE 1-10 — absent on ops queued before the field existed. */
       perceivedEffort?: number | null;
+      /** Per-rep pace and metres — absent on ops queued before the field existed. */
+      splits?: RunSplit[];
       notes: string;
       loggedAt: string;
     }
@@ -170,6 +174,7 @@ export interface RunLogEnvelope {
   avgHr: number | null;
   decouplingPct: number | null;
   perceivedEffort?: number | null;
+  splits: RunSplit[];
   notes: string;
   opKey: string;
 }
@@ -308,6 +313,7 @@ export function buildEnvelopes(
           avgHr: op.avgHr,
           decouplingPct: op.decouplingPct,
           perceivedEffort: op.perceivedEffort ?? null,
+          splits: op.splits ?? [],
           notes: op.notes,
           opKey: k,
         });
