@@ -15,6 +15,8 @@ export interface AccessorySetLog {
   reps: number | null;
   seconds: number | null;
   rir: number | null;
+  /** The load the set actually went on. Absent = the prescribed one. */
+  weightKg?: number | null;
 }
 
 export interface AccessoryProgressionInput {
@@ -26,11 +28,14 @@ export interface AccessoryProgressionInput {
    * — the increment would otherwise resolve to 0 and never move.
    */
   loadMode?: LoadMode;
+  /** Bottom of the prescribed range. Absent = a real range under `repMax`. */
+  repMin?: number;
   /** Top of the prescribed range (reps or seconds, per `effort`). */
   repMax: number;
   /** Sets prescribed for the session as run (after any deload halving). */
   plannedSets: number;
   currentWeightKg: number | null;
+  /** In set order: the last one is the load the athlete ended on. */
   logs: AccessorySetLog[];
   /** Minimum reserve to still call it clean. The doc says 1. */
   minRir?: number;
@@ -38,6 +43,10 @@ export interface AccessoryProgressionInput {
 
 export interface AccessoryProgressionOutcome {
   advance: boolean;
+  /**
+   * What the next session starts from: the load of the last set logged
+   * (the prescription follows the bar), plus the jump when it was earned.
+   */
   nextWeightKg: number | null;
   reason: string;
 }
@@ -74,17 +83,22 @@ export function doubleProgression(
   } = input;
   const minRir = input.minRir ?? 1;
 
+  // The athlete can move the load mid-session; where they ended is the
+  // weight the next session starts from, earned jump or not.
+  const moved = logs.findLast((l) => l.weightKg != null)?.weightKg ?? null;
+  const baseKg = moved ?? currentWeightKg;
+
   const hold = (reason: string): AccessoryProgressionOutcome => ({
     advance: false,
-    nextWeightKg: currentWeightKg,
+    nextWeightKg: baseKg,
     reason,
   });
 
   const weightedBodyweight = input.loadMode === "weighted_bodyweight";
-  if (
-    currentWeightKg == null ||
-    (currentWeightKg <= 0 && !weightedBodyweight)
-  ) {
+  if (input.loadMode === "rpe") {
+    return hold("a sensación: los kilos se recuerdan, no se progresan");
+  }
+  if (baseKg == null || (baseKg <= 0 && !weightedBodyweight)) {
     // A belt at 0 kg is a valid start — the first bump adds the lastre.
     return hold("sin carga externa que progresar");
   }
@@ -93,6 +107,9 @@ export function doubleProgression(
   }
   if (plannedSets <= 0 || logs.length < plannedSets) {
     return hold("sesión incompleta");
+  }
+  if (logs.some((l) => l.weightKg != null && l.weightKg < baseKg)) {
+    return hold("alguna serie fue con menos peso que la última");
   }
 
   const value = (l: AccessorySetLog) =>
@@ -105,25 +122,30 @@ export function doubleProgression(
   if (!rirOk) {
     return hold(`RIR por debajo de ${minRir}`);
   }
+  // A one-number range has no bottom to climb from: every finished
+  // session is "all at the top", so the jump needs a noted reserve.
+  if (input.repMin === repMax && logs.every((l) => l.rir == null)) {
+    return hold("rango de un solo número: sin RIR anotado no sube");
+  }
 
   if (weightedBodyweight) {
     const next = roundToStep(
-      round2(currentWeightKg + config.roundingKg),
+      round2(baseKg + config.roundingKg),
       config.roundingKg,
     );
-    if (next <= currentWeightKg) {
+    if (next <= baseKg) {
       return hold("el incremento no produce una carga mayor alcanzable");
     }
     return {
       advance: true,
       nextWeightKg: next,
-      reason: `tope del rango en todas las series → +${round2(next - currentWeightKg)} kg de lastre`,
+      reason: `tope del rango en todas las series → +${round2(next - baseKg)} kg de lastre`,
     };
   }
 
   if (equipment === "kettlebell") {
     const bells = [...config.kettlebellsKg].filter((k) => k > 0).sort((a, b) => a - b);
-    const nextBell = bells.find((k) => k > currentWeightKg);
+    const nextBell = bells.find((k) => k > baseKg);
     if (nextBell == null) {
       return hold("no hay una kettlebell más pesada disponible");
     }
@@ -139,13 +161,13 @@ export function doubleProgression(
     return hold("el material no admite incrementos de carga");
   }
 
-  const next = loadableWeight(round2(currentWeightKg + inc), equipment, config);
-  if (next <= currentWeightKg) {
+  const next = loadableWeight(round2(baseKg + inc), equipment, config);
+  if (next <= baseKg) {
     return hold("el incremento no produce una carga mayor alcanzable");
   }
   return {
     advance: true,
     nextWeightKg: next,
-    reason: `tope del rango en todas las series → +${round2(next - currentWeightKg)} kg`,
+    reason: `tope del rango en todas las series → +${round2(next - baseKg)} kg`,
   };
 }

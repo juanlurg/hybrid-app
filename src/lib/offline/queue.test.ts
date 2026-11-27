@@ -184,4 +184,38 @@ describe("buildEnvelopes", () => {
     expect(runLogs[0].distanceKm).toBe(8.2);
     expect(mobilityLogs[0].completedSlugs).toEqual(["a", "b"]);
   });
+
+  const extra: QueueOp = {
+    kind: "extra_log",
+    id: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    scheduledOn: "2026-09-15",
+    sessionType: "cross",
+    title: "Rodillo",
+    durationMinutes: 30,
+    distanceKm: null,
+    avgHr: 128,
+    perceivedEffort: 3,
+    notes: "",
+    loggedAt: "t",
+  };
+
+  it("an extra travels as its own envelope, keyed by its id", () => {
+    const { extras, sessions } = buildEnvelopes(enqueue(EMPTY_QUEUE, extra));
+    expect(sessions).toHaveLength(0);
+    expect(extras).toHaveLength(1);
+    expect(extras[0].id).toBe(extra.id);
+    expect(extras[0].log?.title).toBe("Rodillo");
+    expect(extras[0].opKey).toBe(`extra:${extra.id}`);
+  });
+
+  it("editing an extra replaces it; deleting it replaces the log", () => {
+    let q = enqueue(EMPTY_QUEUE, extra);
+    q = enqueue(q, { ...extra, durationMinutes: 40 });
+    expect(buildEnvelopes(q).extras[0].log?.durationMinutes).toBe(40);
+
+    q = enqueue(q, { kind: "extra_delete", id: extra.id });
+    const { extras } = buildEnvelopes(q);
+    expect(extras).toHaveLength(1);
+    expect(extras[0].log).toBeNull();
+  });
 });

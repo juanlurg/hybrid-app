@@ -31,6 +31,7 @@ import { DayIcon } from "@/components/day-icon";
 import { cn } from "@/lib/cn";
 import { DAY_INITIALS } from "@/lib/domain/calendar";
 import type { SessionGroup } from "@/lib/domain/plan";
+import { formatWeight } from "@/lib/engine";
 import {
   addExercise,
   deleteExercise,
@@ -38,6 +39,7 @@ import {
   setDaySlot,
   setExerciseSets,
   setWaveStep,
+  stepExerciseWeight,
   updateExercise,
 } from "@/lib/actions/program";
 import type { ProposalView } from "@/lib/actions/ai";
@@ -74,6 +76,8 @@ interface ExerciseView {
   repMax: number;
   restSeconds: number;
   isPrimary: boolean;
+  /** The pinned load of an accessory. Null: engine, bodyweight, by feel. */
+  weightKg: number | null;
 }
 
 export interface CatalogEntry {
@@ -513,6 +517,22 @@ export function ProgramEditor({
                               }
                             />
                           </div>
+                          {e.weightKg != null ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className={STEP_LABEL}>Peso</span>
+                              <Stepper
+                                compact
+                                label="peso"
+                                value={`${formatWeight(e.weightKg)} kg`}
+                                onDecrement={() =>
+                                  run(() => stepExerciseWeight(e.id, -1))
+                                }
+                                onIncrement={() =>
+                                  run(() => stepExerciseWeight(e.id, 1))
+                                }
+                              />
+                            </div>
+                          ) : null}
                           <div className="ml-auto flex flex-none items-center gap-1">
                             <button
                               type="button"

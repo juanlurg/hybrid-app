@@ -148,6 +148,8 @@ interface PlanSnapshot {
   phaseWave?: number[] | null;
   exercises: ProgramExerciseRow[];
   days: Array<{ day_index: number; slot_id: string }>;
+  /** Absent on snapshots taken before add_session existed. */
+  slotIds?: string[];
   /** Absent on snapshots taken before set_run existed. */
   runs?: RunPrescriptionRow[];
 }
@@ -165,6 +167,7 @@ function snapshotOf(athlete: LoadedAthlete, phaseId: string): PlanSnapshot {
     days: athlete.ctx.days
       .filter((d) => d.phase_id === phaseId)
       .map((d) => ({ day_index: d.day_index, slot_id: d.slot_id })),
+    slotIds: [...slotIds],
     runs: athlete.ctx.prescriptions.filter((r) => r.phase_id === phaseId),
   };
 }
@@ -236,6 +239,15 @@ async function restoreSnapshot(
       strayRuns = strayRuns.not("id", "in", `(${keepRuns.join(",")})`);
     }
     await strayRuns;
+  }
+  // Slots the batch created go last: by now no day points at them, and
+  // their weekly sessions leave with them.
+  if (snapshot.slotIds?.length) {
+    await supabase
+      .from("program_slots")
+      .delete()
+      .eq("phase_id", snapshot.phaseId)
+      .not("id", "in", `(${snapshot.slotIds.join(",")})`);
   }
   const programWave = snapshot.programWave ?? snapshot.wave;
   if (programWave) {
@@ -630,6 +642,42 @@ export async function applyProposal(
             target_minutes: null,
           },
           { onConflict: "phase_id,slot_id,week" },
+        ));
+        break;
+      }
+
+      case "add_session": {
+        // A slot of its own on a free day, marked optional, with the
+        // same session written into every week of the phase.
+        const { data: slot, error: slotError } = await supabase
+          .from("program_slots")
+          .insert({
+            phase_id: phaseId,
+            key: `opt-${crypto.randomUUID().slice(0, 8)}`,
+            session_type: op.sessionType!,
+            label: op.name!.toUpperCase(),
+            title: op.name!,
+            subtitle: "Opcional",
+            optional: true,
+            position: 90,
+          })
+          .select("id")
+          .single();
+        error = slotError;
+        if (!slot) break;
+        ({ error } = await supabase.from("program_days").upsert(
+          { phase_id: phaseId, day_index: op.dayIndex!, slot_id: slot.id },
+          { onConflict: "phase_id,day_index" },
+        ));
+        if (error) break;
+        ({ error } = await supabase.from("program_run_sessions").insert(
+          Array.from({ length: phaseRow?.weeks ?? 0 }, (_, i) => ({
+            phase_id: phaseId,
+            slot_id: slot.id,
+            week: i + 1,
+            prescription: op.prescription!,
+            structure: op.structure! as unknown as Json,
+          })),
         ));
         break;
       }

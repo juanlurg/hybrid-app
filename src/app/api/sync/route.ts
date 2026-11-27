@@ -17,9 +17,11 @@ import {
   replayEngine,
 } from "@/lib/engine/replay";
 import { doubleProgression } from "@/lib/engine/progression";
+import { dayIndexOf, placeDate } from "@/lib/domain/calendar";
 import {
   liftStateFrom,
   phaseEngineConfig,
+  phaseSpans,
   repRangeFor,
 } from "@/lib/domain/plan";
 import { syncRequestSchema } from "@/lib/offline/sync-schema";
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
       if (env.key) {
         const { data } = await supabase
           .from("sessions")
-          .select("id, status, started_at, phase_id, slot_id, week")
+          .select("id, status, started_at, phase_id, slot_id, week, scheduled_on")
           .eq("user_id", athlete.userId)
           .eq("scheduled_on", env.key.scheduledOn)
           .eq("slot_id", env.key.slotId)
@@ -126,7 +128,7 @@ export async function POST(request: Request) {
       if (!session) {
         const { data } = await supabase
           .from("sessions")
-          .select("id, status, started_at, phase_id, slot_id, week")
+          .select("id, status, started_at, phase_id, slot_id, week, scheduled_on")
           .eq("user_id", athlete.userId)
           .eq("id", env.localSessionId)
           .maybeSingle();
@@ -161,7 +163,7 @@ export async function POST(request: Request) {
             status: "in_progress",
             started_at: env.startedAt,
           })
-          .select("id, status, started_at, phase_id, slot_id, week")
+          .select("id, status, started_at, phase_id, slot_id, week, scheduled_on")
           .single();
         if (error) throw new Error(error.message);
         session = inserted;
@@ -536,7 +538,7 @@ export async function POST(request: Request) {
 
         const { data: fullLogs } = await supabase
           .from("set_logs")
-          .select("program_exercise_id, reps, seconds, rir, weight_kg")
+          .select("program_exercise_id, set_index, reps, seconds, rir, weight_kg")
           .eq("session_id", sessionId);
 
         const { error } = await supabase
@@ -562,13 +564,24 @@ export async function POST(request: Request) {
           .eq("id", sessionId);
         if (error) throw new Error(error.message);
 
-        // Double progression for accessories — deduped per exercise so
-        // a repeated flush can never award the jump twice. Never on the
-        // deload (topping a halved-volume session proves nothing) and
-        // never for an archived programme. Corrections re-grade: a bump
-        // whose sets were unlogged or corrected down is taken back, and
-        // an upward correction can still earn one.
-        if (!archived && !isDeloadWeek(session.week, phaseConfig)) {
+        // An accessory's prescription follows the bar: the next session
+        // starts from the load of the last set logged, plus the double-
+        // progression jump when every set earned it. Never on the deload
+        // (a halved, lighter session says nothing about next week) and
+        // never for an archived programme. Corrections re-grade.
+        // A correction to an old session re-grades that session only: it
+        // must not drag the prescription back from what came after it.
+        const { count: later } =
+          alreadyClosed && envSlotId
+            ? await supabase
+                .from("sessions")
+                .select("id", { count: "exact", head: true })
+                .eq("user_id", athlete.userId)
+                .eq("slot_id", envSlotId)
+                .gt("scheduled_on", session.scheduled_on)
+                .in("status", ["done", "partial"])
+            : { count: 0 };
+        if (!archived && !later && !isDeloadWeek(session.week, phaseConfig)) {
           const { data: bumpRows } = await supabase
             .from("engine_events")
             .select("dedup_key, reverted_at, payload")
@@ -586,67 +599,61 @@ export async function POST(request: Request) {
 
           for (const e of slotExercises) {
             if (e.is_primary) continue;
-            if (e.load_mode !== "fixed" && e.load_mode !== "weighted_bodyweight") {
+            if (e.load_mode === "engine" || e.load_mode === "bodyweight") {
               continue;
             }
             const existing = bumpByExercise.get(e.id) ?? null;
-            const rows = (fullLogs ?? []).filter(
-              (l) => l.program_exercise_id === e.id,
-            );
+            const live = existing != null && !existing.reverted_at;
+            // The prescription as it stood before this session moved it:
+            // a re-flush or a correction re-grades from there, not from
+            // the weight an earlier flush already wrote.
+            const stored = live
+              ? ((existing.payload as { previous_kg?: unknown } | null)
+                  ?.previous_kg ?? null)
+              : e.fixed_weight_kg;
+            const previousKg = stored == null ? null : Number(stored);
+            const rows = (fullLogs ?? [])
+              .filter((l) => l.program_exercise_id === e.id)
+              .sort((a, b) => a.set_index - b.set_index);
             const outcome = doubleProgression(
               {
                 equipment: e.equipment,
                 effort: e.effort as "reps" | "seconds" | "amrap",
                 loadMode: e.load_mode as LoadMode,
+                repMin: e.rep_min,
                 repMax: e.rep_max,
                 plannedSets: setsForWeek(e.sets, session.week, phaseConfig),
-                currentWeightKg:
-                  e.fixed_weight_kg == null ? null : Number(e.fixed_weight_kg),
+                currentWeightKg: previousKg,
                 logs: rows.map((l) => ({
                   reps: l.reps,
                   seconds: l.seconds,
                   rir: l.rir == null ? null : Number(l.rir),
+                  weightKg: l.weight_kg == null ? null : Number(l.weight_kg),
                 })),
               },
               phaseConfig,
             );
+            const nextKg = outcome.nextWeightKg;
 
-            if (!outcome.advance || outcome.nextWeightKg == null) {
-              // The sets no longer earn the jump this session awarded:
-              // take the weight back and strike the event through.
-              if (existing && !existing.reverted_at && existing.dedup_key) {
-                const previousKg = (
-                  existing.payload as { previous_kg?: unknown } | null
-                )?.previous_kg;
+            if (nextKg == null || nextKg === previousKg) {
+              // Nothing moves — and if an earlier flush of this session
+              // said otherwise, take it back and strike the event through.
+              if (live && existing.dedup_key) {
                 await supabase
                   .from("engine_events")
                   .update({ reverted_at: new Date().toISOString() })
                   .eq("dedup_key", existing.dedup_key);
-                if (previousKg != null) {
-                  await supabase
-                    .from("program_exercises")
-                    .update({ fixed_weight_kg: Number(previousKg) })
-                    .eq("id", e.id);
-                }
+                await supabase
+                  .from("program_exercises")
+                  .update({ fixed_weight_kg: previousKg })
+                  .eq("id", e.id);
               }
               continue;
             }
 
-            if (existing?.reverted_at && existing.dedup_key) {
-              // Re-earned after a correction took it back.
-              await supabase
-                .from("engine_events")
-                .update({ reverted_at: null })
-                .eq("dedup_key", existing.dedup_key);
-              await supabase
-                .from("program_exercises")
-                .update({ fixed_weight_kg: outcome.nextWeightKg })
-                .eq("id", e.id);
-              continue;
-            }
-            if (existing) continue; // already awarded and still earned
-
-            const { data: bumpRow, error: bumpError } = await supabase
+            // One event per exercise and session, rewritten in place: a
+            // repeated flush lands on the same row with the same numbers.
+            const { error: bumpError } = await supabase
               .from("engine_events")
               .upsert(
                 {
@@ -656,26 +663,27 @@ export async function POST(request: Request) {
                   session_id: sessionId,
                   week: session.week,
                   kind: "accessory_bump",
-                  title: `${e.name} · sube a ${formatWeight(outcome.nextWeightKg)} kg`,
-                  detail: `Todas las series al tope del rango. La próxima sesión: ${formatWeight(outcome.nextWeightKg)} kg.`,
+                  title: outcome.advance
+                    ? `${e.name} · sube a ${formatWeight(nextKg)} kg`
+                    : `${e.name} · queda en ${formatWeight(nextKg)} kg`,
+                  detail: outcome.advance
+                    ? `Todas las series al tope del rango. La próxima sesión: ${formatWeight(nextKg)} kg.`
+                    : "Es el peso de tu última serie. La próxima sesión empieza ahí.",
                   payload: {
                     program_exercise_id: e.id,
-                    previous_kg: e.fixed_weight_kg,
-                    next_kg: outcome.nextWeightKg,
+                    previous_kg: previousKg,
+                    next_kg: nextKg,
                     reason: outcome.reason,
                   },
+                  reverted_at: null,
                 },
-                { onConflict: "dedup_key", ignoreDuplicates: true },
-              )
-              .select("id");
+                { onConflict: "dedup_key" },
+              );
             if (bumpError) throw new Error(bumpError.message);
-            // Conflict → this bump was already awarded by an earlier flush.
-            if (bumpRow && bumpRow.length > 0) {
-              await supabase
-                .from("program_exercises")
-                .update({ fixed_weight_kg: outcome.nextWeightKg })
-                .eq("id", e.id);
-            }
+            await supabase
+              .from("program_exercises")
+              .update({ fixed_weight_kg: nextKg })
+              .eq("id", e.id);
           }
         }
       }
@@ -791,6 +799,69 @@ export async function POST(request: Request) {
       const message = cause instanceof Error ? cause.message : String(cause);
       console.error("[sync] mobility log failed", { opKey: m.opKey, message });
       failures.push({ opKeys: [m.opKey], reason: message, transient: true });
+    }
+  }
+
+  /* ── extras: sessions outside the plan ───────────────────── */
+  for (const x of body.extras) {
+    try {
+      if (!x.log) {
+        const { error } = await supabase
+          .from("sessions")
+          .delete()
+          .eq("id", x.id)
+          .eq("user_id", athlete.userId)
+          .is("slot_id", null);
+        if (error) throw new Error(error.message);
+        ackedKeys.push(x.opKey);
+        continue;
+      }
+
+      // No slot behind it: the row is its own key. It files under the
+      // phase and week its date falls in, when it falls inside the season.
+      const placement = placeDate(phaseSpans(ctx.phases), x.log.scheduledOn);
+      const inSeason = placement?.date === x.log.scheduledOn;
+      const duration = x.log.durationMinutes
+        ? Math.round(x.log.durationMinutes * 60)
+        : null;
+      const { error } = await supabase.from("sessions").upsert(
+        {
+          id: x.id,
+          user_id: athlete.userId,
+          program_id: ctx.program.id,
+          phase_id: inSeason ? placement.phase.id : null,
+          slot_id: null,
+          scheduled_on: x.log.scheduledOn,
+          week: inSeason ? placement.week : 1,
+          day_index: dayIndexOf(x.log.scheduledOn),
+          session_type: x.log.sessionType,
+          title: x.log.title,
+          status: "done",
+          completed_at: x.log.loggedAt,
+          duration_seconds: duration,
+        },
+        { onConflict: "id" },
+      );
+      if (error) throw new Error(error.message);
+
+      const { error: logError } = await supabase.from("run_logs").upsert(
+        {
+          session_id: x.id,
+          user_id: athlete.userId,
+          duration_seconds: duration,
+          distance_km: x.log.distanceKm,
+          avg_hr: x.log.avgHr,
+          perceived_effort: x.log.perceivedEffort,
+          notes: x.log.notes,
+        },
+        { onConflict: "session_id" },
+      );
+      if (logError) throw new Error(logError.message);
+      ackedKeys.push(x.opKey);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.error("[sync] extra failed", { opKey: x.opKey, message });
+      failures.push({ opKeys: [x.opKey], reason: message, transient: true });
     }
   }
 

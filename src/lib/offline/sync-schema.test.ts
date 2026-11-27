@@ -155,4 +155,35 @@ describe("buildEnvelopes output vs the /api/sync schema", () => {
     const parsed = syncRequestSchema.safeParse(request(buildEnvelopes(q)));
     expect(parsed.success).toBe(true);
   });
+
+  it("an extra and its deletion both validate", () => {
+    const id = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+    const logged = enqueue(EMPTY_QUEUE, {
+      kind: "extra_log",
+      id,
+      scheduledOn: "2026-09-15",
+      sessionType: "cross",
+      title: "Rodillo",
+      durationMinutes: 30,
+      distanceKm: null,
+      avgHr: 128,
+      perceivedEffort: 3,
+      notes: "",
+      loggedAt: "2026-09-15T19:00:00Z",
+    });
+    expect(
+      syncRequestSchema.safeParse(request(buildEnvelopes(logged))).success,
+    ).toBe(true);
+    const deleted = enqueue(logged, { kind: "extra_delete", id });
+    expect(
+      syncRequestSchema.safeParse(request(buildEnvelopes(deleted))).success,
+    ).toBe(true);
+  });
+
+  it("a queue from before extras existed still parses", () => {
+    const old: Partial<SyncRequest> = request(buildEnvelopes(EMPTY_QUEUE));
+    delete old.extras;
+    const parsed = syncRequestSchema.safeParse(old);
+    expect(parsed.success && parsed.data.extras).toEqual([]);
+  });
 });

@@ -197,6 +197,12 @@ export default async function EditorPage({
           repMax: e.rep_max,
           restSeconds: e.rest_seconds,
           isPrimary: e.is_primary,
+          // Only a pinned load is the athlete's to move here; the basic's
+          // comes from its RM.
+          weightKg:
+            e.load_mode === "engine" || e.fixed_weight_kg == null
+              ? null
+              : Number(e.fixed_weight_kg),
         }))}
       warnings={warnings}
       hasApiKey={hasGeminiKey()}

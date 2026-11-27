@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 
 import {
   ActionBar,
@@ -13,6 +13,7 @@ import {
   TopBar,
 } from "@/components/ui/kit";
 import { TONE } from "@/components/day-accents";
+import { useRestTimer } from "@/components/session/rest-timer";
 import { enqueueAndFlush } from "@/lib/offline/syncer";
 import { cn } from "@/lib/cn";
 
@@ -28,6 +29,25 @@ export interface MobilityItem {
 
 type Mode = "guided" | "list";
 
+/** Seconds to change sides on a hold done one side at a time. */
+const SWITCH_SECONDS = 5;
+
+/**
+ * The countdown a hold needs, read off its dose: "45" + "segundos por
+ * lado" is 45″, a breath to change sides, 45″. The dose is free text, so
+ * anything that is not a plain number of seconds simply has no clock.
+ */
+function holdPhases(item: MobilityItem): Array<{ label: string; seconds: number }> {
+  const seconds = /^\d+$/.test(item.dose.trim()) ? Number(item.dose) : 0;
+  if (!seconds || !/segundo/i.test(item.doseUnit)) return [];
+  if (!/por lado/i.test(item.doseUnit)) return [{ label: "aguanta", seconds }];
+  return [
+    { label: "primer lado", seconds },
+    { label: "cambia de lado", seconds: SWITCH_SECONDS },
+    { label: "segundo lado", seconds },
+  ];
+}
+
 /* The mode chips ride inside the top bar, so they run a size below the kit's
    default and the inactive one recedes into the surface. */
 const modeChip = "px-3 py-2.5 text-[11px] font-bold uppercase";
@@ -38,11 +58,15 @@ export function MobilityBlock({
   initialCompleted,
   performedOn,
   dateLabel,
+  sound,
+  vibration,
 }: {
   items: MobilityItem[];
   initialCompleted: string[];
   performedOn: string;
   dateLabel: string;
+  sound: boolean;
+  vibration: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("guided");
   const [completed, setCompleted] = useState<string[]>(initialCompleted);
@@ -86,12 +110,44 @@ export function MobilityBlock({
     persist(items.filter((i) => set.has(i.slug)).map((i) => i.slug));
   }
 
+  /* A hold runs on the clock: tap once, keep the position, and the block
+     moves on by itself when the last side is done. */
+  const phases = current ? holdPhases(current) : [];
+  const phaseRef = useRef(0);
+  const [phase, setPhase] = useState(0);
+  const { rest, flash, start, stop } = useRestTimer({
+    sound,
+    vibration,
+    onExpire: () => {
+      const next = phaseRef.current + 1;
+      if (current && next < phases.length) {
+        phaseRef.current = next;
+        setPhase(next);
+        start(phases[next].seconds, phases[next].label);
+      } else if (current) {
+        toggle(current.slug);
+      }
+    },
+  });
+
+  function startHold() {
+    phaseRef.current = 0;
+    setPhase(0);
+    start(phases[0].seconds, phases[0].label);
+  }
+
+  /** Done by hand, clock or not. */
+  function finishCurrent() {
+    if (!current) return;
+    stop();
+    toggle(current.slug);
+  }
+
   const completeNote = (
     <Callout eyebrow="Bloque completo" eyebrowTone="text-ok-bright">
       Los <span className="num">{items.length}</span> ejercicios quedan
-      registrados el <span className="num">{dateLabel}</span>. Estos 20 minutos
-      son innegociables, pero no cuentan como entrenamiento: no suman tonelaje
-      ni mueven el motor. Mañana el bloque vuelve a cero.
+      registrados el <span className="num">{dateLabel}</span>. Glúteo, psoas y
+      tobillo: lo que protege la rodilla en la tirada larga.
     </Callout>
   );
 
@@ -119,7 +175,10 @@ export function MobilityBlock({
             <Chip
               active={mode === "list"}
               aria-pressed={mode === "list"}
-              onClick={() => setMode("list")}
+              onClick={() => {
+                stop();
+                setMode("list");
+              }}
               className={cn(modeChip, mode !== "list" && inactiveChip)}
             >
               Lista
@@ -148,7 +207,7 @@ export function MobilityBlock({
                     ? TONE.ok
                     : i === currentIndex
                       ? TONE.ink
-                      : TONE.soft,
+                      : TONE.quiet,
                 }}
               />
             ))}
@@ -179,9 +238,13 @@ export function MobilityBlock({
                         beside the figure instead of running to the card edge. */}
                     <div className="mt-3.5 flex items-baseline gap-2.5">
                       <span className="num flex-none text-[58px] leading-[0.95] font-bold tracking-[-0.02em] text-clay min-[390px]:text-[76px]">
-                        {current.dose}
+                        {rest ? rest.left : current.dose}
                       </span>
-                      {current.doseUnit ? (
+                      {rest ? (
+                        <span className="font-display max-w-[104px] min-w-0 flex-1 text-[15px] leading-[1.3] font-semibold text-mid uppercase">
+                          {phases[phase]?.label}
+                        </span>
+                      ) : current.doseUnit ? (
                         <span className="font-display max-w-[104px] min-w-0 flex-1 text-[15px] leading-[1.3] font-semibold text-mid uppercase">
                           {current.doseUnit}
                         </span>
@@ -209,10 +272,10 @@ export function MobilityBlock({
                     ) : null}
                   </div>
 
-                  <p className="mt-4 px-1 text-[11.5px] leading-[1.55] text-faint">
-                    <span className="num">20′</span> diarios. Innegociable, pero
-                    no cuenta como entrenamiento: no suma tonelaje ni mueve el
-                    motor. Mañana el bloque vuelve a cero.
+                  <p className="mt-4 px-1 text-[12px] leading-[1.55] text-mid">
+                    {current.groupName === items[0].groupName
+                      ? `${current.groupName} va primero: si hoy solo hay 5 minutos, haz este grupo antes de la barra.`
+                      : "Lo que marques queda guardado aunque no termines el bloque."}
                   </p>
                 </section>
 
@@ -223,10 +286,35 @@ export function MobilityBlock({
             )}
           </div>
 
-          {current ? (
-            <ActionBar tone="strength" onClick={() => toggle(current.slug)}>
-              {next ? "Hecho" : "Terminar"}
+          {current && phases.length > 0 && !rest ? (
+            <div className="flex flex-none gap-2.5 px-4 pt-3.5 pb-3">
+              <button
+                type="button"
+                onClick={finishCurrent}
+                className="h-14 flex-none rounded-xl bg-surface px-4 text-[14px] leading-none font-bold text-ink shadow-raised"
+              >
+                Ya está
+              </button>
+              <ActionBar
+                className="min-w-0 flex-1 p-0"
+                tone="strength"
+                onClick={startHold}
+              >
+                Empezar <span className="num">{current.dose}″</span>
+              </ActionBar>
+            </div>
+          ) : current ? (
+            <ActionBar tone="strength" onClick={finishCurrent}>
+              {rest ? "Ya está" : next ? "Hecho" : "Terminar"}
             </ActionBar>
+          ) : null}
+
+          {flash ? (
+            <div
+              aria-hidden
+              className="animate-flash pointer-events-none fixed inset-0 z-30"
+              style={{ background: TONE.okBright }}
+            />
           ) : null}
         </>
       ) : (
@@ -303,9 +391,9 @@ export function MobilityBlock({
           ) : (
             <Footnote>
               Quedan <span className="num">{items.length - doneCount}</span> de{" "}
-              <span className="num">{items.length}</span>. El bloque se reinicia
-              cada día: lo de hoy queda registrado el{" "}
-              <span className="num">{dateLabel}</span>.
+              <span className="num">{items.length}</span>. Lo marcado queda
+              guardado el <span className="num">{dateLabel}</span> aunque no
+              termines el bloque.
             </Footnote>
           )}
         </div>

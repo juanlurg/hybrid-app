@@ -91,7 +91,9 @@ Put `num` on anything numeric — tabular figures. Nothing smaller than 11px.
 - **Steppers**: one `bg-soft` pill, − / + icons either side of the figure.
 - **Action**: pinned at the bottom, `px-4`, 56px (64px in the runner), clay with
   `shadow-cta`; a white secondary ("Hoy no entreno", "Otras", "Saltar") sits
-  beside it.
+  beside it. In the runner − / + flank it: one tap of "Hecho" never logs the
+  top of a range by itself — it starts from the same set the last time,
+  capped under the top, or from the bottom of the range.
 - **Tab bar**: floating, `inset-x-4 bottom-4`, 68px, icon in a 46×30 pill that
   fills clay when active. Hidden in the runner.
 - **Sheet**: the runner's "Otras" and session list rise from the bottom over a
@@ -116,12 +118,13 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 | Route | Tab | Screen |
 |---|---|---|
 | `/` | Hoy | Today's session, week strip, what to recover, big weight, start bar |
-| `/movilidad` | Hoy | Guided / list mobility block |
-| `/sesion/[id]` | — | Live runner — set pills, weight stepper, rest timer, regression banner, technique GIF |
+| `/movilidad` | Hoy | Guided / list mobility block; holds run on a clock, side by side |
+| `/sesion/[id]` | — | Live runner — set pills, weight stepper, the last time, − / + on the reps "Hecho" logs, RIR asked once per exercise, rest timer, regression banner, technique GIF |
 | `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
 | `/carrera/[fecha]` | Semana | Run blocks, zone ruler, watch data, mark done, skip |
+| `/extra/[fecha]` | Semana | A session outside the plan — what it was, minutes, pulse, RPE, note; edit or delete |
 | `/progreso` | Progreso | Adherence, records, the log, running trend (Pa:HR, km) |
 | `/programa` | Plan | Phases and what each is for, links, RMs, calculadora |
 | `/editor` | Plan | Semana tipo — weekly template editor + AI refinement |
@@ -150,7 +153,12 @@ installed PWA.
    different one: the runner's stepper moves it with `nextLoadableWeight()`
    and the load travels with the set (`set_logs.weight_kg`), so the
    regression holds at the weight actually missed — and only a clean
-   session at (or above) the held weight releases the hold.
+   session at (or above) the held weight releases the hold. An accessory's
+   prescription follows the bar: closing a session leaves `fixed_weight_kg`
+   at the load of its last set, plus the double-progression jump when every
+   set earned it at that load (`doubleProgression`); a one-number range
+   only jumps with a noted RIR. By-feel work remembers kilos the same way
+   and never progresses them.
 2. **Only the basic of the day moves the engine.** Accessories never trigger
    a regression — say so in the UI where it matters.
 3. **The AI proposes, the athlete disposes.** Changes are a diff to tick.
@@ -166,7 +174,12 @@ installed PWA.
    Training before the season starts files under the real date and marks
    no plan day. Moving the season is a bulk shift (`shift_program`,
    Ajustes → Zona de peligro): phases move together, logged sessions keep
-   their real dates, the race does not move.
+   their real dates, the race does not move. What sits outside that
+   contract is never owed: a session outside the plan is a `sessions` row
+   with no slot (`/extra/[fecha]`, type `cross` for aerobic work that is
+   not running), and an optional slot (`program_slots.optional`, the
+   coach's `add_session`) is suggested — neither can be missed, and
+   adherence counts neither.
 6. **The engine speaks phase-local weeks.** Every phase starts at wave[0]
    with its own progression (`program_phases.progression_mode`): F2 waves,
    F3/F4 hold a fixed %RM. A wave step can carry the basic's rep range

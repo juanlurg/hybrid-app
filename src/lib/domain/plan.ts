@@ -202,6 +202,8 @@ export interface ResolvedDay {
   slot: SlotRow | null;
   sessionType: SessionType;
   group: SessionGroup;
+  /** Suggested, not owed: never missed, never in adherence. */
+  optional: boolean;
   title: string;
   subtitle: string;
   label: string;
@@ -233,9 +235,8 @@ export function weightLabelFor(
   loadMode: LoadMode,
   weightKg: number | null,
 ): string {
-  if (loadMode === "rpe") return "a sensación";
   if (loadMode === "bodyweight") return "corporal";
-  if (weightKg == null) return "—";
+  if (weightKg == null) return loadMode === "rpe" ? "a sensación" : "—";
   if (loadMode === "weighted_bodyweight") {
     return weightKg > 0 ? `+${formatWeight(weightKg)} kg` : "corporal";
   }
@@ -280,8 +281,10 @@ export function resolveExercise(
       breakdown = workingWeight(lift, week, config);
       weightKg = breakdown.workingKg;
     }
-  } else if (row.load_mode === "fixed") {
+  } else if (row.load_mode === "fixed" || row.load_mode === "rpe") {
     // What the plan asks for, snapped to what the equipment can load.
+    // By-feel work has no number until the athlete logs one; from then
+    // on it is remembered like any other, just never progressed.
     weightKg =
       row.fixed_weight_kg == null
         ? null
@@ -402,6 +405,7 @@ export function resolveDay(
     slot,
     sessionType,
     group,
+    optional: slot?.optional ?? false,
     title: slot?.title ?? "Descanso",
     subtitle: slot?.subtitle ?? "",
     label: slot?.label ?? "DESCANSO",

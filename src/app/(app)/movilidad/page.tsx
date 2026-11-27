@@ -61,6 +61,8 @@ export default async function MovilidadPage() {
       initialCompleted={completed}
       performedOn={athlete.today}
       dateLabel={formatDayShort(athlete.today)}
+      sound={athlete.ctx.profile.rest_sound}
+      vibration={athlete.ctx.profile.rest_vibration}
     />
   );
 }

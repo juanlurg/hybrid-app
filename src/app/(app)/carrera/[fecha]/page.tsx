@@ -168,9 +168,11 @@ export default async function CarreraPage({
     : null;
 
   // Inside the current week a run can still be skipped deliberately; a
-  // logged one cannot.
+  // logged one cannot, and an optional one was never owed.
   const skippable =
-    sameWeek(day.date, today) && (session?.status ?? "planned") === "planned";
+    !day.optional &&
+    sameWeek(day.date, today) &&
+    (session?.status ?? "planned") === "planned";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -183,6 +185,7 @@ export default async function CarreraPage({
           <Card>
             <div className="text-[11px] leading-none font-bold tracking-[0.13em] text-run uppercase">
               {day.title} · semana <span className="num">{placement.week}</span>
+              {day.optional ? " · opcional" : ""}
             </div>
             <h1 className="mt-2 text-[22px] leading-[1.25] font-extrabold tracking-[-0.01em]">
               {day.prescription || day.title}

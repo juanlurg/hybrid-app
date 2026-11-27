@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { LocalSessionRunner } from "@/components/session/local-session-runner";
 import { requireAthlete } from "@/lib/data/athlete";
+import { loadExerciseHistory } from "@/lib/data/history";
 import {
   liftStateFrom,
   phaseEngineConfig,
@@ -70,6 +71,14 @@ export default async function SessionPage({
   );
 
   if (day.exercises.length === 0) redirect("/");
+
+  const history = await loadExerciseHistory(
+    supabase,
+    athlete.userId,
+    athlete.ctx.exercises,
+    day.exercises.map((e) => e.id),
+    id,
+  );
 
   /* ── what the client engine needs to run the fold locally ──── */
   const phaseConfig = phaseEngineConfig(athlete.config, phase);
@@ -151,6 +160,7 @@ export default async function SessionPage({
         missedRange: l.missed_range,
       }))}
       initialUndone={initialUndone}
+      history={history}
       replayCtx={{
         lift: preLift,
         primary:

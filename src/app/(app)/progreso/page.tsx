@@ -8,6 +8,7 @@ import {
 import { Footnote, Row, RowStack } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
 import {
+  addDays,
   formatDayShort,
   formatSeasonRange,
   placeDate,
@@ -276,6 +277,8 @@ export default async function ProgresoPage() {
     let credit = 0;
     for (const d of days) {
       if (!d.slot || (d.group !== "strength" && d.group !== "run")) continue;
+      // Optional days are suggested, not owed: they neither add nor subtract.
+      if (d.optional) continue;
       if (d.date > today) continue;
       const status = statusForDay(d);
       const closed =
@@ -290,6 +293,15 @@ export default async function ProgresoPage() {
       pct: elapsed === 0 ? null : Math.round((credit / elapsed) * 100),
     };
   };
+
+  // The block is daily, so its own count is the week just lived.
+  const weekAgo = addDays(today, -6);
+  const mobilityDays = (mobilityRows ?? []).filter(
+    (m) =>
+      m.performed_on >= weekAgo &&
+      m.performed_on <= today &&
+      m.completed_slugs.length > 0,
+  ).length;
 
   /* ── KPIs ────────────────────────────────────────────────────── */
 
@@ -330,6 +342,7 @@ export default async function ProgresoPage() {
     .flatMap((s) => {
       const log = runBySession.get(s.id);
       if (!log || log.decoupling_pct == null) return [];
+      if (s.session_type === "cross") return [];
       return [
         {
           id: s.id,
@@ -346,6 +359,8 @@ export default async function ProgresoPage() {
   for (const s of sessions) {
     const log = runBySession.get(s.id);
     if (!log || log.distance_km == null) continue;
+    // Kilometres on the bike are not running volume.
+    if (s.session_type === "cross") continue;
     const week = placeDate(spans, s.scheduled_on as IsoDate)?.absoluteWeek;
     if (week == null) continue;
     kmByWeek.set(week, (kmByWeek.get(week) ?? 0) + Number(log.distance_km));
@@ -514,9 +529,11 @@ export default async function ProgresoPage() {
     const href =
       group === "strength" && (s.status === "done" || s.status === "partial")
         ? `/sesion/${s.id}/resumen`
-        : group === "run" && s.status !== "skipped"
-          ? `/carrera/${s.scheduled_on}`
-          : null;
+        : s.slot_id == null
+          ? `/extra/${s.scheduled_on}?id=${s.id}`
+          : group === "run" && s.status !== "skipped"
+            ? `/carrera/${s.scheduled_on}`
+            : null;
 
     return {
       id: s.id,
@@ -562,7 +579,7 @@ export default async function ProgresoPage() {
     },
     { label: "sesiones", value: registered },
     { label: "tonelaje", value: tonnage, unit: tonnageUnit },
-    { label: "de carrera", value: formatWeight(runHours), unit: "h" },
+    { label: "aeróbicas", value: formatWeight(runHours), unit: "h" },
   ];
 
 
@@ -665,9 +682,12 @@ export default async function ProgresoPage() {
                         </span>
                         <div className="grid flex-1 grid-cols-7 gap-1">
                           {row.days.map((d) => {
+                            const status = statusForDay(d);
+                            // An optional day left undone reads as rest,
+                            // not as a hole in the week.
                             const colour = cellColour(
-                              d.group,
-                              statusForDay(d),
+                              d.optional && status !== "done" ? "rest" : d.group,
+                              status,
                               d.date > today,
                             );
                             const isToday = d.date === today;
@@ -730,7 +750,9 @@ export default async function ProgresoPage() {
               </div>
 
               <Footnote>
-                La movilidad y el descanso no cuentan para la adherencia.
+                Movilidad: <span className="num">{mobilityDays}</span> de los
+                últimos 7 días. Ni ella ni el descanso cuentan para la
+                adherencia.
               </Footnote>
             </>
           }

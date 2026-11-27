@@ -2,7 +2,7 @@
  * Minimal promise wrapper over IndexedDB, behind an interface the tests
  * can satisfy with a Map. Four stores, keyed by string:
  *
- *   snapshot      — one record, the serialized AthleteContext
+ *   snapshot      — the serialized AthleteContext, and the exercise history
  *   queue         — QueueOp by opKey
  *   localSessions — LocalSessionState by localSessionId
  *   meta          — deviceId, lastFlushAt, …

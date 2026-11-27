@@ -25,6 +25,7 @@ export const CHANGE_OPS = [
   "set_day_slot",
   "set_wave",
   "set_run",
+  "add_session",
   "note",
 ] as const;
 
@@ -75,6 +76,8 @@ export const changeOpSchema = z
     dayIndex: z.number().int().min(0).max(6).nullish(),
     waveIndex: z.number().int().min(0).max(7).nullish(),
     waveValue: z.number().min(0.5).max(1).nullish(),
+    /** add_session: an optional aerobic day — a run, or work that is not running. */
+    sessionType: z.enum(["cross", "run_easy"]).nullish(),
     /** set_run: phase-local week, the label, and the typed blocks. */
     week: z.number().int().min(1).max(24).nullish(),
     prescription: z.string().min(1).max(200).nullish(),
@@ -125,6 +128,18 @@ export const changeOpSchema = z
       (!op.slotId || op.week == null || !op.prescription || !op.structure)
     ) {
       fail("set_run necesita slotId, week, prescription y structure");
+    }
+    if (
+      op.op === "add_session" &&
+      (op.dayIndex == null ||
+        !op.name ||
+        !op.sessionType ||
+        !op.prescription ||
+        !op.structure)
+    ) {
+      fail(
+        "add_session necesita dayIndex, name, sessionType, prescription y structure",
+      );
     }
   });
 
@@ -185,8 +200,14 @@ const PROPOSAL_JSON_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          // set_run is the MCP coach's: this brief carries no run blocks.
-          op: { type: "string", enum: CHANGE_OPS.filter((o) => o !== "set_run") },
+          // set_run and add_session are the MCP coach's: this brief
+          // carries no run blocks.
+          op: {
+            type: "string",
+            enum: CHANGE_OPS.filter(
+              (o) => o !== "set_run" && o !== "add_session",
+            ),
+          },
           title: {
             type: "string",
             description:

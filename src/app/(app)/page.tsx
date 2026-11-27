@@ -5,11 +5,13 @@ import {
   HeartPulse,
   History,
   Info,
+  Plus,
   Snowflake,
 } from "lucide-react";
 import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
+import { loadExerciseHistory } from "@/lib/data/history";
 import {
   DAY_INITIALS,
   formatDayFull,
@@ -28,6 +30,7 @@ import { formatWeight } from "@/lib/engine";
 import { cn } from "@/lib/cn";
 import { Note } from "@/components/ui/kit";
 import { DayIcon } from "@/components/day-icon";
+import { HistoryWriter } from "@/components/session/history-writer";
 import {
   SkipDayButton,
   StartSessionButton,
@@ -91,11 +94,16 @@ export default async function HoyPage() {
     clamped && day.group === "strength" ? today : day.date;
 
   const supabase = await createClient();
-  const [{ data: sessions }, { data: heldLifts }, { count: loggedEver }] =
-    await Promise.all([
+  const [
+    { data: sessions },
+    { data: heldLifts },
+    { count: loggedEver },
+    history,
+    { data: mobilityToday },
+  ] = await Promise.all([
       supabase
         .from("sessions")
-        .select("id, slot_id, status, scheduled_on")
+        .select("id, slot_id, status, scheduled_on, title, duration_seconds")
         .eq("user_id", athlete.userId)
         .in(
           "scheduled_on",
@@ -111,7 +119,23 @@ export default async function HoyPage() {
         .select("id", { count: "exact", head: true })
         .eq("user_id", athlete.userId)
         .in("status", ["done", "partial"]),
+      // Kept on the device so a session started with no signal still
+      // shows what each exercise went at the last time.
+      loadExerciseHistory(
+        supabase,
+        athlete.userId,
+        ctx.exercises,
+        day.exercises.map((e) => e.id),
+      ),
+      supabase
+        .from("mobility_logs")
+        .select("completed_slugs, total_items")
+        .eq("user_id", athlete.userId)
+        .eq("performed_on", today)
+        .maybeSingle(),
     ]);
+  const mobilityDone = mobilityToday?.completed_slugs.length ?? 0;
+  const mobilityTotal = mobilityToday?.total_items ?? 0;
 
   const statusOf = (d: ResolvedDay): SessionStatus | null => {
     if (!d.slot) return null;
@@ -129,8 +153,15 @@ export default async function HoyPage() {
 
   /* ── the week around today ───────────────────────────────────── */
 
+  // An optional day is never owed: it cannot be missed, lost or skipped.
   const trains = (d: ResolvedDay) =>
-    d.slot != null && (d.group === "strength" || d.group === "run");
+    d.slot != null &&
+    !d.optional &&
+    (d.group === "strength" || d.group === "run");
+  /** What the athlete added today on top of the plan. */
+  const extras = (sessions ?? []).filter(
+    (s) => s.scheduled_on === today && s.slot_id == null,
+  );
   const missed = week.filter(
     (d) => trains(d) && d.date < today && statusOf(d) === "planned",
   );
@@ -216,8 +247,9 @@ export default async function HoyPage() {
         >
           El motor calcula cada peso a partir de tus RM; tú solo marcas lo que
           haces. Si una serie del básico se queda por debajo del rango, el peso
-          se congela en vez de subir. Los accesorios suben solos cuando haces
-          el tope del rango en todas las series.
+          se congela en vez de subir. Un accesorio empieza donde lo dejaste
+          la última vez, y sube solo cuando haces el tope del rango en todas
+          las series.
         </Note>
       ) : null}
     </>
@@ -323,7 +355,7 @@ export default async function HoyPage() {
                         : undefined
                     }
                   >
-                    <DayIcon group={d.group} />
+                    <DayIcon group={d.group} type={d.sessionType} />
                   </span>
                   <span
                     className={cn(
@@ -378,6 +410,8 @@ export default async function HoyPage() {
           </Note>
         ) : null}
 
+        {day.group === "strength" ? <HistoryWriter history={history} /> : null}
+
         {day.group === "strength" ? (
           <StrengthDay
             day={day}
@@ -406,6 +440,7 @@ export default async function HoyPage() {
                     )}
                   >
                     {day.label}
+                    {day.optional ? " · opcional" : ""}
                   </span>
                 </div>
                 {quiet ? null : (
@@ -448,13 +483,44 @@ export default async function HoyPage() {
               <span className="block text-[14px] leading-[1.3] font-bold">
                 Movilidad y correctivos
               </span>
-              <span className="mt-0.5 block text-[12.5px] leading-[1.35] font-medium text-mid">
-                20′ · diaria · no cuenta como entrenamiento
+              <span className="num mt-0.5 block text-[12.5px] leading-[1.35] font-medium text-mid">
+                {mobilityDone === 0
+                  ? day.group === "strength"
+                    ? "Activación glútea antes de la barra · 5′"
+                    : "20′ · glúteo, psoas y tobillo"
+                  : mobilityDone >= mobilityTotal
+                    ? "Hecha hoy"
+                    : `${mobilityDone} de ${mobilityTotal} hechos hoy`}
               </span>
             </span>
             <ChevronRight aria-hidden size={18} className="flex-none text-faint" />
           </Link>
         ) : null}
+
+        <Link
+          href={`/extra/${today}`}
+          className="mx-5 mt-3 flex items-center gap-3 rounded-2xl bg-surface px-4 py-3.5 shadow-card"
+        >
+          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-run-soft text-run">
+            <Plus aria-hidden size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14px] leading-[1.3] font-bold">
+              Sesión extra
+            </span>
+            <span className="num mt-0.5 block truncate text-[12.5px] leading-[1.35] font-medium text-mid">
+              {extras.length > 0
+                ? extras
+                    .map(
+                      (x) =>
+                        `${x.title}${x.duration_seconds ? ` ${Math.round(x.duration_seconds / 60)}′` : ""}`,
+                    )
+                    .join(" · ") + " · registrada"
+                : "Rodillo, bici, caminata · fuera del plan"}
+            </span>
+          </span>
+          <ChevronRight aria-hidden size={18} className="flex-none text-faint" />
+        </Link>
       </div>
 
       {day.slot ? (
