@@ -10,6 +10,7 @@ import {
 import Link from "next/link";
 
 import { requireAthlete } from "@/lib/data/athlete";
+import { loadExerciseHistory } from "@/lib/data/history";
 import {
   DAY_INITIALS,
   formatDayFull,
@@ -28,6 +29,7 @@ import { formatWeight } from "@/lib/engine";
 import { cn } from "@/lib/cn";
 import { Note } from "@/components/ui/kit";
 import { DayIcon } from "@/components/day-icon";
+import { HistoryWriter } from "@/components/session/history-writer";
 import {
   SkipDayButton,
   StartSessionButton,
@@ -91,8 +93,12 @@ export default async function HoyPage() {
     clamped && day.group === "strength" ? today : day.date;
 
   const supabase = await createClient();
-  const [{ data: sessions }, { data: heldLifts }, { count: loggedEver }] =
-    await Promise.all([
+  const [
+    { data: sessions },
+    { data: heldLifts },
+    { count: loggedEver },
+    history,
+  ] = await Promise.all([
       supabase
         .from("sessions")
         .select("id, slot_id, status, scheduled_on")
@@ -111,6 +117,14 @@ export default async function HoyPage() {
         .select("id", { count: "exact", head: true })
         .eq("user_id", athlete.userId)
         .in("status", ["done", "partial"]),
+      // Kept on the device so a session started with no signal still
+      // shows what each exercise went at the last time.
+      loadExerciseHistory(
+        supabase,
+        athlete.userId,
+        ctx.exercises,
+        day.exercises.map((e) => e.id),
+      ),
     ]);
 
   const statusOf = (d: ResolvedDay): SessionStatus | null => {
@@ -216,8 +230,9 @@ export default async function HoyPage() {
         >
           El motor calcula cada peso a partir de tus RM; tú solo marcas lo que
           haces. Si una serie del básico se queda por debajo del rango, el peso
-          se congela en vez de subir. Los accesorios suben solos cuando haces
-          el tope del rango en todas las series.
+          se congela en vez de subir. Un accesorio empieza donde lo dejaste
+          la última vez, y sube solo cuando haces el tope del rango en todas
+          las series.
         </Note>
       ) : null}
     </>
@@ -377,6 +392,8 @@ export default async function HoyPage() {
             que sea esa.
           </Note>
         ) : null}
+
+        {day.group === "strength" ? <HistoryWriter history={history} /> : null}
 
         {day.group === "strength" ? (
           <StrengthDay

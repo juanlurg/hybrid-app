@@ -117,7 +117,7 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 |---|---|---|
 | `/` | Hoy | Today's session, week strip, what to recover, big weight, start bar |
 | `/movilidad` | Hoy | Guided / list mobility block |
-| `/sesion/[id]` | — | Live runner — set pills, weight stepper, rest timer, regression banner, technique GIF |
+| `/sesion/[id]` | — | Live runner — set pills, weight stepper, the last time, rest timer, regression banner, technique GIF |
 | `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
@@ -150,7 +150,12 @@ installed PWA.
    different one: the runner's stepper moves it with `nextLoadableWeight()`
    and the load travels with the set (`set_logs.weight_kg`), so the
    regression holds at the weight actually missed — and only a clean
-   session at (or above) the held weight releases the hold.
+   session at (or above) the held weight releases the hold. An accessory's
+   prescription follows the bar: closing a session leaves `fixed_weight_kg`
+   at the load of its last set, plus the double-progression jump when every
+   set earned it at that load (`doubleProgression`); a one-number range
+   only jumps with a noted RIR. By-feel work remembers kilos the same way
+   and never progresses them.
 2. **Only the basic of the day moves the engine.** Accessories never trigger
    a regression — say so in the UI where it matters.
 3. **The AI proposes, the athlete disposes.** Changes are a diff to tick.

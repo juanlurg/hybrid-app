@@ -508,6 +508,10 @@ Fecha: 2026-11-27 · commit auditado: `380d8e9` · método: lectura de código m
 los datos reales de F2 semanas 1-5 (26 oct – 27 nov, leídos por `/api/mcp`).
 Mismas escalas que arriba. Nada de esto se implementa en esta rama.
 
+Estado (2026-11-27, misma rama, tras las 4 decisiones): HIST-01, ACC-01,
+ACC-02 y ACC-04 implementados; ACC-03 solo en su mitad de editor — la IA sigue
+sin op de peso (innegociable 1): con ACC-01 basta con mover el stepper una vez.
+
 ### 9.1 · lo que pediste
 
 **HIST-01 · el runner no enseña lo que hiciste la última vez — S2 · E2 · capacidad ausente**
@@ -724,7 +728,10 @@ la voz del producto).
 7. REG-03 · REG-04 · REG-06 · PROG-01 · RUN-04.
 8. RUN-05 · MOV-01.
 
-**decisiones de producto pendientes**
+**decisiones de producto** — resueltas el 2026-11-27: (1) las dos cosas,
+registro a posteriori y huecos opcionales; (2) lo último que moviste pasa a
+ser la prescripción; (3) a criterio de la implementación; (4) arreglarla y
+mantenerla.
 1. **Extras.** ¿Solo registro a posteriori, o también huecos opcionales que el
    entrenador pueda planificar (rodillo del domingo) y que no penalicen si no
    se hacen? (EXT-01)

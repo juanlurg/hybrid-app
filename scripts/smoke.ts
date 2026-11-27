@@ -278,7 +278,9 @@ async function main() {
 
     const { data: exercisesA } = await a.client
       .from("program_exercises")
-      .select("id, name, is_primary, slot_id, position, rep_min, rep_max, lift_key")
+      .select(
+        "id, name, is_primary, slot_id, position, sets, rep_min, rep_max, lift_key, load_mode, effort, fixed_weight_kg",
+      )
       .in(
         "slot_id",
         (
@@ -628,6 +630,89 @@ async function main() {
       "the stale fail event is reverted, not deleted",
       eventsAfter4?.length === 1 && eventsAfter4[0].reverted_at != null,
       JSON.stringify(eventsAfter4),
+    );
+
+    // Flush 5: an accessory done at a load the plan did not prescribe,
+    // short of the top of its range. The prescription follows the bar.
+    const followed = exercisesA!.find(
+      (e) =>
+        e.slot_id === basic!.slot_id &&
+        !e.is_primary &&
+        e.load_mode === "fixed" &&
+        e.rep_max > e.rep_min,
+    );
+    check("the basic's slot has a fixed-load accessory", Boolean(followed));
+    const movedKg = Number(followed!.fixed_weight_kg) + 10;
+    const accessorySet = (setIndex: number, reps: number, rir: number | null) => ({
+      programExerciseId: followed!.id,
+      liftKey: null,
+      exerciseName: followed!.name,
+      position: followed!.position,
+      setIndex,
+      reps,
+      seconds: null,
+      rir,
+      weightKg: movedKg,
+      loggedAt: `${scheduledOn}T18:3${setIndex}:00.000Z`,
+    });
+    const accessoryFlush = (reps: number, rir: number | null = null) =>
+      postSync(
+        envelope({
+          key: null,
+          startedAt: null,
+          sets: Array.from({ length: followed!.sets }, (_, i) =>
+            accessorySet(i, reps, rir),
+          ),
+          finish: { finishedAt: `${scheduledOn}T19:10:00.000Z` },
+          opKeys: [`${localId}:finish`],
+        }),
+      );
+    const prescribed = async () =>
+      Number(
+        (
+          await a.client
+            .from("program_exercises")
+            .select("fixed_weight_kg")
+            .eq("id", followed!.id)
+            .single()
+        ).data?.fixed_weight_kg,
+      );
+    const bumpEvents = async () =>
+      (
+        await a.client
+          .from("engine_events")
+          .select("title, reverted_at, payload")
+          .eq("session_id", localId)
+          .eq("kind", "accessory_bump")
+      ).data ?? [];
+
+    check("the accessory flush lands", (await (await accessoryFlush(followed!.rep_min)).json()).ok === true);
+    check(
+      "the accessory's prescription moves to the load actually lifted",
+      (await prescribed()) === movedKg,
+      `got ${await prescribed()}, moved ${movedKg}`,
+    );
+    await accessoryFlush(followed!.rep_min);
+    const afterRepeat = await bumpEvents();
+    check(
+      "a repeated flush leaves one event and the same weight",
+      afterRepeat.length === 1 &&
+        afterRepeat[0].reverted_at == null &&
+        (await prescribed()) === movedKg,
+      JSON.stringify(afterRepeat),
+    );
+    // Corrected up to the top of the range, with reserve noted: now the
+    // jump is earned, from the load that was lifted — not the plan's.
+    await accessoryFlush(followed!.rep_max, 2);
+    const afterTop = await bumpEvents();
+    check(
+      "every set at the top earns the jump on top of the lifted load",
+      (await prescribed()) > movedKg &&
+        afterTop.length === 1 &&
+        Number(
+          (afterTop[0].payload as { previous_kg?: number }).previous_kg,
+        ) === Number(followed!.fixed_weight_kg),
+      `prescribed ${await prescribed()} · ${JSON.stringify(afterTop)}`,
     );
 
     section("AI proposal storage");

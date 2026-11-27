@@ -158,6 +158,91 @@ describe("doubleProgression", () => {
     expect(out.advance).toBe(true);
     expect(out.nextWeightKg).toBe(2.5);
   });
+
+  const at = (kg: number, reps: number, rir: number | null = null) => ({
+    reps,
+    seconds: null,
+    rir,
+    weightKg: kg,
+  });
+
+  it("the next session starts from the load actually moved, not the plan's", () => {
+    // Jalón prescribed at 50, done 50 · 55 · 55 short of the top.
+    const out = doubleProgression(
+      input({
+        equipment: "pulley",
+        currentWeightKg: 50,
+        logs: [at(50, 8), at(55, 8), at(55, 8)],
+      }),
+      cfg,
+    );
+    expect(out.advance).toBe(false);
+    expect(out.nextWeightKg).toBe(55);
+  });
+
+  it("the jump is earned at the moved load: the plan said 35, the bar said 15", () => {
+    const out = doubleProgression(
+      input({
+        equipment: "pulley",
+        repMax: 15,
+        plannedSets: 2,
+        currentWeightKg: 35,
+        logs: [at(15, 15, 2), at(15, 15, 1)],
+      }),
+      cfg,
+    );
+    expect(out.advance).toBe(true);
+    expect(out.nextWeightKg).toBe(20);
+  });
+
+  it("a lighter set earlier in the exercise blocks the jump", () => {
+    const out = doubleProgression(
+      input({ currentWeightKg: 40, logs: [at(40, 10), at(42.5, 10), at(42.5, 10)] }),
+      cfg,
+    );
+    expect(out.advance).toBe(false);
+    expect(out.nextWeightKg).toBe(42.5);
+  });
+
+  it("an unfinished exercise still moves the prescription to where it ended", () => {
+    const out = doubleProgression(
+      input({ currentWeightKg: 40, logs: [at(35, 10)] }),
+      cfg,
+    );
+    expect(out.advance).toBe(false);
+    expect(out.nextWeightKg).toBe(35);
+  });
+
+  it("a one-number range needs a noted RIR — one tap per set must not move the load", () => {
+    const fixed = { repMin: 15, repMax: 15, equipment: "pulley" as const };
+    const lazy = doubleProgression(
+      input({ ...fixed, logs: [at(40, 15), at(40, 15), at(40, 15)] }),
+      cfg,
+    );
+    expect(lazy.advance).toBe(false);
+    expect(lazy.nextWeightKg).toBe(40);
+
+    const noted = doubleProgression(
+      input({ ...fixed, logs: [at(40, 15), at(40, 15), at(40, 15, 2)] }),
+      cfg,
+    );
+    expect(noted.advance).toBe(true);
+    expect(noted.nextWeightKg).toBe(45);
+  });
+
+  it("by-feel work remembers the kilos and never progresses them", () => {
+    const out = doubleProgression(
+      input({
+        equipment: "dumbbell",
+        loadMode: "rpe",
+        currentWeightKg: null,
+        logs: [at(12.5, 10), at(12.5, 10), at(12.5, 10)],
+      }),
+      cfg,
+    );
+    expect(out.advance).toBe(false);
+    expect(out.nextWeightKg).toBe(12.5);
+  });
 });
 
 describe("equipmentIncrementKg", () => {

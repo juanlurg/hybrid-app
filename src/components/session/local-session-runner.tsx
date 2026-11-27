@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { HISTORY_KEY } from "@/components/session/history-writer";
 import { SessionRunner } from "@/components/session/session-runner";
 import {
   Footnote,
@@ -10,6 +11,7 @@ import {
   ScreenHeader,
   StatGrid,
 } from "@/components/ui/kit";
+import type { ExerciseHistory } from "@/lib/data/history";
 import {
   liftStateFrom,
   phaseEngineConfig,
@@ -28,7 +30,12 @@ import { cn } from "@/lib/cn";
 type LoadState =
   | { phase: "loading" }
   | { phase: "missing" }
-  | { phase: "ready"; snapshot: AthleteSnapshot; local: LocalSessionState };
+  | {
+      phase: "ready";
+      snapshot: AthleteSnapshot;
+      local: LocalSessionState;
+      history: ExerciseHistory;
+    };
 
 /**
  * Mounts the normal SessionRunner from what IndexedDB holds — no server
@@ -42,16 +49,17 @@ export function LocalSessionRunner({ sessionId }: { sessionId: string }) {
     void (async () => {
       try {
         const store = openOfflineStore();
-        const [snapRaw, local] = await Promise.all([
+        const [snapRaw, local, history] = await Promise.all([
           store.get("snapshot", SNAPSHOT_KEY),
           getLocalSession(sessionId),
+          store.get<ExerciseHistory>("snapshot", HISTORY_KEY),
         ]);
         const snapshot = validateSnapshot(snapRaw);
         if (!snapshot || !local) {
           setState({ phase: "missing" });
           return;
         }
-        setState({ phase: "ready", snapshot, local });
+        setState({ phase: "ready", snapshot, local, history: history ?? {} });
       } catch {
         setState({ phase: "missing" });
       }
@@ -125,6 +133,7 @@ export function LocalSessionRunner({ sessionId }: { sessionId: string }) {
       exercises={day.exercises}
       initialLogs={initialLogs}
       initialUndone={local.undoneFailures}
+      history={state.history}
       replayCtx={{
         // The snapshot is the last online render — if it was taken
         // mid-session after a flush, the fold may start one step late.

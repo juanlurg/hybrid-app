@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { loadAthlete } from "@/lib/data/athlete";
 import { createClient } from "@/lib/supabase/server";
-import { formatWeight, roundToStep } from "@/lib/engine";
+import { formatWeight, nextLoadableWeight, roundToStep } from "@/lib/engine";
 import { seedWeightKg, TIMED_SLUGS } from "@/lib/domain/catalog";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -39,6 +39,38 @@ export async function setExerciseSets(
   const { error } = await supabase
     .from("program_exercises")
     .update({ sets: next })
+    .eq("id", exerciseId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * One notch up or down on an accessory's prescribed load — a weight its
+ * equipment can rack. The basic's comes from its RM, never from here.
+ */
+export async function stepExerciseWeight(
+  exerciseId: string,
+  direction: 1 | -1,
+): Promise<Result> {
+  const athlete = await guard();
+  if (!athlete) return { ok: false, error: "Sin sesión iniciada." };
+  const row = athlete.ctx.exercises.find((e) => e.id === exerciseId);
+  if (!row || row.load_mode === "engine" || row.fixed_weight_kg == null) {
+    return { ok: false, error: "Ese ejercicio no lleva un peso fijo." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("program_exercises")
+    .update({
+      fixed_weight_kg: nextLoadableWeight(
+        Number(row.fixed_weight_kg),
+        direction,
+        row.equipment,
+        athlete.config,
+      ),
+    })
     .eq("id", exerciseId);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/", "layout");

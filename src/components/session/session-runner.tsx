@@ -2,6 +2,7 @@
 
 import {
   Check,
+  ChevronRight,
   List,
   Minus,
   Plus,
@@ -30,6 +31,8 @@ import {
   type LiftState,
 } from "@/lib/engine";
 import { replayEngine, type ReplayPrimary } from "@/lib/engine/replay";
+import type { ExerciseHistory, PastSession } from "@/lib/data/history";
+import { formatDayShort } from "@/lib/domain/calendar";
 import { GIF_CREDIT, GIF_CREDIT_URL } from "@/lib/domain/catalog";
 import { weightLabelFor, type ResolvedExercise } from "@/lib/domain/plan";
 import {
@@ -92,6 +95,7 @@ export function SessionRunner({
   exercises,
   initialLogs,
   initialUndone,
+  history,
   replayCtx,
   autoRest,
   sound,
@@ -107,6 +111,8 @@ export function SessionRunner({
   initialLogs: LoggedSet[];
   /** Failures already undone in earlier flushes of this session. */
   initialUndone: Array<{ position: number; setIndex: number }>;
+  /** Earlier sessions of each exercise, newest first. Absent offline. */
+  history?: ExerciseHistory;
   replayCtx: ReplayContext;
   autoRest: boolean;
   sound: boolean;
@@ -124,6 +130,8 @@ export function SessionRunner({
   const [listOpen, setListOpen] = useState(false);
   /** The technique GIF, full size, behind the thumbnail by the title. */
   const [gifOpen, setGifOpen] = useState(false);
+  /** The exercise's earlier sessions, behind the "última vez" line. */
+  const [historyOpen, setHistoryOpen] = useState(false);
   /** Set index being corrected via its pill — overwrites in place. */
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -693,12 +701,14 @@ export function SessionRunner({
 
   const editingLogged =
     editingIndex != null && Boolean(logs[keyOf(exercise.id, editingIndex)]);
-  const unit =
-    exercise.loadMode === "rpe"
-      ? "sensación"
-      : exercise.loadMode === "bodyweight"
-        ? "corporal"
-        : "kg";
+  const past = history?.[exercise.id] ?? [];
+  // By-feel work has no number until the athlete writes one.
+  const byFeel = exercise.loadMode === "rpe" && currentWeight == null;
+  const unit = byFeel
+    ? "sensación"
+    : exercise.loadMode === "bodyweight"
+      ? "corporal"
+      : "kg";
   const loadNote =
     plates && plates.perSide.length > 0
       ? perSideLabel(plates.perSide)
@@ -714,14 +724,16 @@ export function SessionRunner({
                 ? "de lastre"
                 : exercise.loadMode === "bodyweight"
                   ? "sin lastre"
-                  : null;
+                  : byFeel
+                    ? "toca la raya para apuntar los kilos"
+                    : null;
   const programmed =
     exercise.weightKg != null &&
     currentWeight != null &&
     currentWeight !== exercise.weightKg
       ? `programado ${formatWeight(exercise.weightKg)}`
       : null;
-  const canStep = exercise.loadMode !== "rpe" && currentWeight != null;
+  const canStep = currentWeight != null;
   const round =
     "flex h-10 w-10 flex-none items-center justify-center rounded-full bg-surface text-ink shadow-raised";
   const stepButton =
@@ -729,7 +741,7 @@ export function SessionRunner({
   const tile = "rounded-xl bg-surface px-3.5 py-3 shadow-raised";
   const finishedAll = totalDone >= totalSets;
   const heroWeight =
-    exercise.loadMode === "rpe" || currentWeight == null
+    currentWeight == null
       ? "—"
       : exercise.loadMode === "weighted_bodyweight"
         ? `+${formatWeight(currentWeight)}`
@@ -854,11 +866,12 @@ export function SessionRunner({
               ) : (
                 <button
                   type="button"
-                  disabled={!canStep}
-                  aria-label={canStep ? "Escribir el peso" : undefined}
+                  disabled={!canStep && !byFeel}
+                  aria-label={canStep || byFeel ? "Escribir el peso" : undefined}
                   onClick={() => {
-                    if (currentWeight == null) return;
-                    setWeightDraft(formatWeight(currentWeight));
+                    setWeightDraft(
+                      currentWeight == null ? "" : formatWeight(currentWeight),
+                    );
                     setWeightEditing(true);
                   }}
                   className="num min-w-0 leading-[0.95] font-extrabold tracking-[-0.04em] whitespace-nowrap text-ink disabled:opacity-100"
@@ -897,6 +910,22 @@ export function SessionRunner({
                 ) : null}
               </span>
             </div>
+          ) : null}
+          {past.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="mt-3 flex w-full items-center gap-2 border-t border-line px-1 pt-3 text-left"
+            >
+              <span className="flex-none text-[12px] leading-none font-semibold text-mid">
+                Última vez ·{" "}
+                <span className="num">{formatDayShort(past[0].date)}</span>
+              </span>
+              <span className="num min-w-0 flex-1 truncate text-right text-[13px] leading-none font-bold">
+                {pastLine(past[0], exercise)}
+              </span>
+              <ChevronRight aria-hidden size={16} className="flex-none text-faint" />
+            </button>
           ) : null}
         </div>
 
@@ -1317,6 +1346,31 @@ export function SessionRunner({
         </Sheet>
       ) : null}
 
+      {historyOpen ? (
+        <Sheet onClose={() => setHistoryOpen(false)}>
+          <div className="flex items-baseline gap-2">
+            <span className="min-w-0 flex-1 truncate text-[18px] leading-tight font-extrabold tracking-[-0.01em]">
+              {exercise.name}
+            </span>
+            <span className="num flex-none text-[13px] leading-none font-semibold text-mid">
+              objetivo {exercise.schemeLabel.replace("-", "–")}
+            </span>
+          </div>
+          <div className="mt-3 flex max-h-[55dvh] flex-col divide-y divide-line overflow-auto">
+            {past.map((p) => (
+              <div key={p.date} className="flex items-baseline gap-3 py-3">
+                <span className="num w-[52px] flex-none text-[13px] leading-none font-semibold text-mid">
+                  {formatDayShort(p.date)}
+                </span>
+                <span className="num min-w-0 flex-1 text-[14px] leading-[1.35] font-bold">
+                  {pastLine(p, exercise)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Sheet>
+      ) : null}
+
       {gifOpen && exercise.gif ? (
         <Sheet onClose={() => setGifOpen(false)}>
           <div className="text-[18px] leading-tight font-extrabold tracking-[-0.01em]">
@@ -1374,6 +1428,28 @@ function Sheet({
       </div>
     </div>
   );
+}
+
+/** "22,5 kg × 8 · 8 · 8" — or set by set when the load moved mid-exercise. */
+function pastLine(past: PastSession, ex: ResolvedExercise): string {
+  const mark = ex.effort === "seconds" ? "″" : "";
+  const values = past.sets.map((s) =>
+    s.value == null ? "—" : `${s.value}${mark}`,
+  );
+  const kgs = past.sets.map((s) => s.weightKg);
+  if (kgs.every((k) => k == null)) {
+    return `${values.join(" · ")}${mark ? "" : " reps"}`;
+  }
+  if (kgs.every((k) => k === kgs[0])) {
+    return `${weightLabelFor(ex.loadMode, kgs[0])} × ${values.join(" · ")}`;
+  }
+  return past.sets
+    .map((s, i) =>
+      s.weightKg == null
+        ? values[i]
+        : `${formatWeight(s.weightKg)} × ${values[i]}`,
+    )
+    .join(" · ");
 }
 
 function countDone(logs: LogMap, exerciseId: string, sets: number): number {
