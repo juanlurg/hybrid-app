@@ -118,7 +118,7 @@ export function HistoryLog({ entries }: { entries: HistoryEntry[] }) {
                         href={entry.href}
                         className="pt-1 text-[13px] leading-none font-medium text-clay"
                       >
-                        {entry.group === "run" ? "ver carrera ›" : "ver resumen ›"}
+                        {entry.group === "run" ? "ver sesión ›" : "ver resumen ›"}
                       </Link>
                     ) : null}
                   </div>

@@ -715,6 +715,82 @@ async function main() {
       `prescribed ${await prescribed()} · ${JSON.stringify(afterTop)}`,
     );
 
+    // A session outside the plan: its own row, no slot behind it.
+    const extraId = crypto.randomUUID();
+    const extraOn = todayIso();
+    const extraFlush = (log: Record<string, unknown> | null) =>
+      postSync({
+        protocolVersion: 1,
+        deviceId: "smoke",
+        sessions: [],
+        runLogs: [],
+        mobilityLogs: [],
+        extras: [{ id: extraId, log, opKey: `extra:${extraId}` }],
+      });
+    const rodillo = (durationMinutes: number) => ({
+      scheduledOn: extraOn,
+      sessionType: "cross",
+      title: "Rodillo",
+      durationMinutes,
+      distanceKm: null,
+      avgHr: 128,
+      perceivedEffort: 3,
+      notes: "Z1 viendo la etapa",
+      loggedAt: `${extraOn}T19:00:00.000Z`,
+    });
+    const extraRows = async () =>
+      (
+        await a.client
+          .from("sessions")
+          .select("id, slot_id, session_type, status, duration_seconds, run_logs(avg_hr, notes)")
+          .eq("scheduled_on", extraOn)
+          .is("slot_id", null)
+      ).data ?? [];
+
+    const extraBody = await (await extraFlush(rodillo(30))).json();
+    const extraAfter = await extraRows();
+    check(
+      "an extra lands as a done session with no slot, and is acked",
+      extraBody.ok === true &&
+        extraBody.ackedKeys?.includes(`extra:${extraId}`) &&
+        extraAfter.length === 1 &&
+        extraAfter[0].id === extraId &&
+        extraAfter[0].session_type === "cross" &&
+        extraAfter[0].status === "done" &&
+        extraAfter[0].duration_seconds === 1800 &&
+        extraAfter[0].run_logs?.avg_hr === 128,
+      JSON.stringify({ extraBody, extraAfter }),
+    );
+    await extraFlush(rodillo(40));
+    const extraEdited = await extraRows();
+    check(
+      "editing it rewrites the same row",
+      extraEdited.length === 1 && extraEdited[0].duration_seconds === 2400,
+      JSON.stringify(extraEdited),
+    );
+    const coachView = await (
+      await fetch(`${APP_URL}/api/mcp/${MCP_TOKEN}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 9000,
+          method: "tools/call",
+          params: { name: "get_sessions", arguments: { athlete: a.id } },
+        }),
+      })
+    ).json();
+    check(
+      "the coach sees the extra on its day",
+      coachView.result?.content?.[0]?.text?.includes('"title":"Rodillo"'),
+      JSON.stringify(coachView).slice(0, 300),
+    );
+    await extraFlush(null);
+    check("deleting it removes the row", (await extraRows()).length === 0);
+
     section("AI proposal storage");
     const { data: thread } = await a.client
       .from("ai_threads")
@@ -811,6 +887,24 @@ async function main() {
       .flatMap((s) => s.program_exercises)
       .find((e) => e.is_primary)!;
 
+    const { data: daysForMcp } = await admin
+      .from("program_days")
+      .select("day_index, slot_id")
+      .eq("phase_id", currentPhase.id);
+    const typeOn = (d: { slot_id: string }) =>
+      currentPhase.program_slots.find((s) => s.id === d.slot_id)?.session_type;
+    const freeDay = daysForMcp!.find((d) => typeOn(d) === "rest")!;
+    const busyDay = daysForMcp!.find((d) => typeOn(d) === "strength")!;
+    const optionalRide = (dayIndex: number) => ({
+      op: "add_session",
+      title: "Tercer aeróbico en el rodillo",
+      name: "Rodillo",
+      sessionType: "cross",
+      dayIndex,
+      prescription: "30' Z2 en rodillo",
+      structure: [{ kind: "steady", workMin: 30, zone: "Z2" }],
+    });
+
     const proposed = await tool("propose_changes", {
       athlete: a.id,
       request: "Noto las piernas cargadas; quiero la calidad algo más corta.",
@@ -826,14 +920,23 @@ async function main() {
         },
         { op: "set_sets", title: "Una serie menos", exerciseId: accessory.id, sets: 2 },
         { op: "remove_exercise", title: "Quitar el básico", exerciseId: primary.id },
+        optionalRide(freeDay.day_index),
+        optionalRide(busyDay.day_index),
       ],
     });
     const proposedBody = proposed.isError ? null : JSON.parse(proposed.content[0].text);
     check(
       "propose_changes keeps the valid ops and drops the basic",
-      proposedBody?.pending?.length === 2 &&
+      proposedBody?.pending?.length === 3 &&
         proposedBody.dropped?.[0]?.reason?.includes("básico"),
       proposed.content[0].text.slice(0, 300),
+    );
+
+    check(
+      "an optional session is kept on a free day and dropped on a busy one",
+      proposedBody?.dropped?.length === 2 &&
+        proposedBody.dropped[1].reason.includes("día libre"),
+      JSON.stringify(proposedBody?.dropped),
     );
 
     const { data: aProposals } = await admin

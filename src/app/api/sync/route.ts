@@ -17,9 +17,11 @@ import {
   replayEngine,
 } from "@/lib/engine/replay";
 import { doubleProgression } from "@/lib/engine/progression";
+import { dayIndexOf, placeDate } from "@/lib/domain/calendar";
 import {
   liftStateFrom,
   phaseEngineConfig,
+  phaseSpans,
   repRangeFor,
 } from "@/lib/domain/plan";
 import { syncRequestSchema } from "@/lib/offline/sync-schema";
@@ -797,6 +799,69 @@ export async function POST(request: Request) {
       const message = cause instanceof Error ? cause.message : String(cause);
       console.error("[sync] mobility log failed", { opKey: m.opKey, message });
       failures.push({ opKeys: [m.opKey], reason: message, transient: true });
+    }
+  }
+
+  /* ── extras: sessions outside the plan ───────────────────── */
+  for (const x of body.extras) {
+    try {
+      if (!x.log) {
+        const { error } = await supabase
+          .from("sessions")
+          .delete()
+          .eq("id", x.id)
+          .eq("user_id", athlete.userId)
+          .is("slot_id", null);
+        if (error) throw new Error(error.message);
+        ackedKeys.push(x.opKey);
+        continue;
+      }
+
+      // No slot behind it: the row is its own key. It files under the
+      // phase and week its date falls in, when it falls inside the season.
+      const placement = placeDate(phaseSpans(ctx.phases), x.log.scheduledOn);
+      const inSeason = placement?.date === x.log.scheduledOn;
+      const duration = x.log.durationMinutes
+        ? Math.round(x.log.durationMinutes * 60)
+        : null;
+      const { error } = await supabase.from("sessions").upsert(
+        {
+          id: x.id,
+          user_id: athlete.userId,
+          program_id: ctx.program.id,
+          phase_id: inSeason ? placement.phase.id : null,
+          slot_id: null,
+          scheduled_on: x.log.scheduledOn,
+          week: inSeason ? placement.week : 1,
+          day_index: dayIndexOf(x.log.scheduledOn),
+          session_type: x.log.sessionType,
+          title: x.log.title,
+          status: "done",
+          completed_at: x.log.loggedAt,
+          duration_seconds: duration,
+        },
+        { onConflict: "id" },
+      );
+      if (error) throw new Error(error.message);
+
+      const { error: logError } = await supabase.from("run_logs").upsert(
+        {
+          session_id: x.id,
+          user_id: athlete.userId,
+          duration_seconds: duration,
+          distance_km: x.log.distanceKm,
+          avg_hr: x.log.avgHr,
+          perceived_effort: x.log.perceivedEffort,
+          notes: x.log.notes,
+        },
+        { onConflict: "session_id" },
+      );
+      if (logError) throw new Error(logError.message);
+      ackedKeys.push(x.opKey);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      console.error("[sync] extra failed", { opKey: x.opKey, message });
+      failures.push({ opKeys: [x.opKey], reason: message, transient: true });
     }
   }
 

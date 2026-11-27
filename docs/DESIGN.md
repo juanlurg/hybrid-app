@@ -122,6 +122,7 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
 | `/carrera/[fecha]` | Semana | Run blocks, zone ruler, watch data, mark done, skip |
+| `/extra/[fecha]` | Semana | A session outside the plan — what it was, minutes, pulse, RPE, note; edit or delete |
 | `/progreso` | Progreso | Adherence, records, the log, running trend (Pa:HR, km) |
 | `/programa` | Plan | Phases and what each is for, links, RMs, calculadora |
 | `/editor` | Plan | Semana tipo — weekly template editor + AI refinement |
@@ -171,7 +172,12 @@ installed PWA.
    Training before the season starts files under the real date and marks
    no plan day. Moving the season is a bulk shift (`shift_program`,
    Ajustes → Zona de peligro): phases move together, logged sessions keep
-   their real dates, the race does not move.
+   their real dates, the race does not move. What sits outside that
+   contract is never owed: a session outside the plan is a `sessions` row
+   with no slot (`/extra/[fecha]`, type `cross` for aerobic work that is
+   not running), and an optional slot (`program_slots.optional`, the
+   coach's `add_session`) is suggested — neither can be missed, and
+   adherence counts neither.
 6. **The engine speaks phase-local weeks.** Every phase starts at wave[0]
    with its own progression (`program_phases.progression_mode`): F2 waves,
    F3/F4 hold a fixed %RM. A wave step can carry the basic's rep range

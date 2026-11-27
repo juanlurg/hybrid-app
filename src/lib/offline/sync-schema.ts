@@ -15,7 +15,7 @@ export const sessionKeySchema = z.object({
   dayIndex: z.number().int().min(0).max(6),
   sessionType: z.enum([
     "strength", "run_quality", "run_long", "run_easy", "run_test",
-    "mobility", "rest",
+    "cross", "mobility", "rest",
   ]),
   title: z.string().max(200),
 });
@@ -101,4 +101,29 @@ export const syncRequestSchema = z.object({
       }),
     )
     .max(60),
+  // Optional-with-default: a client built before extras existed still
+  // drains its queue.
+  extras: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        log: z
+          .object({
+            scheduledOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+            sessionType: z.enum(["run_easy", "cross"]),
+            title: z.string().min(1).max(60),
+            durationMinutes: z.number().min(0).max(1000).nullable(),
+            distanceKm: z.number().min(0).max(500).nullable(),
+            avgHr: z.number().int().min(0).max(250).nullable(),
+            perceivedEffort: z.number().int().min(1).max(10).nullable(),
+            notes: z.string().max(2000),
+            loggedAt: z.string(),
+          })
+          .nullable(),
+        opKey: z.string().max(200),
+      }),
+    )
+    .max(60)
+    .optional()
+    .default([]),
 });

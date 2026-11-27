@@ -170,13 +170,10 @@ async function doFlush(): Promise<SyncResponse | null> {
   const sessionKeys = new Map<string, SessionKey>(
     locals.map((s) => [s.localSessionId, s.key]),
   );
-  const { sessions, runLogs, mobilityLogs } = buildEnvelopes(state, sessionKeys);
   const body = {
     protocolVersion: 1 as const,
     deviceId: await deviceId(),
-    sessions,
-    runLogs,
-    mobilityLogs,
+    ...buildEnvelopes(state, sessionKeys),
   };
 
   const res = await fetch("/api/sync", {

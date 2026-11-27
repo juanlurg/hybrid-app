@@ -355,6 +355,7 @@ async function main() {
     "/generar",
     runDay,
     strengthDay,
+    `/extra/${todayIso()}`,
   ];
 
   console.log("\nPhone 412×892");

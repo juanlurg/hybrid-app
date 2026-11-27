@@ -397,7 +397,7 @@ export const MCP_TOOLS: McpTool[] = [
     name: "propose_changes",
     title: "Proponer cambios",
     description:
-      "Deja una propuesta PENDIENTE en el Editor de la app: el atleta marca qué cambios acepta y los aplica (y puede deshacerlos). Sustituye a la propuesta pendiente anterior. Una fase por propuesta: la actual por defecto, o una futura con phaseKey. Ops: add_exercise, remove_exercise, move_exercise, rename_exercise (sustituir por otro del catálogo), set_sets, set_reps, set_rest, set_day_slot, set_wave, set_run (la carrera de una semana: slotId + week + prescription + structure), note (consejo sin cambio). Cada cambio lleva title / from / to / why cortos, en español: es lo que el atleta lee. Los que rompen las reglas vuelven en dropped con el motivo.",
+      "Deja una propuesta PENDIENTE en el Editor de la app: el atleta marca qué cambios acepta y los aplica (y puede deshacerlos). Sustituye a la propuesta pendiente anterior. Una fase por propuesta: la actual por defecto, o una futura con phaseKey. Ops: add_exercise, remove_exercise, move_exercise, rename_exercise (sustituir por otro del catálogo), set_sets, set_reps, set_rest, set_day_slot, set_wave, set_run (la carrera de una semana: slotId + week + prescription + structure), add_session (un aeróbico OPCIONAL en un día libre: dayIndex + name + sessionType cross|run_easy + prescription + structure; no cuenta en la adherencia), note (consejo sin cambio). Cada cambio lleva title / from / to / why cortos, en español: es lo que el atleta lee. Los que rompen las reglas vuelven en dropped con el motivo.",
     input: z.object({
       athlete: athleteArg,
       phaseKey: z

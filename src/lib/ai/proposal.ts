@@ -100,6 +100,15 @@ export function filterOwnedChanges(
     ) {
       return "el básico no se toca: es el que dispara la regresión";
     }
+    if (c.op === "add_session") {
+      const day = athlete.ctx.days.find(
+        (d) => d.phase_id === phaseId && d.day_index === c.dayIndex,
+      );
+      const current = day ? slotsById.get(day.slot_id) : null;
+      if (current && current.session_type !== "rest") {
+        return "ese día ya tiene sesión: una opcional solo cabe en un día libre";
+      }
+    }
     if (c.op === "set_run") {
       if (groupOf(slotsById.get(c.slotId!)!.session_type) !== "run") {
         return "solo se cambia la carrera de una sesión de carrera";

@@ -29,7 +29,7 @@ const PRIMARY: ReadonlyArray<{
     href: "/semana",
     label: "Semana",
     icon: CalendarDays,
-    owns: ["/fuerza", "/carrera"],
+    owns: ["/fuerza", "/carrera", "/extra"],
   },
   { href: "/progreso", label: "Progreso", icon: TrendingUp, owns: [] },
   {

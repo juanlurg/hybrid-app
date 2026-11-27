@@ -836,6 +836,7 @@ export type Database = {
           id: string
           key: string
           label: string
+          optional: boolean
           phase_id: string
           position: number
           session_type: Database["public"]["Enums"]["session_type"]
@@ -847,6 +848,7 @@ export type Database = {
           id?: string
           key: string
           label: string
+          optional?: boolean
           phase_id: string
           position?: number
           session_type: Database["public"]["Enums"]["session_type"]
@@ -858,6 +860,7 @@ export type Database = {
           id?: string
           key?: string
           label?: string
+          optional?: boolean
           phase_id?: string
           position?: number
           session_type?: Database["public"]["Enums"]["session_type"]
@@ -1216,6 +1219,7 @@ export type Database = {
         | "run_test"
         | "mobility"
         | "rest"
+        | "cross"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1387,6 +1391,7 @@ export const Constants = {
         "run_test",
         "mobility",
         "rest",
+        "cross",
       ],
     },
   },

@@ -511,6 +511,11 @@ Mismas escalas que arriba. Nada de esto se implementa en esta rama.
 Estado (2026-11-27, misma rama, tras las 4 decisiones): HIST-01, ACC-01,
 ACC-02 y ACC-04 implementados; ACC-03 solo en su mitad de editor — la IA sigue
 sin op de peso (innegociable 1): con ACC-01 basta con mover el stepper una vez.
+EXT-01 implementado en sus dos mitades: `/extra/[fecha]` para registrar a
+posteriori (op `extra_log`, tipo `cross`) y huecos opcionales
+(`program_slots.optional`, op `add_session` del entrenador), que no entran en
+la adherencia. Las carreras que el plan ya llamaba opcionales con palabras
+(F0-bis, F4, F0 del 10K) pasan a serlo de verdad.
 
 ### 9.1 · lo que pediste
 

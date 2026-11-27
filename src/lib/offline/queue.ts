@@ -77,7 +77,26 @@ export type QueueOp =
       completedSlugs: string[];
       totalItems: number;
       loggedAt: string;
-    };
+    }
+  | {
+      /** A session outside the plan — 30′ de rodillo on an easy day. */
+      kind: "extra_log";
+      /** Minted on the device; the `sessions` row takes it as its id. */
+      id: string;
+      scheduledOn: string;
+      sessionType: ExtraType;
+      title: string;
+      durationMinutes: number | null;
+      distanceKm: number | null;
+      avgHr: number | null;
+      perceivedEffort: number | null;
+      notes: string;
+      loggedAt: string;
+    }
+  | { kind: "extra_delete"; id: string };
+
+/** What an extra can be: a run, or aerobic work that is not running. */
+export type ExtraType = "run_easy" | "cross";
 
 /**
  * Natural idempotency key. Re-logging the same set REPLACES the queued
@@ -102,6 +121,11 @@ export function opKey(op: QueueOp): string {
       return `run:${op.key.scheduledOn}:${op.key.slotId}`;
     case "mobility_log":
       return `mob:${op.performedOn}`;
+    // One key for both, like set_log/set_unlog: an extra deleted before
+    // its log flushed never reaches the server at all.
+    case "extra_log":
+    case "extra_delete":
+      return `extra:${op.id}`;
   }
 }
 
@@ -181,12 +205,30 @@ export interface MobilityLogEnvelope {
   opKey: string;
 }
 
+export interface ExtraEnvelope {
+  id: string;
+  /** Null: the athlete deleted it. */
+  log: {
+    scheduledOn: string;
+    sessionType: ExtraType;
+    title: string;
+    durationMinutes: number | null;
+    distanceKm: number | null;
+    avgHr: number | null;
+    perceivedEffort: number | null;
+    notes: string;
+    loggedAt: string;
+  } | null;
+  opKey: string;
+}
+
 export interface SyncRequest {
   protocolVersion: 1;
   deviceId: string;
   sessions: SessionEnvelope[];
   runLogs: RunLogEnvelope[];
   mobilityLogs: MobilityLogEnvelope[];
+  extras: ExtraEnvelope[];
 }
 
 export interface SyncSessionResult {
@@ -225,10 +267,12 @@ export function buildEnvelopes(
   sessions: SessionEnvelope[];
   runLogs: RunLogEnvelope[];
   mobilityLogs: MobilityLogEnvelope[];
+  extras: ExtraEnvelope[];
 } {
   const bySession = new Map<string, SessionEnvelope>();
   const runLogs: RunLogEnvelope[] = [];
   const mobilityLogs: MobilityLogEnvelope[] = [];
+  const extras: ExtraEnvelope[] = [];
 
   const envelopeFor = (
     localSessionId: string,
@@ -320,6 +364,26 @@ export function buildEnvelopes(
           opKey: k,
         });
         break;
+      case "extra_log":
+        extras.push({
+          id: op.id,
+          log: {
+            scheduledOn: op.scheduledOn,
+            sessionType: op.sessionType,
+            title: op.title,
+            durationMinutes: op.durationMinutes,
+            distanceKm: op.distanceKm,
+            avgHr: op.avgHr,
+            perceivedEffort: op.perceivedEffort,
+            notes: op.notes,
+            loggedAt: op.loggedAt,
+          },
+          opKey: k,
+        });
+        break;
+      case "extra_delete":
+        extras.push({ id: op.id, log: null, opKey: k });
+        break;
     }
   }
 
@@ -328,5 +392,5 @@ export function buildEnvelopes(
     env.sets.sort((a, b) => a.loggedAt.localeCompare(b.loggedAt));
   }
 
-  return { sessions: [...bySession.values()], runLogs, mobilityLogs };
+  return { sessions: [...bySession.values()], runLogs, mobilityLogs, extras };
 }

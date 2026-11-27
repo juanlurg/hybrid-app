@@ -202,6 +202,8 @@ export interface ResolvedDay {
   slot: SlotRow | null;
   sessionType: SessionType;
   group: SessionGroup;
+  /** Suggested, not owed: never missed, never in adherence. */
+  optional: boolean;
   title: string;
   subtitle: string;
   label: string;
@@ -403,6 +405,7 @@ export function resolveDay(
     slot,
     sessionType,
     group,
+    optional: slot?.optional ?? false,
     title: slot?.title ?? "Descanso",
     subtitle: slot?.subtitle ?? "",
     label: slot?.label ?? "DESCANSO",

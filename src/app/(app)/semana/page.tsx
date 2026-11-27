@@ -1,6 +1,7 @@
-import { Check, ChevronRight, Flag } from "lucide-react";
+import { Check, ChevronRight, Flag, Plus } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Fragment } from "react";
 
 import { requireAthlete, weekContext } from "@/lib/data/athlete";
 import {
@@ -108,7 +109,9 @@ export default async function SemanaPage({
   const supabase = await createClient();
   const { data: sessions } = await supabase
     .from("sessions")
-    .select("id, slot_id, status, scheduled_on")
+    .select(
+      "id, slot_id, status, scheduled_on, session_type, title, duration_seconds",
+    )
     .eq("user_id", athlete.userId)
     .in(
       "scheduled_on",
@@ -124,6 +127,15 @@ export default async function SemanaPage({
       ) ?? null
     );
   };
+
+  /** Sessions outside the plan: no slot behind them. */
+  const extrasOn = (date: IsoDate) =>
+    (sessions ?? []).filter(
+      (s) => s.scheduled_on === date && s.slot_id == null,
+    );
+  // An extra is logged after the fact: a week still ahead cannot hold one.
+  const extraDate =
+    days[0].date > today ? null : days[6].date < today ? days[0].date : today;
 
   /** No row yet means the day is still ahead of the athlete, not missing. */
   const statusFor = (
@@ -214,9 +226,8 @@ export default async function SemanaPage({
   const viewingCurrentWeek = absoluteWeek === athlete.placement.absoluteWeek;
   const missedDays = viewingCurrentWeek
     ? days.filter((d) => {
-        if (!d.slot || (d.group !== "strength" && d.group !== "run")) {
-          return false;
-        }
+        if (!d.slot || d.optional) return false;
+        if (d.group !== "strength" && d.group !== "run") return false;
         if (d.date >= today) return false;
         const s = sessionFor(d);
         return (s?.status ?? "planned") === "planned";
@@ -303,7 +314,9 @@ export default async function SemanaPage({
               const trains = day.group === "strength" || day.group === "run";
               const pill = !trains || !status
                 ? null
-                : isToday && status === "planned"
+                : day.optional && status === "planned"
+                  ? { label: "Opcional", tone: "bg-soft text-mid" }
+                  : isToday && status === "planned"
                   ? { label: "Hoy", tone: "bg-strength text-on-strength" }
                   : status === "done"
                     ? { label: STATUS_LABEL.done, tone: "bg-ok-soft text-ok", check: true }
@@ -343,7 +356,7 @@ export default async function SemanaPage({
                       tileFor(day, isToday),
                     )}
                   >
-                    <DayIcon group={day.group} />
+                    <DayIcon group={day.group} type={day.sessionType} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div
@@ -384,9 +397,8 @@ export default async function SemanaPage({
                 isToday && "bg-clay-soft",
               );
 
-              return href ? (
+              const row = href ? (
                 <Link
-                  key={day.date}
                   id={`dia-${day.dayIndex}`}
                   href={href}
                   aria-current={isToday ? "date" : undefined}
@@ -396,7 +408,6 @@ export default async function SemanaPage({
                 </Link>
               ) : (
                 <div
-                  key={day.date}
                   id={`dia-${day.dayIndex}`}
                   aria-current={isToday ? "date" : undefined}
                   className={classes}
@@ -404,7 +415,55 @@ export default async function SemanaPage({
                   {body}
                 </div>
               );
+
+              return (
+                <Fragment key={day.date}>
+                  {row}
+                  {extrasOn(day.date).map((x) => (
+                    <Link
+                      key={x.id}
+                      href={`/extra/${day.date}?id=${x.id}`}
+                      className="flex items-center gap-3 rounded-lg p-2.5"
+                    >
+                      <span className="w-[34px] flex-none" />
+                      <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-run-soft text-run">
+                        <DayIcon group="run" type={x.session_type} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[15px] leading-[1.25] font-bold">
+                          {x.title}
+                        </div>
+                        <div className="num mt-0.5 truncate text-[12.5px] leading-[1.35] font-medium text-mid">
+                          fuera del plan
+                          {x.duration_seconds
+                            ? ` · ${Math.round(x.duration_seconds / 60)}′`
+                            : ""}
+                        </div>
+                      </div>
+                      <span className="flex h-6 flex-none items-center gap-1 rounded-full bg-ok-soft px-2.5 text-[11px] leading-none font-bold text-ok">
+                        <Check aria-hidden size={12} strokeWidth={3} />
+                        Extra
+                      </span>
+                    </Link>
+                  ))}
+                </Fragment>
+              );
             })}
+            {extraDate ? (
+              <Link
+                href={`/extra/${extraDate}`}
+                className="flex items-center gap-3 rounded-lg p-2.5"
+              >
+                <span className="w-[34px] flex-none" />
+                <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-dashed border-hairline text-mid">
+                  <Plus aria-hidden size={18} />
+                </span>
+                <span className="min-w-0 flex-1 text-[14px] leading-[1.3] font-bold text-body">
+                  Añadir una sesión fuera del plan
+                </span>
+                <ChevronRight aria-hidden size={18} className="flex-none text-faint" />
+              </Link>
+            ) : null}
           </div>
         )}
 

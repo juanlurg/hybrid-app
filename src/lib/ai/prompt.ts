@@ -79,6 +79,12 @@ CÓMO TRABAJAS
 - Cambios en la fase actual o en una futura (phaseKey); una propuesta toca una sola fase.
 - Carrera: set_run sustituye la sesión de una semana entera — etiqueta corta en "prescription"
   ("3×8' Z4 (rec 3')") y los bloques tipados en "structure", que es lo que la app pinta y suma.
+- Aeróbico opcional (rodillo, bici, un rodaje extra): add_session lo pone en un día libre de la
+  semana tipo con "name" ("Rodillo"), "sessionType" (cross = no es carrera; run_easy = rodaje),
+  "dayIndex", "prescription" y "structure". Es opcional de verdad: si no se hace no cuenta como
+  fallo ni baja la adherencia. Luego se ajusta semana a semana con set_run sobre su slotId.
+- get_sessions también trae lo que el atleta añade fuera del plan (tipo cross o run_easy sin
+  sesión planificada detrás): cuéntalo como volumen aeróbico real.
 
 QUÉ NO PUEDES HACER — NUNCA
 - No tocas las RM ni la regla de regresión: los kilos salen del motor (RM × ola). Si piden
@@ -280,7 +286,7 @@ function slotLines(
     .sort((a, b) => a.position - b.position);
   for (const slot of slots) {
     lines.push(
-      `### ${slot.label} — ${slot.title} · ${slot.subtitle || "—"}  [slotId: ${slot.id}] [tipo: ${slot.session_type}]`,
+      `### ${slot.label} — ${slot.title} · ${slot.subtitle || "—"}  [slotId: ${slot.id}] [tipo: ${slot.session_type}]${slot.optional ? " [opcional: no cuenta en la adherencia]" : ""}`,
     );
     const exercises = ctx.exercises
       .filter((e) => e.slot_id === slot.id)

@@ -5,6 +5,7 @@ import {
   HeartPulse,
   History,
   Info,
+  Plus,
   Snowflake,
 } from "lucide-react";
 import Link from "next/link";
@@ -101,7 +102,7 @@ export default async function HoyPage() {
   ] = await Promise.all([
       supabase
         .from("sessions")
-        .select("id, slot_id, status, scheduled_on")
+        .select("id, slot_id, status, scheduled_on, title, duration_seconds")
         .eq("user_id", athlete.userId)
         .in(
           "scheduled_on",
@@ -143,8 +144,15 @@ export default async function HoyPage() {
 
   /* ── the week around today ───────────────────────────────────── */
 
+  // An optional day is never owed: it cannot be missed, lost or skipped.
   const trains = (d: ResolvedDay) =>
-    d.slot != null && (d.group === "strength" || d.group === "run");
+    d.slot != null &&
+    !d.optional &&
+    (d.group === "strength" || d.group === "run");
+  /** What the athlete added today on top of the plan. */
+  const extras = (sessions ?? []).filter(
+    (s) => s.scheduled_on === today && s.slot_id == null,
+  );
   const missed = week.filter(
     (d) => trains(d) && d.date < today && statusOf(d) === "planned",
   );
@@ -338,7 +346,7 @@ export default async function HoyPage() {
                         : undefined
                     }
                   >
-                    <DayIcon group={d.group} />
+                    <DayIcon group={d.group} type={d.sessionType} />
                   </span>
                   <span
                     className={cn(
@@ -423,6 +431,7 @@ export default async function HoyPage() {
                     )}
                   >
                     {day.label}
+                    {day.optional ? " · opcional" : ""}
                   </span>
                 </div>
                 {quiet ? null : (
@@ -472,6 +481,31 @@ export default async function HoyPage() {
             <ChevronRight aria-hidden size={18} className="flex-none text-faint" />
           </Link>
         ) : null}
+
+        <Link
+          href={`/extra/${today}`}
+          className="mx-5 mt-3 flex items-center gap-3 rounded-2xl bg-surface px-4 py-3.5 shadow-card"
+        >
+          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-run-soft text-run">
+            <Plus aria-hidden size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14px] leading-[1.3] font-bold">
+              Sesión extra
+            </span>
+            <span className="num mt-0.5 block truncate text-[12.5px] leading-[1.35] font-medium text-mid">
+              {extras.length > 0
+                ? extras
+                    .map(
+                      (x) =>
+                        `${x.title}${x.duration_seconds ? ` ${Math.round(x.duration_seconds / 60)}′` : ""}`,
+                    )
+                    .join(" · ") + " · registrada"
+                : "Rodillo, bici, caminata · fuera del plan"}
+            </span>
+          </span>
+          <ChevronRight aria-hidden size={18} className="flex-none text-faint" />
+        </Link>
       </div>
 
       {day.slot ? (
