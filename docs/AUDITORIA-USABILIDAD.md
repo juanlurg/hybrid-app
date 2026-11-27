@@ -515,7 +515,12 @@ EXT-01 implementado en sus dos mitades: `/extra/[fecha]` para registrar a
 posteriori (op `extra_log`, tipo `cross`) y huecos opcionales
 (`program_slots.optional`, op `add_session` del entrenador), que no entran en
 la adherencia. Las carreras que el plan ya llamaba opcionales con palabras
-(F0-bis, F4, F0 del 10K) pasan a serlo de verdad.
+(F0-bis, F4, F0 del 10K) pasan a serlo de verdad. REG-01 (decisión 3: − / +
+junto a «Hecho», y por defecto la misma serie de la última vez, nunca el tope
+del rango), REG-02 (el RIR se pregunta una vez, tras la última serie de cada
+ejercicio) y MOV-01 (decisión 4: cronómetro por lados en los isométricos, el
+progreso del día en Hoy, los días de la semana en Progreso) implementados.
+Quedan RM-01, RUN-01…06, REG-03…07, PROG-01, PROG-02 y DAT-01.
 
 ### 9.1 · lo que pediste
 

@@ -91,7 +91,9 @@ Put `num` on anything numeric — tabular figures. Nothing smaller than 11px.
 - **Steppers**: one `bg-soft` pill, − / + icons either side of the figure.
 - **Action**: pinned at the bottom, `px-4`, 56px (64px in the runner), clay with
   `shadow-cta`; a white secondary ("Hoy no entreno", "Otras", "Saltar") sits
-  beside it.
+  beside it. In the runner − / + flank it: one tap of "Hecho" never logs the
+  top of a range by itself — it starts from the same set the last time,
+  capped under the top, or from the bottom of the range.
 - **Tab bar**: floating, `inset-x-4 bottom-4`, 68px, icon in a 46×30 pill that
   fills clay when active. Hidden in the runner.
 - **Sheet**: the runner's "Otras" and session list rise from the bottom over a
@@ -116,8 +118,8 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 | Route | Tab | Screen |
 |---|---|---|
 | `/` | Hoy | Today's session, week strip, what to recover, big weight, start bar |
-| `/movilidad` | Hoy | Guided / list mobility block |
-| `/sesion/[id]` | — | Live runner — set pills, weight stepper, the last time, rest timer, regression banner, technique GIF |
+| `/movilidad` | Hoy | Guided / list mobility block; holds run on a clock, side by side |
+| `/sesion/[id]` | — | Live runner — set pills, weight stepper, the last time, − / + on the reps "Hecho" logs, RIR asked once per exercise, rest timer, regression banner, technique GIF |
 | `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |

@@ -99,6 +99,7 @@ export default async function HoyPage() {
     { data: heldLifts },
     { count: loggedEver },
     history,
+    { data: mobilityToday },
   ] = await Promise.all([
       supabase
         .from("sessions")
@@ -126,7 +127,15 @@ export default async function HoyPage() {
         ctx.exercises,
         day.exercises.map((e) => e.id),
       ),
+      supabase
+        .from("mobility_logs")
+        .select("completed_slugs, total_items")
+        .eq("user_id", athlete.userId)
+        .eq("performed_on", today)
+        .maybeSingle(),
     ]);
+  const mobilityDone = mobilityToday?.completed_slugs.length ?? 0;
+  const mobilityTotal = mobilityToday?.total_items ?? 0;
 
   const statusOf = (d: ResolvedDay): SessionStatus | null => {
     if (!d.slot) return null;
@@ -474,8 +483,14 @@ export default async function HoyPage() {
               <span className="block text-[14px] leading-[1.3] font-bold">
                 Movilidad y correctivos
               </span>
-              <span className="mt-0.5 block text-[12.5px] leading-[1.35] font-medium text-mid">
-                20′ · diaria · no cuenta como entrenamiento
+              <span className="num mt-0.5 block text-[12.5px] leading-[1.35] font-medium text-mid">
+                {mobilityDone === 0
+                  ? day.group === "strength"
+                    ? "Activación glútea antes de la barra · 5′"
+                    : "20′ · glúteo, psoas y tobillo"
+                  : mobilityDone >= mobilityTotal
+                    ? "Hecha hoy"
+                    : `${mobilityDone} de ${mobilityTotal} hechos hoy`}
               </span>
             </span>
             <ChevronRight aria-hidden size={18} className="flex-none text-faint" />

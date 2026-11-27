@@ -242,6 +242,13 @@ export function SessionRunner({
 
   const [exIndex, setExIndex] = useState(firstUnfinished);
   const [pendingRir, setPendingRir] = useState<number | null>(null);
+  /** What − / + beside "Hecho" added to the default, for the set at hand. */
+  const [nudge, setNudge] = useState(0);
+  /** The set that just closed an exercise: its reserve is asked once. */
+  const [rirAsk, setRirAsk] = useState<{
+    exerciseId: string;
+    setIndex: number;
+  } | null>(null);
   const exercise = exercises[Math.min(exIndex, exercises.length - 1)];
 
   // Read once on mount: the toggle lives in Ajustes, a session apart.
@@ -449,7 +456,15 @@ export function SessionRunner({
     setRepsOpen(false);
     setEditingIndex(null);
     setPendingRir(null);
+    setNudge(0);
     setError(null);
+    // The last set of an exercise is where the reserve says something:
+    // ask for it once, beside the rest clock, unless it was just given.
+    setRirAsk(
+      !overwrite && rir == null && setIndex + 1 >= exercise.sets
+        ? { exerciseId: exercise.id, setIndex }
+        : null,
+    );
 
     let groupDone = false;
     let lastGroupIndex = exIndex;
@@ -581,6 +596,50 @@ export function SessionRunner({
     });
   }
 
+  /** The reserve of a set already logged — same op key, so it rewrites
+      that set and nothing else. */
+  function noteRir(rir: number) {
+    const ask = rirAsk;
+    setRirAsk(null);
+    const ex = ask && exercises.find((e) => e.id === ask.exerciseId);
+    const entry = ask && logs[keyOf(ask.exerciseId, ask.setIndex)];
+    if (!ask || !ex || !entry) return;
+    setLogs((prev) => ({
+      ...prev,
+      [keyOf(ex.id, ask.setIndex)]: { ...entry, rir },
+    }));
+    const timed = ex.effort === "seconds";
+    const loggedAt = new Date().toISOString();
+    startTransition(async () => {
+      await withLocal((s) =>
+        recordLocalSet(s, {
+          position: ex.position,
+          setIndex: ask.setIndex,
+          value: entry.value,
+          missed: entry.missed,
+          weightKg: entry.weightKg,
+          rir,
+          timed,
+          loggedAt,
+        }),
+      );
+      await enqueueAndFlush({
+        kind: "set_log",
+        localSessionId: sessionId,
+        programExerciseId: ex.id,
+        liftKey: ex.liftKey,
+        exerciseName: ex.name,
+        position: ex.position,
+        setIndex: ask.setIndex,
+        reps: timed ? null : entry.value,
+        seconds: timed ? entry.value : null,
+        rir,
+        weightKg: entry.weightKg,
+        loggedAt,
+      });
+    });
+  }
+
   function nudgeWeight(direction: 1 | -1) {
     if (currentWeight == null) return;
     applyWeight(
@@ -665,13 +724,14 @@ export function SessionRunner({
   }, [exercise.repMin, exercise.repMax, exercise.effort]);
 
   /**
-   * What one tap on "Hecho" logs. Never the top of the range by default:
-   * all sets at the top is exactly what bumps an accessory, so the laziest
-   * tap must not be the one that moves a load. The first set of an
-   * exercise logs the range minimum; after that, whatever the athlete
-   * last logged on it — pick 8 once with "Otras" and the rest follow.
+   * What one tap on "Hecho" logs, before − / + move it. Never the top of
+   * the range by default: all sets at the top is exactly what bumps an
+   * accessory, so the laziest tap must not be the one that moves a load.
+   * A set follows whatever the athlete last logged on this exercise
+   * today; the first one starts from the same set the last time, when
+   * today's load is no heavier — and from the range minimum otherwise.
    */
-  const quickValue = (() => {
+  const quickDefault = (() => {
     for (let i = nextFreeIndex - 1; i >= 0; i--) {
       const entry = logs[keyOf(exercise.id, i)];
       if (entry) return entry.value;
@@ -680,8 +740,21 @@ export function SessionRunner({
       const entry = logs[keyOf(exercise.id, i)];
       if (entry) return entry.value;
     }
+    const last = history?.[exercise.id]?.[0]?.sets[nextFreeIndex];
+    if (
+      last?.value != null &&
+      (currentWeight == null ||
+        last.weightKg == null ||
+        currentWeight <= last.weightKg)
+    ) {
+      const ceiling =
+        exercise.repMax > exercise.repMin ? exercise.repMax - 1 : exercise.repMax;
+      return Math.max(exercise.repMin, Math.min(last.value, ceiling));
+    }
     return exercise.repMin;
   })();
+  const quickStep = exercise.effort === "seconds" ? 5 : 1;
+  const quickValue = Math.max(quickStep, quickDefault + nudge * quickStep);
 
   const setNumber = Math.min(nextFreeIndex + 1, exercise.sets);
   const eyebrow = exercise.isPrimary
@@ -702,6 +775,9 @@ export function SessionRunner({
   const editingLogged =
     editingIndex != null && Boolean(logs[keyOf(exercise.id, editingIndex)]);
   const past = history?.[exercise.id] ?? [];
+  const askedExercise = rirAsk
+    ? (exercises.find((e) => e.id === rirAsk.exerciseId) ?? null)
+    : null;
   // By-feel work has no number until the athlete writes one.
   const byFeel = exercise.loadMode === "rpe" && currentWeight == null;
   const unit = byFeel
@@ -1044,6 +1120,36 @@ export function SessionRunner({
           </Note>
         ) : null}
 
+        {askedExercise ? (
+          <div className="mt-3.5 rounded-2xl bg-surface px-3.5 py-3 shadow-card">
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 truncate text-[13px] leading-none font-bold">
+                ¿Cuántas te quedaban? · {askedExercise.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => setRirAsk(null)}
+                className="-my-2 flex-none py-2 text-[12px] leading-none font-semibold text-mid"
+              >
+                Ahora no
+              </button>
+            </div>
+            <div className="mt-2.5 flex gap-1.5">
+              {[0, 1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  aria-label={`RIR ${n}`}
+                  onClick={() => noteRir(n)}
+                  className="num h-10 flex-1 rounded-md bg-soft text-[15px] leading-none font-bold text-ink"
+                >
+                  {n === 4 ? "4+" : n}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {rest ? (
           <div className="mt-3.5">
             <RestBar
@@ -1167,7 +1273,19 @@ export function SessionRunner({
         )}
       </div>
 
-      <div className="flex flex-none gap-2.5 px-4 pt-3 pb-[calc(1.75rem+var(--safe-bottom))]">
+      <div className="flex flex-none items-center gap-2 px-4 pt-3 pb-[calc(1.75rem+var(--safe-bottom))]">
+        {/* The real number is one tap away: − / + move what "Hecho" logs. */}
+        {exercise.effort === "amrap" ? null : (
+          <button
+            type="button"
+            aria-label={exercise.effort === "seconds" ? "Menos segundos" : "Menos reps"}
+            disabled={quickValue <= quickStep}
+            onClick={() => setNudge((n) => n - 1)}
+            className={cn(stepButton, "bg-surface shadow-raised disabled:opacity-40")}
+          >
+            <Minus aria-hidden size={20} strokeWidth={2.25} />
+          </button>
+        )}
         <button
           type="button"
           disabled={pending}
@@ -1179,21 +1297,33 @@ export function SessionRunner({
             }
             record(quickValue);
           }}
-          className="flex h-16 flex-1 items-center justify-center gap-2 rounded-2xl bg-strength text-[17px] leading-none font-bold text-on-strength shadow-cta active:opacity-85 disabled:opacity-40"
+          className="flex h-16 min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-strength text-[17px] leading-none font-bold whitespace-nowrap text-on-strength shadow-cta active:opacity-85 disabled:opacity-40"
         >
-          <Check aria-hidden size={20} strokeWidth={2.5} />
           {exercise.effort === "amrap" ? (
-            "Registrar AMRAP"
+            <>
+              <Check aria-hidden size={20} strokeWidth={2.5} />
+              Registrar AMRAP
+            </>
           ) : (
             <>
               Hecho ·{" "}
               <span className="num">
                 {quickValue}
-                {exercise.effort === "seconds" ? "″" : " reps"}
+                {exercise.effort === "seconds" ? "″" : ""}
               </span>
             </>
           )}
         </button>
+        {exercise.effort === "amrap" ? null : (
+          <button
+            type="button"
+            aria-label={exercise.effort === "seconds" ? "Más segundos" : "Más reps"}
+            onClick={() => setNudge((n) => n + 1)}
+            className={cn(stepButton, "bg-surface shadow-raised")}
+          >
+            <Plus aria-hidden size={20} strokeWidth={2.25} />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => {
@@ -1202,7 +1332,7 @@ export function SessionRunner({
             setEditingIndex(null);
             setRepsOpen(true);
           }}
-          className="flex h-16 w-24 flex-none items-center justify-center rounded-2xl bg-surface text-[15px] leading-none font-bold text-ink shadow-raised"
+          className="flex h-16 flex-none items-center justify-center rounded-2xl bg-surface px-4 text-[15px] leading-none font-bold text-ink shadow-raised"
         >
           Otras
         </button>
@@ -1322,6 +1452,7 @@ export function SessionRunner({
                   className={i === exIndex ? "bg-clay-soft" : undefined}
                   onClick={() => {
                     setExIndex(i);
+                    setNudge(0);
                     if (failureKey) setDismissedFailure(failureKey);
                     setRepsOpen(false);
                     setEditingIndex(null);

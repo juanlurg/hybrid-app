@@ -8,6 +8,7 @@ import {
 import { Footnote, Row, RowStack } from "@/components/ui/kit";
 import { requireAthlete } from "@/lib/data/athlete";
 import {
+  addDays,
   formatDayShort,
   formatSeasonRange,
   placeDate,
@@ -292,6 +293,15 @@ export default async function ProgresoPage() {
       pct: elapsed === 0 ? null : Math.round((credit / elapsed) * 100),
     };
   };
+
+  // The block is daily, so its own count is the week just lived.
+  const weekAgo = addDays(today, -6);
+  const mobilityDays = (mobilityRows ?? []).filter(
+    (m) =>
+      m.performed_on >= weekAgo &&
+      m.performed_on <= today &&
+      m.completed_slugs.length > 0,
+  ).length;
 
   /* ── KPIs ────────────────────────────────────────────────────── */
 
@@ -740,7 +750,9 @@ export default async function ProgresoPage() {
               </div>
 
               <Footnote>
-                La movilidad y el descanso no cuentan para la adherencia.
+                Movilidad: <span className="num">{mobilityDays}</span> de los
+                últimos 7 días. Ni ella ni el descanso cuentan para la
+                adherencia.
               </Footnote>
             </>
           }
