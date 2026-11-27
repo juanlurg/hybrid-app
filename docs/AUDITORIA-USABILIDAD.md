@@ -501,3 +501,235 @@ presupuesto de densidad por pantalla en `scripts/walkthrough.ts`.
 4. **¿Debe el motor mirar el peso real?** Hoy el fallo congela al peso real
    pero la absolución no lo comprueba; exigirlo enmienda el matiz del
    innegociable 1. (ERR-08)
+
+## 9 · cuarta ronda — features que faltan
+
+Fecha: 2026-11-27 · commit auditado: `380d8e9` · método: lectura de código más
+los datos reales de F2 semanas 1-5 (26 oct – 27 nov, leídos por `/api/mcp`).
+Mismas escalas que arriba. Nada de esto se implementa en esta rama.
+
+### 9.1 · lo que pediste
+
+**HIST-01 · el runner no enseña lo que hiciste la última vez — S2 · E2 · capacidad ausente**
+- evidencia: `SessionRunner` recibe solo los `set_logs` de la sesión abierta
+  (`src/app/(app)/sesion/[id]/page.tsx:33-41`); ninguna consulta trae
+  sesiones anteriores del mismo ejercicio. El dato existe y solo se lee
+  abriendo el resumen de cada sesión pasada, una a una.
+- recomendación: una línea bajo el peso — «la última vez · 20 nov · 22,5 kg ×
+  8·8·8» — y al tocarla una hoja con las últimas 5-6 sesiones. Clave por
+  ejercicio de catálogo (o nombre), no por `program_exercise_id`: cada fase
+  tiene sus filas y `rename_exercise` conserva el id al sustituir
+  (`src/lib/actions/ai.ts:552-567`: dominadas lastradas → supinas). Tiene que
+  entrar en el snapshot offline (`src/lib/offline/snapshot.ts`).
+
+**ACC-01 · el peso de un accesorio no recuerda lo que moviste — S2 · E2 · bug**
+- evidencia: cada sesión arranca en el `fixed_weight_kg` del plan
+  (`src/lib/domain/plan.ts:283-288`) y el stepper solo vale para esa sesión
+  (`session-runner.tsx:323-332`). Datos: jalón 50 → 55 → 60 → 50; búlgara
+  22,5 → 17,5 → 22,5; inclinado 25 → 20/22,5 → 25/22,5.
+- recomendación: al cerrar una sesión (nunca en descarga), `/api/sync` deja
+  `fixed_weight_kg` en el peso de la última serie registrada del accesorio,
+  con su evento deshacible. El runner sigue leyendo `ResolvedExercise.weightKg`.
+
+**ACC-02 · la doble progresión sube desde el peso del plan, no desde el levantado — S2 · E1 · bug**
+- evidencia: `currentWeightKg: e.fixed_weight_kg`
+  (`src/app/api/sync/route.ts:603-604`); `doubleProgression` no recibe los
+  kilos de las series. Datos: face pull es 15-15 (`template_program.sql:168`),
+  así que un toque de «Hecho» por serie ya es «todas al tope»: subió 27,5 →
+  30 → 32,5 → 35 → 37,5 en cuatro sesiones. El 25 nov lo registraste a 15 kg
+  y el motor lo subió de 35 a 37,5.
+- mecanismo: el plan prescribe 37,5 y tú mueves 15. Contradice el innegociable
+  1 («the load travels with the set»).
+- recomendación: progresar desde el peso registrado, y exigir rango real
+  (`rep_max > rep_min`) o RIR anotado para subir.
+
+**ACC-03 · el peso prescrito de un accesorio no se puede editar — S2 · E1 · capacidad ausente**
+- evidencia: el editor expone series, reps y descanso
+  (`src/app/(app)/editor/program-editor.tsx:445-510`); `updateExercise` ya
+  acepta `fixedWeightKg` y `loadMode` (`src/lib/actions/program.ts:48-58`) y
+  ninguna pantalla los envía. La IA tampoco tiene op de peso
+  (`src/lib/ai/schema.ts:17-29`): «abducción: sube a 10 kg» llegó tres veces
+  como `note` (2, 16 y 22 nov) y el runner siguió enseñando 5 kg.
+- recomendación: stepper de peso en el acordeón del ejercicio y op
+  `set_weight` en `CHANGE_OPS`, solo accesorios.
+
+**ACC-04 · «a sensación» no deja apuntar kilos — S3 · E1 · capacidad ausente**
+- evidencia: `canStep = loadMode !== "rpe" && currentWeight != null`
+  (`session-runner.tsx:724`). Curl de bíceps, tibialis y step-down se guardan
+  sin `weight_kg`; el entrenador lo pide el 27 nov («apunta también los kilos
+  del curl») y la app no tiene dónde.
+- recomendación: en `rpe` el peso empieza vacío y es opcional; si se escribe,
+  viaja con la serie y alimenta HIST-01.
+
+**EXT-01 · no se puede registrar una sesión fuera del plan — S2 · E2 · capacidad ausente**
+- evidencia: toda escritura lleva `SessionKey.slotId`
+  (`src/lib/offline/queue.ts:11-19`); `/carrera/[fecha]` redirige si ese día
+  no tiene hueco de carrera (`carrera/[fecha]/page.tsx:94`); un día de
+  descanso pinta «Día libre» inerte (`start-session-button.tsx:43-50`);
+  `program_days` es un hueco por día (`20260729000200_programs.sql:80-86`),
+  así que tampoco cabe un doble; `session_type` no tiene bici ni cross
+  (`20260729000100_core.sql:20-28`). El 27 nov el entrenador propuso «30-40′
+  de Z2 en rodillo el domingo» — como `note`, porque no hay dónde ponerlo.
+- recomendación: «Añadir sesión» en Hoy y en cada día de Semana: tipo (rodillo,
+  carrera, caminata, otro), duración, FC media, RPE, nota. Fila en `sessions`
+  con `slot_id` nulo y un valor nuevo de `session_type`; op `extra_log` con id
+  propio como clave, por la misma cola. Suma a las horas aeróbicas de Progreso
+  y sale en `get_sessions`; ni suma ni resta adherencia.
+
+### 9.2 · mientras entrenas
+
+**REG-01 · «Hecho» registra siempre el mínimo del rango — S2 · E1 · decisión de producto**
+- evidencia: `quickValue` cae en `exercise.repMin`
+  (`session-runner.tsx:666-676`); cualquier otra cifra son dos toques por
+  «Otras». Datos: cinco semanas de accesorios a 8, 10 y 12 exactos. La doble
+  progresión pide el tope en todas las series (`progression.ts:100-101`), así
+  que nada sube salvo lo que tiene rango de un solo número (ACC-02).
+- recomendación: − / + de reps junto a «Hecho»: la cifra real a un toque.
+
+**REG-02 · el RIR no se registra nunca — S3 · E1 · descubribilidad**
+- evidencia: el selector vive dentro de «Otras»
+  (`session-runner.tsx:1205-1227`); cero series con RIR en cinco semanas. El
+  plan se define por él («RIR 1-3 en básicos») y la progresión lo consulta
+  (`progression.ts:104`).
+- recomendación: pedirlo una vez, tras la última serie del básico.
+
+**REG-03 · no se puede cambiar de ejercicio en el día — S3 · E2 · capacidad ausente**
+- evidencia: el runner no sustituye; tres filas del plan son «A o B» con un
+  solo peso (`template_program.sql:70`, `:183`, `:184`) y el historial mezcla
+  dos movimientos bajo un nombre: «Fondos o press banca ligero» a 0 kg.
+- recomendación: «Cambiar por hoy» desde la lista de la sesión: uno del
+  catálogo con el mismo `tag`, y la serie guarda el nombre real
+  (`set_logs.exercise_name` ya está desnormalizado). Nunca el básico. Partir
+  las filas «A o B».
+
+**REG-04 · ni una serie ni un ejercicio de más — S3 · E2 · capacidad ausente**
+- evidencia: una píldora por serie prescrita (`session-runner.tsx:936`) y
+  `record` corta en `exercise.sets` (`:420-423`).
+- recomendación: «+ serie» tras la última píldora. Antes hay que decidir si
+  una serie extra del básico entra en el fold del motor.
+
+**REG-05 · las series de aproximación están calculadas y no se pintan — S3 · E1 · capacidad ausente**
+- evidencia: `warmupSets()` (`src/lib/engine/index.ts:437-458`), con tests y
+  sin un solo uso en `src/`.
+- recomendación: pliegue «aproximación» en el básico, en el runner y en
+  `StrengthDay`.
+
+**REG-06 · una nota por sesión, y solo se lee en el resumen — S4 · E2 · capacidad ausente**
+- evidencia: `finishNotes` (`session-runner.tsx:1106-1118`) se muestra en
+  `resumen/page.tsx:423-427` y en ningún otro sitio; no hay nota por ejercicio.
+- recomendación: nota por ejercicio (molestia, otra máquina), visible en
+  HIST-01 y en `get_sessions`.
+
+**REG-07 · el runner no dice cuánto llevas — S4 · E1 · capacidad ausente**
+- evidencia: sin reloj de sesión; las reales duran 54-79′ y el plan pone el
+  techo en ~70′.
+- recomendación: minutos transcurridos junto a «n de m series».
+
+### 9.3 · carrera
+
+**RUN-01 · el test de umbral no tiene dónde apuntar el resultado — S2 · E1 · capacidad ausente**
+- evidencia: `recordMeasurement` — actualiza `profiles.lthr`, escribe
+  `measurements` y el evento `lthr_test` (`src/lib/actions/program.ts:359-398`)
+  — no lo llama nadie; `LogRunForm` no tiene campo de LTHR. El único camino es
+  el stepper de Ajustes → Carrera, sin fecha ni evento. `measurements` está
+  vacía.
+- recomendación: en un día de test, la tarjeta de datos pide «FC media de los
+  últimos 20′» y llama a `recordMeasurement`.
+
+**RUN-02 · la pestaña Carrera está vacía con diez carreras registradas — S3 · E1 · capacidad ausente**
+- evidencia: solo pinta desacople y km por semana
+  (`progreso/page.tsx:789-899`); el desacople se pide en tiradas de 60′ o más y
+  las tuyas son de 30-41′. Duración, km y FC media están en las diez y no se
+  cruzan: no hay ritmo en ninguna pantalla.
+- recomendación: ritmo medio por carrera y la tendencia ritmo ↔ pulso en Z2
+  (27 oct: 9:10 /km a 147 ppm). Es el indicador de base que sí dan las
+  carreras cortas.
+
+**RUN-03 · campos de carrera que existen y nadie rellena — S4 · E1 · capacidad ausente**
+- evidencia: `notes: ""` fijo (`log-run-form.tsx:165`); `max_hr` y
+  `dominant_zone` sin entrada; Progreso enseña «Zona dominante —» siempre
+  (`progreso/page.tsx:481`).
+- recomendación: nota en el formulario; quitar la fila de zona dominante.
+
+**RUN-04 · la carrera no se puede tocar a mano — S3 · E2 · capacidad ausente**
+- evidencia: «a run day's structure is not editable from here»
+  (`program-editor.tsx:167-168`); solo `set_run` por IA. Pasar de 40′ a 45′
+  exige una conversación.
+- recomendación: minutos y zona de la carrera de la semana en el editor; los
+  bloques tipados siguen siendo de la IA.
+
+**RUN-05 · cuatro cifras tecleadas por carrera — S3 · E3 · capacidad ausente**
+- evidencia: no hay importación de ningún tipo.
+- recomendación: subir el `.fit`/`.gpx` del reloj → duración, km, FC media,
+  desacople y tiempo en zona calculados. Strava/Garmin por API quedan fuera:
+  OAuth y servidor para un atleta.
+
+**RUN-06 · la carrera objetivo no se edita — S3 · E1 · capacidad ausente**
+- evidencia: `race_on` y `race_name` solo se leen (`semana/page.tsx:209`,
+  `programa/page.tsx:273`); ninguna acción de `src/` los escribe, y desplazar
+  el plan no mueve la carrera (innegociable 5).
+- recomendación: fecha y nombre en Ajustes, junto a desplazar el plan.
+
+### 9.4 · plan y progreso
+
+**RM-01 · el re-test de RM no tiene flujo — S2 · E1 · capacidad ausente**
+- evidencia: el ajuste «Recalcular RM tras el re-test»
+  (`settings-groups.tsx:811-820`) gobierna una rama de `recordMeasurement` que
+  nadie llama; la calculadora «no guarda nada» (`programa/page.tsx:341`). El
+  camino real es el stepper de RM, un evento `manual_rm` por toque
+  (`rm-rows.tsx:54`): el 23 nov, banca 80 → 77,5 → 75 → 77,5 son tres eventos.
+  El entrenador pide test de RMs esta misma semana.
+- recomendación: «Usar como RM» en la calculadora → un `rm_retest` y su fila
+  en `measurements`; el stepper confirma al soltar, no por toque.
+
+**PROG-01 · no hay progresión por ejercicio — S3 · E2 · capacidad ausente**
+- evidencia: récords = la serie más pesada de cada básico
+  (`progreso/page.tsx:105-138`), sin línea temporal y sin accesorios; el
+  registro son las últimas 30 sesiones del programa activo (`:172`, `:181`),
+  así que F0-bis — que el entrenador cita — no se ve en la app.
+- recomendación: tocar un récord (o el ejercicio en HIST-01) abre su serie
+  histórica: mejor serie por sesión, todas las fases y programas.
+
+**PROG-02 · el peso corporal es un número, no una serie — S4 · E1 · capacidad ausente**
+- evidencia: `profiles.body_weight_kg` con stepper
+  (`settings-groups.tsx:413-432`); `measurement_kind = 'body'` existe sin uso.
+- recomendación: cada cambio a `measurements` y la tendencia en Progreso.
+
+**MOV-01 · el bloque de movilidad no se ha registrado ni un día — S3 · decisión de producto**
+- evidencia: cero `mobility_logs` en 33 días. Son 20′ de ítems a marcar uno a
+  uno, sin cronómetro para los isométricos (la dosis es texto:
+  `mobility-block.tsx:180-189`), sin GIF y sin versión corta; ocupa una fila
+  fija de Hoy.
+- recomendación: o gana utilidad — cronómetro en los ítems por tiempo, una
+  activación de 5′ enganchada a «Empezar» en días de fuerza — o sale de Hoy.
+
+**DAT-01 · dos atletas «Juanlu» activos — S4 · E1 · datos**
+- evidencia: `list_athletes` devuelve dos con el mismo plan; uno va por
+  «semana 10 de 12» sin una sola sesión y con otra fecha de carrera.
+- recomendación: archivar la cuenta vacía; el entrenador hoy tiene que elegir
+  por id.
+
+No añadiría: intervalos guiados de carrera (lo hace el reloj), push de
+recordatorio (exige servidor; `DESIGN.md` lo descarta), rachas o logros (contra
+la voz del producto).
+
+### 9.5 · orden recomendado
+
+1. ACC-02 · ACC-03 · ACC-01 — que el peso de un accesorio diga la verdad.
+2. HIST-01 · ACC-04 — la última vez, en el runner.
+3. EXT-01 — sesiones fuera del plan.
+4. REG-01 · REG-02 — reps y RIR reales a un toque.
+5. RM-01 · RUN-01 — cablear `recordMeasurement`.
+6. REG-05 · RUN-02 · RUN-03 · RUN-06 · REG-07 · PROG-02 — baratos.
+7. REG-03 · REG-04 · REG-06 · PROG-01 · RUN-04.
+8. RUN-05 · MOV-01.
+
+**decisiones de producto pendientes**
+1. **Extras.** ¿Solo registro a posteriori, o también huecos opcionales que el
+   entrenador pueda planificar (rodillo del domingo) y que no penalicen si no
+   se hacen? (EXT-01)
+2. **¿Quién fija el peso de un accesorio?** ¿Lo último que moviste pasa a ser
+   la prescripción, o el plan manda y lo anterior es solo referencia? (ACC-01)
+3. **El toque perezoso.** «Hecho» por defecto: el mínimo del rango (hoy), o
+   las reps de esa serie la última vez. (REG-01)
+4. **Movilidad.** Arreglarla o retirarla de Hoy. (MOV-01)
