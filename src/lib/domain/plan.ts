@@ -214,6 +214,8 @@ export interface ResolvedDay {
   totalSets: number;
   estimatedMinutes: number;
   isDeload: boolean;
+  /** The week this phase re-tests the RM of each day's basic. */
+  isRetest: boolean;
   week: number;
   phaseId: string;
 }
@@ -423,6 +425,8 @@ export function resolveDay(
     totalSets,
     estimatedMinutes: minutes,
     isDeload: isDeloadWeek(week, phaseConfig),
+    isRetest:
+      phase.retest_week === week && exercises.some((e) => e.isPrimary),
     week,
     phaseId: phase.id,
   };

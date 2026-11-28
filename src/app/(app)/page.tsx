@@ -7,6 +7,7 @@ import {
   Info,
   Plus,
   Snowflake,
+  Target,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -211,6 +212,19 @@ export default async function HoyPage() {
         >
           Mitad de series y pesos más bajos, a propósito. La carrera también
           baja. El objetivo es llegar fresco a la semana que viene.
+        </Note>
+      ) : null}
+
+      {day.isRetest ? (
+        <Note
+          className="mx-5 mt-3"
+          tone="clay"
+          icon={<Target size={18} />}
+          title="Hoy toca re-test de RM"
+        >
+          En la última serie del básico sube el peso hasta que las
+          reps del objetivo te dejen 1 en reserva, y apunta cuántas te
+          quedaban. Al terminar, el resumen te da la RM que sale.
         </Note>
       ) : null}
 

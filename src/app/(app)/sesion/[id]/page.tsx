@@ -161,6 +161,7 @@ export default async function SessionPage({
       }))}
       initialUndone={initialUndone}
       history={history}
+      retest={day.isRetest}
       replayCtx={{
         lift: preLift,
         primary:

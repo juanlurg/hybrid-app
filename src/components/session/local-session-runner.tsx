@@ -134,6 +134,7 @@ export function LocalSessionRunner({ sessionId }: { sessionId: string }) {
       initialLogs={initialLogs}
       initialUndone={local.undoneFailures}
       history={state.history}
+      retest={day.isRetest}
       replayCtx={{
         // The snapshot is the last online render — if it was taken
         // mid-session after a flush, the fold may start one step late.

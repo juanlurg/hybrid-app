@@ -156,10 +156,15 @@ export default async function SemanaPage({
   const nextDeload =
     week - cycleWeek + phaseConfig.cycleWeeks;
   const fixed = phaseConfig.progressionMode === "fixed_pct";
-  const noteTitle = deload
-    ? `Descarga: básicos al ${wavePct} % de la RM`
-    : `Básicos al ${wavePct} % de la RM`;
-  const note = fixed
+  const retest = phase.retest_week === week;
+  const noteTitle = retest
+    ? "Semana de re-test de RM"
+    : deload
+      ? `Descarga: básicos al ${wavePct} % de la RM`
+      : `Básicos al ${wavePct} % de la RM`;
+  const note = retest
+    ? `${deload ? "Descarga, y en" : "En"} la última serie de cada básico subes el peso hasta dejar 1 en reserva: de ahí sale tu RM nueva.`
+    : fixed
     ? "El mismo porcentaje todas las semanas de esta fase."
     : deload
       ? phaseConfig.autoDeload

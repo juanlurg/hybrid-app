@@ -207,7 +207,7 @@ export function buildSeasonContext(athlete: LoadedAthlete): string {
       `# Fase ${phase.key} — ${phase.name} (${when})  [phaseKey: ${phase.key}]`,
     );
     lines.push(
-      `Empieza el ${phase.starts_on ?? "—"} · ${phase.weeks} semanas · énfasis: ${phase.emphasis || "—"}`,
+      `Empieza el ${phase.starts_on ?? "—"} · ${phase.weeks} semanas · énfasis: ${phase.emphasis || "—"}${phase.retest_week ? ` · re-test de RM en la semana ${phase.retest_week}` : ""}`,
     );
     if (phase.notes) lines.push(`Notas: ${phase.notes}`);
     const cfg = phaseEngineConfig(athlete.config, phase);
