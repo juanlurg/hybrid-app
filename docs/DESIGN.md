@@ -120,13 +120,13 @@ opened: `StrengthDay` renders Hoy's session and `/fuerza/[fecha]` alike.
 | `/` | Hoy | Today's session, week strip, what to recover, big weight, start bar |
 | `/movilidad` | Hoy | Guided / list mobility block; holds run on a clock, side by side |
 | `/sesion/[id]` | — | Live runner — set pills, weight stepper, the last time, − / + on the reps "Hecho" logs, RIR asked once per exercise, rest timer, regression banner, technique GIF |
-| `/sesion/[id]/resumen` | — | Summary — KPIs and which weights changed |
+| `/sesion/[id]/resumen` | — | Summary — KPIs, which weights changed and, on a re-test week, the RM that comes out |
 | `/semana` | Semana | The 7 days + season phase bar |
 | `/fuerza/[fecha]` | Semana | A strength day by date; train or skip it within its week |
 | `/carrera/[fecha]` | Semana | Run blocks, zone ruler, watch data, mark done, skip |
 | `/extra/[fecha]` | Semana | A session outside the plan — what it was, minutes, pulse, RPE, note; edit or delete |
 | `/progreso` | Progreso | Adherence, records, the log, running trend (Pa:HR, km) |
-| `/programa` | Plan | Phases and what each is for, links, RMs, calculadora |
+| `/programa` | Plan | Phases and what each is for, links, RMs, calculadora — where a re-test is taken any other week |
 | `/editor` | Plan | Semana tipo — weekly template editor + AI refinement |
 | `/motor` | Plan | Where each weight comes from, season projection, regression rule, engine timeline |
 | `/ajustes` | Plan | Every knob, grouped; the engine's folded |
@@ -185,6 +185,11 @@ installed PWA.
    F3/F4 hold a fixed %RM. A wave step can carry the basic's rep range
    (`wave_reps`, read through `repRangeFor`): F2's 85 % week is 4×3-4, so
    a 4 there is not a miss. Never feed `absoluteWeek` to the engine.
+   A phase can name the week it re-tests RMs (`retest_week`): the basic's
+   last set is worked up to 1 in reserve, `retestRm` reads the RM off the
+   sets whose RIR was noted, and the athlete takes it or leaves it
+   (`recordMeasurement`, an `rm_retest` event) — it is never applied by
+   itself.
 7. **One write path for the session.** The runner writes to the local
    queue (IndexedDB) and `/api/sync` replays the engine idempotently
    (`engine_events.dedup_key`). No per-set server actions — ever again.

@@ -28,7 +28,14 @@ import {
   summarise,
   type ExerciseSummary,
 } from "@/lib/domain/summary";
-import { formatTonnage, formatWeight, regressionLadder } from "@/lib/engine";
+import {
+  formatTonnage,
+  formatWeight,
+  regressionLadder,
+  retestRm,
+  roundToStep,
+} from "@/lib/engine";
+import { RetestButton } from "@/components/retest-button";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/cn";
 
@@ -263,6 +270,33 @@ export default async function ResumenPage({
         ] * 100,
       )
     : 0;
+
+  /* A re-test week: the RM that comes out of the basic's sets, for the
+     athlete to take or leave. Only sets with a noted reserve count. */
+  const retestLift =
+    sessionPhase?.retest_week === session.week && primaryEx?.liftKey
+      ? (ctx.lifts.find((l) => l.key === primaryEx.liftKey) ?? null)
+      : null;
+  const retest = retestLift
+    ? retestRm(
+        primaryLogs.map((l) => ({
+          weightKg: l.weight_kg == null ? null : Number(l.weight_kg),
+          reps: l.reps,
+          rir: l.rir == null ? null : Number(l.rir),
+        })),
+      )
+    : null;
+  const retestKg = retest ? roundToStep(retest.e1rmKg, config.roundingKg) : null;
+  const { data: retestTaken } = retestLift
+    ? await supabase
+        .from("measurements")
+        .select("value")
+        .eq("user_id", athlete.userId)
+        .eq("kind", "rm_estimate")
+        .contains("payload", { session_id: session.id })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
 
   const reverted = engineEvents.filter((e) => e.reverted_at);
   const standing = engineEvents.length - reverted.length;
@@ -524,6 +558,57 @@ export default async function ResumenPage({
               rango quedan registrados y nada más.
             </Footnote>
           </>
+        ) : null}
+
+        {retestLift ? (
+          <div className="mt-3.5 px-5">
+            <Card className="px-4 py-4">
+              <div className="font-display text-[11px] leading-none font-semibold tracking-[0.14em] text-clay uppercase">
+                Re-test de RM · {retestLift.name}
+              </div>
+              {retestTaken ? (
+                <p className="mt-2 text-[13px] leading-[1.5] text-mid">
+                  Ya está registrado:{" "}
+                  <span className="num font-bold text-ink">
+                    {formatWeight(Number(retestTaken.value))} kg
+                  </span>
+                  .
+                </p>
+              ) : retest && retestKg != null ? (
+                <>
+                  <p className="mt-2 text-[13px] leading-[1.5] text-mid">
+                    <span className="num">
+                      {formatWeight(retest.weightKg)} kg × {retest.reps}
+                    </span>{" "}
+                    con <span className="num">{retest.rir}</span> en reserva
+                    dan una RM de{" "}
+                    <span className="num font-bold text-ink">
+                      {formatWeight(retestKg)} kg
+                    </span>
+                    . La que usa el motor hoy:{" "}
+                    <span className="num">
+                      {formatWeight(Number(retestLift.e1rm_kg))} kg
+                    </span>
+                    .
+                  </p>
+                  <RetestButton
+                    liftId={retestLift.id}
+                    liftName={retestLift.name}
+                    rmKg={retestKg}
+                    takenOn={athlete.today}
+                    sessionId={session.id}
+                    syncs={ctx.profile.sync_rm_after_retest}
+                  />
+                </>
+              ) : (
+                <p className="mt-2 text-[13px] leading-[1.5] text-mid">
+                  Ninguna serie del básico tiene apuntado cuántas te quedaban,
+                  y sin eso no hay RM que calcular. Corrige la sesión y anota
+                  el RIR de la serie de test.
+                </p>
+              )}
+            </Card>
+          </div>
         ) : null}
 
         <div className="mt-3.5 px-5">

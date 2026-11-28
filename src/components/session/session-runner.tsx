@@ -96,6 +96,7 @@ export function SessionRunner({
   initialLogs,
   initialUndone,
   history,
+  retest,
   replayCtx,
   autoRest,
   sound,
@@ -113,6 +114,8 @@ export function SessionRunner({
   initialUndone: Array<{ position: number; setIndex: number }>;
   /** Earlier sessions of each exercise, newest first. Absent offline. */
   history?: ExerciseHistory;
+  /** A re-test week: the basic's last set is worked up to 1 in reserve. */
+  retest?: boolean;
   replayCtx: ReplayContext;
   autoRest: boolean;
   sound: boolean;
@@ -1187,7 +1190,12 @@ export function SessionRunner({
           </Card>
         ) : null}
 
-        {exercise.notes ? (
+        {retest && exercise.isPrimary ? (
+          <p className="mt-4 px-1 text-[12.5px] leading-[1.5] font-bold text-clay">
+            Re-test: en la última serie sube el peso hasta que las reps del
+            objetivo te dejen 1 en reserva, y apunta cuántas te quedaban.
+          </p>
+        ) : exercise.notes ? (
           <p className="mt-4 px-1 text-[12.5px] leading-[1.5] font-medium text-mid">
             {exercise.notes}
           </p>

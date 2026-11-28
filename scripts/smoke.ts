@@ -257,10 +257,16 @@ async function main() {
 
     const { data: phasesA } = await a.client
       .from("program_phases")
-      .select("key, weeks, starts_on")
+      .select("key, weeks, starts_on, retest_week")
       .eq("program_id", programAId!)
       .order("position");
     check("the clone has 4 phases", phasesA?.length === 4);
+    check(
+      "the clone carries F2's RM re-test week, and only F2 has one",
+      phasesA?.find((p) => p.key === "F2")?.retest_week === 8 &&
+        phasesA.filter((p) => p.retest_week != null).length === 1,
+      JSON.stringify(phasesA),
+    );
     check(
       "F2 starts on 26 Oct 2026, as the plan says",
       phasesA?.find((p) => p.key === "F2")?.starts_on === "2026-10-26",

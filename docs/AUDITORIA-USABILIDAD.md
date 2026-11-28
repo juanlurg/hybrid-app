@@ -520,7 +520,11 @@ junto a «Hecho», y por defecto la misma serie de la última vez, nunca el tope
 del rango), REG-02 (el RIR se pregunta una vez, tras la última serie de cada
 ejercicio) y MOV-01 (decisión 4: cronómetro por lados en los isométricos, el
 progreso del día en Hoy, los días de la semana en Progreso) implementados.
-Quedan RM-01, RUN-01…06, REG-03…07, PROG-01, PROG-02 y DAT-01.
+RM-01 (2026-11-28): la semana de re-test vive en el plan
+(`program_phases.retest_week`, F2 sem 8 como dice `PROGRAMA-juanlu.md`), se
+anuncia en Semana, Hoy y el runner, y el resumen y la calculadora ofrecen la RM
+que sale — `recordMeasurement` deja de ser código sin llamar. Quedan
+RUN-01…06, REG-03…07, PROG-01, PROG-02 y DAT-01.
 
 ### 9.1 · lo que pediste
 

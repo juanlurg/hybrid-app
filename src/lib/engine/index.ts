@@ -299,6 +299,36 @@ export function epley1RM(weightKg: number, reps: number): number {
   return round2(weightKg * (1 + reps / 30));
 }
 
+/** Past this many reps to failure, Epley stops estimating and starts guessing. */
+export const EPLEY_MAX_REPS = 12;
+
+export interface RetestSet {
+  weightKg: number | null;
+  reps: number | null;
+  rir: number | null;
+}
+
+/**
+ * The RM a re-test shows: the best Epley among the sets whose reserve was
+ * noted, with the reps left in the tank counted as reps — 5 with 1 left
+ * is a 6RM. A set with no RIR says nothing: the deload's 70 % × 5 would
+ * read as a collapse.
+ */
+export function retestRm(
+  sets: RetestSet[],
+): { weightKg: number; reps: number; rir: number; e1rmKg: number } | null {
+  let best: ReturnType<typeof retestRm> = null;
+  for (const s of sets) {
+    if (!s.weightKg || !s.reps || s.rir == null) continue;
+    if (s.reps + s.rir > EPLEY_MAX_REPS) continue;
+    const e1rmKg = epley1RM(s.weightKg, s.reps + s.rir);
+    if (!best || e1rmKg > best.e1rmKg) {
+      best = { weightKg: s.weightKg, reps: s.reps, rir: s.rir, e1rmKg };
+    }
+  }
+  return best;
+}
+
 /** Inverse Epley: the load that should yield `reps`. */
 export function epleyLoad(e1rmKg: number, reps: number): number {
   if (reps <= 0) return 0;

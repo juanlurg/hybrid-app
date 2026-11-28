@@ -6,6 +6,7 @@ import {
   cycleOf,
   epley1RM,
   epleyLoad,
+  retestRm,
   formatPlates,
   formatWeight,
   isDeloadWeek,
@@ -335,6 +336,27 @@ describe("plates", () => {
     const load = plateBreakdown(60, { barKg: 15, platesKg: [25, 20, 10, 5] });
     expect(load.perSide).toEqual([20]);
     expect(load.remainderKg).toBe(2.5);
+  });
+});
+
+describe("re-test", () => {
+  it("counts the reps left in the tank: 5 with 1 in reserve is a 6RM", () => {
+    const rm = retestRm([{ weightKg: 85, reps: 5, rir: 1 }]);
+    expect(rm?.e1rmKg).toBe(epley1RM(85, 6));
+  });
+
+  it("takes the best set, and only among the ones with a noted reserve", () => {
+    const rm = retestRm([
+      { weightKg: 62.5, reps: 5, rir: null }, // the deload set: says nothing
+      { weightKg: 80, reps: 5, rir: 3 },
+      { weightKg: 87.5, reps: 5, rir: 1 },
+    ]);
+    expect(rm).toMatchObject({ weightKg: 87.5, reps: 5, rir: 1 });
+  });
+
+  it("no reserve noted → no estimate, rather than a false collapse", () => {
+    expect(retestRm([{ weightKg: 62.5, reps: 5, rir: null }])).toBeNull();
+    expect(retestRm([{ weightKg: 40, reps: 12, rir: 4 }])).toBeNull();
   });
 });
 

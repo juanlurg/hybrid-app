@@ -165,6 +165,7 @@ export default async function PlanPage() {
   });
 
   const calcLifts: RmCalcLift[] = ctx.lifts.map((l) => ({
+    id: l.id,
     key: l.key,
     name: l.name,
     e1rmKg: Number(l.e1rm_kg),
@@ -338,9 +339,14 @@ export default async function PlanPage() {
           <Fold
             className="mt-3"
             title="Calculadora de RM"
-            summary="Peso × reps de una serie → tu RM · no guarda nada"
+            summary="Peso × reps de una serie → tu RM · el re-test"
           >
-            <RmCalculator lifts={calcLifts} stepKg={config.roundingKg} />
+            <RmCalculator
+              lifts={calcLifts}
+              stepKg={config.roundingKg}
+              today={athlete.today}
+              syncs={ctx.profile.sync_rm_after_retest}
+            />
           </Fold>
         ) : null}
       </div>

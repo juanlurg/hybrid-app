@@ -395,6 +395,8 @@ export async function recordMeasurement(input: {
   value?: number | null;
   unit?: string;
   liftId?: string | null;
+  /** The session whose set this came from, so it is only applied once. */
+  sessionId?: string | null;
   notes?: string;
 }): Promise<Result> {
   const athlete = await guard();
@@ -409,7 +411,10 @@ export async function recordMeasurement(input: {
     value: input.value ?? null,
     unit: input.unit ?? "",
     notes: input.notes ?? "",
-    payload: input.liftId ? { lift_id: input.liftId } : {},
+    payload: {
+      ...(input.liftId ? { lift_id: input.liftId } : {}),
+      ...(input.sessionId ? { session_id: input.sessionId } : {}),
+    },
   });
   if (error) return { ok: false, error: error.message };
 
@@ -435,6 +440,7 @@ export async function recordMeasurement(input: {
     athlete.ctx.profile.sync_rm_after_retest
   ) {
     const rounded = roundToStep(input.value, athlete.config.roundingKg);
+    const before = athlete.ctx.lifts.find((l) => l.id === input.liftId);
     await supabase
       .from("lifts")
       .update({ e1rm_kg: rounded, penalty: 0, fail_count: 0, hold: false, hold_at_kg: null })
@@ -446,8 +452,7 @@ export async function recordMeasurement(input: {
       week: athlete.placement.absoluteWeek,
       kind: "rm_retest",
       title: `Re-test de RM · ${formatWeight(rounded)} kg`,
-      detail:
-        "La ola se reconstruye con la RM nueva y el contador de fallos vuelve a cero.",
+      detail: `${before ? `${formatWeight(Number(before.e1rm_kg))} kg → ${formatWeight(rounded)} kg. ` : ""}La ola se reconstruye con la RM nueva y el contador de fallos vuelve a cero.`,
     });
   }
 

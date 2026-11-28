@@ -731,6 +731,7 @@ export type Database = {
           priority: string
           program_id: string
           progression_mode: string
+          retest_week: number | null
           starts_on: string | null
           wave: number[] | null
           wave_reps: Json | null
@@ -749,6 +750,7 @@ export type Database = {
           priority?: string
           program_id: string
           progression_mode?: string
+          retest_week?: number | null
           starts_on?: string | null
           wave?: number[] | null
           wave_reps?: Json | null
@@ -767,6 +769,7 @@ export type Database = {
           priority?: string
           program_id?: string
           progression_mode?: string
+          retest_week?: number | null
           starts_on?: string | null
           wave?: number[] | null
           wave_reps?: Json | null

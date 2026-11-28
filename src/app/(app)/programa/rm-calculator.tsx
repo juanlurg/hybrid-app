@@ -2,12 +2,21 @@
 
 import { useState } from "react";
 
+import { RetestButton } from "@/components/retest-button";
 import { Card, HeroNumber, Stepper } from "@/components/ui/kit";
-import { epley1RM, epleyLoad, formatWeight, round2, roundToStep } from "@/lib/engine";
+import {
+  EPLEY_MAX_REPS,
+  epley1RM,
+  epleyLoad,
+  formatWeight,
+  round2,
+  roundToStep,
+} from "@/lib/engine";
 import { cn } from "@/lib/cn";
 
 /** Serialisable projection of a lift plus the last set logged for it. */
 export interface RmCalcLift {
+  id: string;
   key: string;
   name: string;
   e1rmKg: number;
@@ -15,20 +24,22 @@ export interface RmCalcLift {
   lastSet: { weightKg: number; reps: number; on: string } | null;
 }
 
-/** Past this, Epley stops being an estimate and starts being a guess. */
-const MAX_REPS = 12;
-
 /**
- * Peso × repeticiones → RM estimada. Reads the engine's own Epley, so the
- * number here is the same one the wave would multiply; it writes nothing —
- * the RM only moves through the steppers above.
+ * Peso × repeticiones, más las que quedaban → RM estimada. Reads the
+ * engine's own Epley, so the number here is the same one the wave would
+ * multiply. Taking it is a re-test: one event, one measurement.
  */
 export function RmCalculator({
   lifts,
   stepKg,
+  today,
+  syncs,
 }: {
   lifts: RmCalcLift[];
   stepKg: number;
+  today: string;
+  /** profiles.sync_rm_after_retest */
+  syncs: boolean;
 }) {
   const [activeKey, setActiveKey] = useState(lifts[0].key);
   const lift = lifts.find((l) => l.key === activeKey) ?? lifts[0];
@@ -58,12 +69,28 @@ export function RmCalculator({
       </div>
 
       {/* Keyed: changing the basic reloads the form with that basic's set. */}
-      <Estimate key={lift.key} lift={lift} stepKg={stepKg} />
+      <Estimate
+        key={lift.key}
+        lift={lift}
+        stepKg={stepKg}
+        today={today}
+        syncs={syncs}
+      />
     </>
   );
 }
 
-function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
+function Estimate({
+  lift,
+  stepKg,
+  today,
+  syncs,
+}: {
+  lift: RmCalcLift;
+  stepKg: number;
+  today: string;
+  syncs: boolean;
+}) {
   // With no history the form opens on what the engine already believes: the
   // load it would prescribe for 5 reps, which reads back as today's RM.
   const [reps, setReps] = useState(lift.lastSet?.reps ?? 5);
@@ -71,7 +98,10 @@ function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
     lift.lastSet?.weightKg ?? roundToStep(epleyLoad(lift.e1rmKg, 5), stepKg),
   );
 
-  const estimateKg = epley1RM(weightKg, reps);
+  /** Reps left in the tank: they count as reps done. */
+  const [rir, setRir] = useState(0);
+
+  const estimateKg = epley1RM(weightKg, reps + rir);
   const roundedKg = roundToStep(estimateKg, stepKg);
   const deltaKg = round2(estimateKg - lift.e1rmKg);
 
@@ -117,15 +147,42 @@ function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
               label={`las repeticiones de la serie de ${lift.name}`}
               value={reps}
               onDecrement={() => setReps((r) => Math.max(1, r - 1))}
-              onIncrement={() => setReps((r) => Math.min(MAX_REPS, r + 1))}
+              onIncrement={() =>
+                setReps((r) => Math.min(EPLEY_MAX_REPS - rir, r + 1))
+              }
             />
           </div>
         </div>
       </div>
 
+      <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2.5">
+        <span className="flex-1 text-[12px] leading-none font-semibold text-mid">
+          Te quedaban
+        </span>
+        {[0, 1, 2, 3].map((n) => (
+          <button
+            key={n}
+            type="button"
+            aria-pressed={rir === n}
+            aria-label={`${n} en reserva`}
+            onClick={() => {
+              setRir(n);
+              setReps((r) => Math.min(r, EPLEY_MAX_REPS - n));
+            }}
+            className={cn(
+              "num h-10 w-11 rounded-md text-[15px] leading-none font-bold",
+              rir === n ? "bg-strength text-on-strength" : "bg-soft text-ink",
+            )}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+
       <Card className="mt-1.5 px-4 py-4">
         <div className="font-display text-[11px] leading-none font-semibold tracking-[0.12em] text-warn uppercase">
           RM estimada · {formatWeight(weightKg)} kg × {reps}
+          {rir > 0 ? ` + ${rir}` : ""}
         </div>
         <HeroNumber
           size="md"
@@ -146,11 +203,21 @@ function Estimate({ lift, stepKg }: { lift: RmCalcLift; stepKg: number }) {
         />
       </Card>
 
+      {roundedKg === lift.e1rmKg ? null : (
+        <RetestButton
+          key={roundedKg}
+          liftId={lift.id}
+          liftName={lift.name}
+          rmKg={roundedKg}
+          takenOn={today}
+          syncs={syncs}
+        />
+      )}
+
       <p className="mt-3 text-[11px] leading-[1.5] text-faint">
-        Epley cuenta la serie como llevada al límite: con dos o tres
-        repeticiones de margen la RM real es más alta que esto, y por encima de
-        diez la fórmula la infla. Aquí no se guarda nada — para mover la RM,
-        los ± de arriba.
+        Epley cuenta la serie como llevada al límite, así que las reps que te
+        quedaban se suman a las hechas. Por encima de diez la fórmula infla la
+        RM: el test bueno es una serie de 3 a 6.
       </p>
     </>
   );
